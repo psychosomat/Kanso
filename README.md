@@ -8,11 +8,11 @@
 
 *Zen-like desktop player with forum-style organization, noise texture, and smooth motion.*
 
-[![Release](https://img.shields.io/github/v/release/psychosomat/kanso?display_name=tag&sort=semver&style=for-the-badge&labelColor=24283b&color=24283b)](https://github.com/psychosomat/kanso/releases)
-[![Downloads](https://img.shields.io/github/downloads/psychosomat/kanso/total?style=for-the-badge&labelColor=24283b&color=24283b)](https://github.com/psychosomat/kanso/releases)
-[![License](https://img.shields.io/github/license/psychosomat/kanso?style=for-the-badge&labelColor=24283b&color=24283b)](https://github.com/psychosomat/kanso/blob/main/LICENSE)
-[![Issues](https://img.shields.io/github/issues/psychosomat/kanso?style=for-the-badge&labelColor=24283b&color=24283b)](https://github.com/psychosomat/kanso/issues)
-[![Stars](https://img.shields.io/github/stars/psychosomat/kanso?style=for-the-badge&labelColor=24283b&color=24283b)](https://github.com/psychosomat/kanso/stargazers)
+[![Release](https://img.shields.io/github/v/release/psychosomat/Kanso?display_name=tag&sort=semver&style=for-the-badge&labelColor=24283b&color=24283b)](https://github.com/psychosomat/Kanso/releases)
+[![Downloads](https://img.shields.io/github/downloads/psychosomat/Kanso/total?style=for-the-badge&labelColor=24283b&color=24283b)](https://github.com/psychosomat/Kanso/releases)
+[![License](https://img.shields.io/github/license/psychosomat/Kanso?style=for-the-badge&labelColor=24283b&color=24283b)](https://github.com/psychosomat/Kanso/blob/main/LICENSE)
+[![Issues](https://img.shields.io/github/issues/psychosomat/Kanso?style=for-the-badge&labelColor=24283b&color=24283b)](https://github.com/psychosomat/Kanso/issues)
+[![Stars](https://img.shields.io/github/stars/psychosomat/Kanso?style=for-the-badge&labelColor=24283b&color=24283b)](https://github.com/psychosomat/Kanso/stargazers)
 
 [![Electron](https://img.shields.io/badge/Electron-24283b?style=for-the-badge&logo=electron)](https://www.electronjs.org/)
 [![React](https://img.shields.io/badge/React-24283b?style=for-the-badge&logo=react)](https://react.dev/)
@@ -20,7 +20,7 @@
 [![Bun](https://img.shields.io/badge/Bun-24283b?style=for-the-badge&logo=bun)](https://bun.sh/)
 [![SQLite](https://img.shields.io/badge/SQLite-24283b?style=for-the-badge&logo=sqlite)](https://www.sqlite.org/)
 
-[Download Installer](https://github.com/psychosomat/kanso/releases) • [Source Code](https://github.com/psychosomat/kanso) • [Report Issue](https://github.com/psychosomat/kanso/issues)
+[Download Installer](https://github.com/psychosomat/Kanso/releases) • [Source Code](https://github.com/psychosomat/Kanso) • [Report Issue](https://github.com/psychosomat/Kanso/issues)
 
 </div>
 
@@ -41,7 +41,7 @@ Kanso is built around a different standard:
 
 | Mode | Status |
 | --- | --- |
-| Platform | [![Windows](https://img.shields.io/badge/Windows-24283b?style=for-the-badge&logo=windows)](https://github.com/psychosomat/kanso/releases) [![MacOS](https://img.shields.io/badge/MacOS-24283b?style=for-the-badge&logo=macos)](https://github.com/psychosomat/kanso/releases) [![Linux](https://img.shields.io/badge/Linux-24283b?style=for-the-badge&logo=linux)](https://github.com/psychosomat/kanso/releases) |
+| Platform | [![Windows](https://img.shields.io/badge/Windows-24283b?style=for-the-badge&logo=windows)](https://github.com/psychosomat/Kanso/releases) [![MacOS](https://img.shields.io/badge/MacOS-24283b?style=for-the-badge&logo=macos)](https://github.com/psychosomat/Kanso/releases) [![Linux](https://img.shields.io/badge/Linux-24283b?style=for-the-badge&logo=linux)](https://github.com/psychosomat/Kanso/releases) |
 | Delivery | `Installer from Releases` + `source build` |
 | Library | `Local folders` + `watch mode` + `rescan` |
 | Organization | `Forum-style categories` + `uncategorized dump` |
@@ -61,7 +61,7 @@ Kanso is built around a different standard:
 
 ### Option A: Installer
 
-Download the latest Windows build from [Releases](https://github.com/psychosomat/kanso/releases).
+Download the latest Windows build from [Releases](https://github.com/psychosomat/Kanso/releases).
 
 ### Option B: Run From Source
 
@@ -89,4 +89,4 @@ The project is intentionally being shaped around:
 
 ## License
 
-[MIT](https://github.com/psychosomat/kanso/blob/main/LICENSE)
+[MIT](https://github.com/psychosomat/Kanso/blob/main/LICENSE)
