@@ -16,7 +16,8 @@ export function resolveTitlebarMode(
 
 	switch (platform) {
 		case "darwin":
-			return "macos";
+			// Use hidden on actual macOS to prevent duplication with system titlebar
+			return "hidden";
 		case "win32":
 			return "windows";
 		default:

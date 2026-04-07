@@ -256,7 +256,7 @@ async function createMainWindow() {
 		backgroundColor: "#090b0f",
 		autoHideMenuBar: true,
 		frame: false,
-		titleBarStyle: "hidden",
+		titleBarStyle: process.platform === "darwin" ? "hiddenInset" : "hidden",
 		webPreferences: {
 			preload: getPreloadPath(),
 			contextIsolation: true,
@@ -396,12 +396,20 @@ function parseRangeHeader(rangeHeader: string | null, fileSize: number) {
 }
 
 function createMediaResponse(targetPath: string, request: Request) {
-	const stats = statSync(targetPath);
-	const mimeType = getMimeType(targetPath);
+	// Normalize path for macOS compatibility
+	let normalizedPath = targetPath;
+	if (process.platform === "darwin") {
+		// Ensure path is properly resolved for macOS
+		normalizedPath = path.resolve(targetPath);
+		console.log("[MEDIA RESPONSE] macOS normalized path:", normalizedPath);
+	}
+
+	const stats = statSync(normalizedPath);
+	const mimeType = getMimeType(normalizedPath);
 	const range = parseRangeHeader(request.headers.get("range"), stats.size);
 
 	if (range) {
-		const stream = createReadStream(targetPath, {
+		const stream = createReadStream(normalizedPath, {
 			start: range.start,
 			end: range.end,
 		});
@@ -421,7 +429,7 @@ function createMediaResponse(targetPath: string, request: Request) {
 		);
 	}
 
-	const stream = createReadStream(targetPath);
+	const stream = createReadStream(normalizedPath);
 	return new Response(
 		Readable.toWeb(stream) as unknown as globalThis.ReadableStream,
 		{
@@ -512,10 +520,30 @@ async function bootstrap() {
 		const url = new URL(request.url);
 		const filePath = decodeURIComponent(url.pathname.replace(/^\/+/, ""));
 		try {
-			return createMediaResponse(filePath, request);
+			// Additional logging for macOS debugging
+			if (process.platform === "darwin") {
+				console.log("[VIDEO PROTOCOL] macOS request:", filePath);
+			}
+
+			const response = createMediaResponse(filePath, request);
+
+			// Log success on macOS
+			if (process.platform === "darwin") {
+				console.log("[VIDEO PROTOCOL] macOS response created successfully");
+			}
+
+			return response;
 		} catch (error) {
 			const message =
 				error instanceof Error ? error.message : "Failed to read local media";
+
+			// Enhanced error logging for macOS
+			if (process.platform === "darwin") {
+				console.error("[VIDEO PROTOCOL] macOS error:", error);
+				console.error("[VIDEO PROTOCOL] filePath:", filePath);
+				console.error("[VIDEO PROTOCOL] error message:", message);
+			}
+
 			return new Response(message, { status: 500 });
 		}
 	});

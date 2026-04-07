@@ -18,7 +18,12 @@ export class PosterCacheService {
 	) {
 		const binaryPath = ffmpegPath as string | null;
 		if (!binaryPath) return null;
+
+		// Ensure cache directory exists
 		await fs.mkdir(this.cacheDir, { recursive: true });
+
+		// Normalize source path for macOS compatibility
+		const normalizedSourcePath = path.resolve(sourcePath);
 		const outputPath = path.join(
 			this.cacheDir,
 			`${videoId}-${sanitizeMtime(modifiedAt)}.jpg`,
@@ -34,21 +39,44 @@ export class PosterCacheService {
 				? Math.max(1, Math.floor(durationSec * 0.15))
 				: 1;
 
+		// Enhanced logging for macOS debugging
+		if (process.platform === "darwin") {
+			console.log("[POSTER CACHE] macOS generating poster:", {
+				videoId,
+				sourcePath: normalizedSourcePath,
+				outputPath,
+				seekPoint,
+			});
+		}
+
 		const generated = await new Promise<boolean>((resolve) => {
 			const child = spawn(binaryPath, [
 				"-y",
 				"-ss",
 				String(seekPoint),
 				"-i",
-				sourcePath,
+				normalizedSourcePath,
 				"-frames:v",
 				"1",
 				"-vf",
 				"scale=640:-1",
 				outputPath,
 			]);
-			child.on("close", (code: number | null) => resolve(code === 0));
-			child.on("error", () => resolve(false));
+
+			child.on("close", (code: number | null) => {
+				const success = code === 0;
+				if (process.platform === "darwin") {
+					console.log("[POSTER CACHE] macOS ffmpeg result:", { code, success });
+				}
+				resolve(success);
+			});
+
+			child.on("error", (error) => {
+				if (process.platform === "darwin") {
+					console.error("[POSTER CACHE] macOS ffmpeg error:", error);
+				}
+				resolve(false);
+			});
 		});
 
 		return generated ? outputPath : null;
