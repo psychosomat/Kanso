@@ -2,7 +2,7 @@
 	"name": "kanso",
 	"version": "0.1.0",
 	"description": "Kanso - Modern Media Player",
-	"author": "psychosomat(Dmitrii Dark)",
+	"author": "psychosomat(Dmitrii Dark) <hello@ddark.dev>",
 	"private": true,
 	"type": "module",
 	"main": "dist-electron/main.js",

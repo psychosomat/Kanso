@@ -70,6 +70,14 @@ bun i
 bun dev
 ```
 
+### Option C: Arch Linux (AUR)
+
+```bash
+# Using an AUR helper like yay or paru
+paru -S kanso-bin
+
+```
+
 ## Build
 
 ```bash

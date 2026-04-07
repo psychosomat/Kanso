@@ -1,10 +1,10 @@
 pkgname=kanso-bin
-pkgver=__VERSION__
+pkgver=0.1.0
 pkgrel=1
 pkgdesc="Modern media player focused on convenience, beauty, and performance"
 arch=("x86_64")
-url="__PROJECT_URL__"
-license=("custom")
+url="https://github.com/psychosomat/Kanso"
+license=("MIT")
 depends=(
   "gtk3"
   "libsecret"
@@ -16,8 +16,8 @@ optdepends=(
 )
 provides=("kanso")
 conflicts=("kanso")
-source_x86_64=("kanso-${pkgver}.tar.gz::__SOURCE_URL__")
-sha256sums_x86_64=("__SHA256__")
+source_x86_64=("kanso-${pkgver}.tar.gz::https://github.com/psychosomat/Kanso/releases/download/v${pkgver}/Kanso-${pkgver}-linux-x86_64.tar.gz")
+sha256sums_x86_64=("9727f18edd06858647a5d2c051c5fed42f6085bb9f06af96f03996de04aabab2")
 
 package() {
   install -dm755 "${pkgdir}/opt/kanso"

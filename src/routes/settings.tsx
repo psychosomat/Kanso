@@ -10,6 +10,7 @@ import {
 	IconPlayerPlay,
 	IconRefresh,
 	IconTrash,
+	IconBrandGithub,
 } from "@tabler/icons-react";
 import { createFileRoute } from "@tanstack/react-router";
 import { useEffect, useState } from "react";
@@ -34,6 +35,7 @@ import { formatDateTime } from "@/lib/utils";
 
 const NOISE_STORAGE_KEY = "player:noiseOpacity";
 const ACCENT_STORAGE_KEY = "player:accentColor";
+const GITHUB_URL = "https://github.com/psychosomat/Kanso";
 
 function getNoiseOpacity(): number {
 	if (typeof window === "undefined") {
@@ -485,6 +487,15 @@ function SettingsPage() {
 							volume
 						</p>
 					</div>
+					<Separator className="my-4" />
+					<Button
+						variant="secondary"
+						className="w-full"
+						onClick={() => window.open(GITHUB_URL, "_blank")}
+					>
+						<IconBrandGithub size={16} />
+						View source code
+					</Button>
 				</SettingsSection>
 			</div>
 		</PageFrame>
