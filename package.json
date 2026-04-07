@@ -151,6 +151,14 @@
 				"role": "Viewer"
 			}
 		],
+		"mac": {
+			"category": "public.app-category.video",
+			"target": [
+				"dmg",
+				"zip"
+			],
+			"icon": "public/icon.png"
+		},
 		"win": {
 			"target": [
 				"nsis"
@@ -158,28 +166,22 @@
 			"icon": "public/favicon.ico",
 			"compression": "maximum"
 		},
+		"linux": {
+			"category": "AudioVideo",
+			"target": [
+				"deb",
+				"tar.gz"
+			],
+			"icon": "public/icon.png"
+		},
 		"nsis": {
 			"oneClick": false,
 			"allowToChangeInstallationDirectory": true,
 			"createDesktopShortcut": "always",
 			"createStartMenuShortcut": true
 		},
-		"linux": {
-			"category": "AudioVideo",
-			"target": [
-				"deb",
-				"tar.gz"
-			]
-		},
 		"deb": {
 			"priority": "optional"
-		},
-		"mac": {
-			"category": "public.app-category.video",
-			"target": [
-				"dmg",
-				"zip"
-			]
 		}
 	}
 }
