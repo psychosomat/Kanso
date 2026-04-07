@@ -1,0 +1,309 @@
+@import "tailwindcss";
+@plugin "@tailwindcss/typography";
+
+@theme {
+  --font-sans: "Segoe UI", system-ui, -apple-system, sans-serif;
+  --font-display: "Segoe UI", "Trebuchet MS", system-ui, sans-serif;
+}
+
+:root {
+  --background: #0d0b09;
+  --foreground: #ece9e3;
+  --muted-foreground: #8c8379;
+
+  --panel: #181410;
+  --panel-strong: #231e19;
+  --panel-elevated: #1c1814;
+  --panel-hover: #2e2720;
+
+  --border: rgba(240, 220, 195, 0.07);
+  --border-strong: rgba(240, 220, 195, 0.13);
+  --border-focus: rgba(212, 148, 58, 0.45);
+
+  --accent: #c8883a;
+  --accent-hover: color-mix(in oklab, var(--accent), black 18%);
+  --accent-subtle: color-mix(in oklab, var(--accent), transparent 87%);
+  --accent-strong: color-mix(in oklab, var(--accent), white 22%);
+
+  --ring: color-mix(in oklab, var(--accent), transparent 60%);
+  --border-focus: color-mix(in oklab, var(--accent), transparent 55%);
+
+  --destructive: #d4524a;
+  --destructive-subtle: rgba(212, 82, 74, 0.13);
+  --success: #5a9e6a;
+  --success-subtle: rgba(90, 158, 106, 0.13);
+
+  --shadow-sm: 0 1px 2px 0 rgba(0, 0, 0, 0.4);
+  --shadow: 0 1px 3px 0 rgba(0, 0, 0, 0.5), 0 1px 2px -1px rgba(0, 0, 0, 0.4);
+  --shadow-md: 0 4px 6px -1px rgba(0, 0, 0, 0.5), 0 2px 4px -2px rgba(0, 0, 0, 0.4);
+  --shadow-lg: 0 10px 15px -3px rgba(0, 0, 0, 0.6), 0 4px 6px -4px rgba(0, 0, 0, 0.5);
+  --shadow-xl: 0 20px 25px -5px rgba(0, 0, 0, 0.65), 0 8px 10px -6px rgba(0, 0, 0, 0.55);
+
+  --bg-tint-1: color-mix(in oklab, var(--accent), transparent 93%);
+  --bg-tint-2: color-mix(in oklab, var(--accent), transparent 94%);
+  --bg-tint-3: color-mix(in oklab, var(--accent), transparent 96%);
+  --bg-tint-4: color-mix(in oklab, var(--accent), transparent 96%);
+
+  --scrollbar-thumb: color-mix(in oklab, var(--accent), transparent 86%);
+  --scrollbar-thumb-hover: color-mix(in oklab, var(--accent), transparent 76%);
+
+  --radius-sm: 5px;
+  --radius: 9px;
+  --radius-md: 13px;
+  --radius-lg: 16px;
+  --radius-xl: 22px;
+  --radius-full: 9999px;
+
+  --noise-opacity: 0.035;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html,
+body,
+#app {
+  min-height: 100%;
+}
+
+html {
+  color-scheme: dark;
+}
+
+body {
+  margin: 0;
+  font-family: var(--font-sans);
+  background: var(--background);
+  color: var(--foreground);
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+body::before {
+  content: "";
+  position: fixed;
+  inset: 0;
+  pointer-events: none;
+  z-index: 0;
+  opacity: 0;
+  background:
+    radial-gradient(ellipse 70% 55% at 15% 8%, var(--bg-tint-1) 0%, transparent 55%),
+    radial-gradient(ellipse 55% 70% at 85% 92%, var(--bg-tint-2) 0%, transparent 55%),
+    radial-gradient(ellipse 45% 35% at 65% 20%, var(--bg-tint-3) 0%, transparent 50%),
+    radial-gradient(ellipse 35% 50% at 30% 80%, var(--bg-tint-4) 0%, transparent 50%);
+}
+
+body.ui-decor-ready::before {
+  opacity: 1;
+}
+
+body::after {
+  content: "";
+  position: fixed;
+  inset: 0;
+  pointer-events: none;
+  z-index: 1;
+  opacity: 0;
+  background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 256 256' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");
+  background-size: 200px 200px;
+  background-repeat: repeat;
+}
+
+body.ui-decor-ready::after {
+  opacity: var(--noise-opacity, 0.035);
+}
+::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+::-webkit-scrollbar-thumb {
+  border-radius: 999px;
+  background: var(--scrollbar-thumb);
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: var(--scrollbar-thumb-hover);
+}
+
+::selection {
+  background: var(--accent-subtle);
+  color: var(--accent-strong);
+}
+
+:focus-visible {
+  outline: none;
+  box-shadow: 0 0 0 2px var(--ring);
+}
+
+a {
+  color: inherit;
+  text-decoration: none;
+}
+
+button,
+input,
+textarea,
+select {
+  font: inherit;
+}
+
+img {
+  display: block;
+}
+
+.window-drag {
+  -webkit-app-region: drag;
+}
+
+.window-no-drag,
+.window-no-drag * {
+  -webkit-app-region: no-drag;
+}
+
+.app-scrollbar {
+  scrollbar-gutter: stable;
+}
+
+@keyframes fadeIn {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+@keyframes slideUp {
+  from {
+    opacity: 0;
+    transform: translateY(8px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes scaleIn {
+  from {
+    opacity: 0;
+    transform: scale(0.96);
+  }
+  to {
+    opacity: 1;
+    transform: scale(1);
+  }
+}
+
+.animate-fade-in {
+  animation: fadeIn 0.2s ease-out;
+}
+
+.animate-slide-up {
+  animation: slideUp 0.25s ease-out;
+}
+
+@keyframes fadeOut {
+  from {
+    opacity: 1;
+  }
+  to {
+    opacity: 0;
+  }
+}
+
+.animate-fade-out {
+  animation: fadeOut 0.15s ease-out forwards;
+}
+
+@keyframes slideInRight {
+  from {
+    opacity: 0;
+    transform: translateX(100%);
+  }
+  to {
+    opacity: 1;
+    transform: translateX(0);
+  }
+}
+
+@keyframes slideOutRight {
+  from {
+    opacity: 1;
+    transform: translateX(0);
+  }
+  to {
+    opacity: 0;
+    transform: translateX(100%);
+  }
+}
+
+.animate-slide-in-right {
+  animation: slideInRight 0.3s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+.animate-slide-out-right {
+  animation: slideOutRight 0.2s ease-in forwards;
+}
+
+@keyframes slideInLeft {
+  from {
+    opacity: 0;
+    transform: translateX(-100%);
+  }
+  to {
+    opacity: 1;
+    transform: translateX(0);
+  }
+}
+
+@keyframes slideOutLeft {
+  from {
+    opacity: 1;
+    transform: translateX(0);
+  }
+  to {
+    opacity: 0;
+    transform: translateX(-100%);
+  }
+}
+
+.animate-slide-in-left {
+  animation: slideInLeft 0.3s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+.animate-slide-out-left {
+  animation: slideOutLeft 0.2s ease-in forwards;
+}
+
+.data-\[state\=open\]\:animate-slide-in-left[data-state="open"] {
+  animation: slideInLeft 0.3s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+.data-\[state\=closed\]\:animate-slide-out-left[data-state="closed"] {
+  animation: slideOutLeft 0.2s ease-in forwards;
+}
+
+.data-\[state\=open\]\:animate-slide-in-right[data-state="open"] {
+  animation: slideInRight 0.3s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+.data-\[state\=closed\]\:animate-slide-out-right[data-state="closed"] {
+  animation: slideOutRight 0.2s ease-in forwards;
+}
+
+.font-display {
+  font-family: var(--font-display);
+}
+
+.glass {
+  background: rgba(20, 16, 12, 0.82);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+}

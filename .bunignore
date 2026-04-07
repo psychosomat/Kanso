@@ -1,0 +1,46 @@
+# Development files
+src/
+electron/
+public/
+.vite/
+dist/
+dist-electron/
+*.ts
+*.tsx
+*.js.map
+*.d.ts
+
+# Development dependencies
+node_modules/.bin/
+node_modules/@types/
+node_modules/@biomejs/
+node_modules/@vitejs/
+node_modules/@testing-library/
+node_modules/vite/
+node_modules/tsup/
+node_modules/concurrently/
+node_modules/cross-env/
+node_modules/wait-on/
+node_modules/vitest/
+node_modules/jsdom/
+
+# Config files
+*.config.js
+*.config.ts
+.gitignore
+.eslintrc*
+.prettierrc*
+biome.json
+.cta.json
+
+# Documentation
+README.md
+LICENSE
+*.md
+
+# Cache and temp
+.cache/
+.temp/
+*.log
+.DS_Store
+Thumbs.db

@@ -1,0 +1,43 @@
+pkgname=kanso-bin
+pkgver=__VERSION__
+pkgrel=1
+pkgdesc="Forum design player focused on convenience, beauty, and performance"
+arch=("x86_64")
+url="__PROJECT_URL__"
+license=("custom")
+depends=(
+  "gtk3"
+  "libsecret"
+  "nss"
+  "alsa-lib"
+)
+optdepends=(
+  "ffmpeg: broader codec support from the system stack"
+)
+provides=("kanso")
+conflicts=("kanso")
+source_x86_64=("kanso-${pkgver}.tar.gz::__SOURCE_URL__")
+sha256sums_x86_64=("__SHA256__")
+
+package() {
+  install -dm755 "${pkgdir}/opt/kanso"
+  cp -a "${srcdir}/"* "${pkgdir}/opt/kanso/"
+
+  install -dm755 "${pkgdir}/usr/bin"
+  ln -sf "/opt/kanso/kanso" "${pkgdir}/usr/bin/kanso"
+
+  install -Dm644 "${pkgdir}/opt/kanso/resources/app.asar.unpacked/dist/client/logo512.png" \
+    "${pkgdir}/usr/share/pixmaps/kanso.png"
+
+  install -Dm644 /dev/stdin "${pkgdir}/usr/share/applications/kanso.desktop" <<'DESKTOP'
+[Desktop Entry]
+Name=Kanso
+Exec=/usr/bin/kanso %U
+Terminal=false
+Type=Application
+Icon=kanso
+StartupWMClass=Kanso
+Categories=AudioVideo;Video;
+MimeType=video/mp4;video/x-matroska;video/webm;video/quicktime;video/x-msvideo;video/x-m4v;video/mp2t;
+DESKTOP
+}
