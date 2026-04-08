@@ -208,6 +208,8 @@ export type PlayerPreferencesDto = {
 	speedPresetPrimary: number;
 	speedPresetSecondary: number;
 	accentColor: string;
+	playerEqEnabled: boolean;
+	playerEqGains: number[];
 };
 
 export type SavePlayerPreferencesDto = Partial<PlayerPreferencesDto>;

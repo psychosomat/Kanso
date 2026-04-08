@@ -20,14 +20,21 @@ import type {
 import { DatabaseService } from "../services/db";
 import { getExternalVideoDetails } from "../services/external-video";
 import { LibraryIndexerService } from "../services/library-indexer";
+import { PosterCacheService } from "../services/poster-cache";
 
 type Services = {
 	db: DatabaseService;
 	indexer: LibraryIndexerService;
+	posterCache: PosterCacheService;
 	getMainWindow: () => BrowserWindow | null;
 };
 
-export function registerIpc({ db, indexer, getMainWindow }: Services) {
+export function registerIpc({
+	db,
+	indexer,
+	posterCache,
+	getMainWindow,
+}: Services) {
 	ipcMain.handle("window:minimize", () => {
 		getMainWindow()?.minimize();
 	});
@@ -136,7 +143,7 @@ export function registerIpc({ db, indexer, getMainWindow }: Services) {
 		db.getVideoById(videoId),
 	);
 	ipcMain.handle("library:get-external-video", (_event, sourcePath: string) =>
-		getExternalVideoDetails(sourcePath),
+		getExternalVideoDetails(sourcePath, posterCache),
 	);
 	ipcMain.handle("library:rescan", async () => {
 		const settings = db.getLibrarySettings();

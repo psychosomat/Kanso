@@ -13,7 +13,8 @@ import {
 	IconBrandGithub,
 } from "@tabler/icons-react";
 import { createFileRoute } from "@tanstack/react-router";
-import { useEffect, useState } from "react";
+import type React from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useAppState } from "@/components/layout/app-state";
 import { PageFrame } from "@/components/shared/page-frame";
 import { Badge } from "@/components/ui/badge";
@@ -30,6 +31,13 @@ import { Separator } from "@/components/ui/separator";
 import { useScrollRestore } from "@/hooks/use-scroll-restore";
 import { APP_NAME } from "@/lib/constants";
 import type { TitlebarMode } from "@/lib/contracts";
+import {
+	EQ_BANDS,
+	EQ_GAIN_MAX,
+	EQ_GAIN_MIN,
+	clampEqGain,
+	normalizeEqGains,
+} from "@/lib/equalizer";
 import { getPlayerApi } from "@/lib/player-api";
 import { formatDateTime } from "@/lib/utils";
 
@@ -90,6 +98,8 @@ function SettingsPage() {
 	const [busy, setBusy] = useState(false);
 	const [noiseOpacity, setNoiseOpacity] = useState<number>(0.035);
 	const [accentColor, setAccentColor] = useState<string>("#c8883a");
+	const [eqEnabled, setEqEnabled] = useState(false);
+	const [eqGains, setEqGains] = useState<number[]>(normalizeEqGains());
 
 	useEffect(() => {
 		setNoiseOpacity(getNoiseOpacity());
@@ -97,13 +107,15 @@ function SettingsPage() {
 	}, []);
 
 	useEffect(() => {
-		if (!preferences?.accentColor) {
+		if (!preferences) {
 			return;
 		}
 
 		setAccentColor(preferences.accentColor);
 		applyAccentColor(preferences.accentColor);
-	}, [preferences?.accentColor]);
+		setEqEnabled(Boolean(preferences.playerEqEnabled));
+		setEqGains(normalizeEqGains(preferences.playerEqGains));
+	}, [preferences]);
 
 	function handleNoiseChange(value: number) {
 		setNoiseOpacity(value);
@@ -115,6 +127,112 @@ function SettingsPage() {
 		applyAccentColor(value);
 		void savePreferences({ accentColor: value });
 	}
+
+	const handleEqToggle = useCallback(
+		(enabled: boolean) => {
+			setEqEnabled(enabled);
+			void savePreferences({ playerEqEnabled: enabled });
+		},
+		[savePreferences],
+	);
+
+	const handleEqBandChange = useCallback(
+		(index: number, value: number) => {
+			const next = normalizeEqGains(eqGains);
+			next[index] = clampEqGain(value);
+			setEqGains([...next]);
+			void savePreferences({ playerEqGains: next });
+		},
+		[eqGains, savePreferences],
+	);
+
+	const resetEq = useCallback(() => {
+		const defaults = normalizeEqGains();
+		setEqGains(defaults);
+		void savePreferences({ playerEqGains: defaults, playerEqEnabled: false });
+		setEqEnabled(false);
+	}, [savePreferences]);
+
+	const eqGraphWidth = 720;
+	const eqGraphHeight = 260;
+	const eqMargin = 28;
+	const bandPoints = useMemo(
+		() =>
+			EQ_BANDS.map((band, index) => {
+				const x =
+					eqMargin +
+					(index / Math.max(1, EQ_BANDS.length - 1)) *
+						(eqGraphWidth - eqMargin * 2);
+				return { ...band, x };
+			}),
+		[],
+	);
+
+	const gainToY = useCallback((value: number) => {
+		const clamped = clampEqGain(value);
+		const ratio = (EQ_GAIN_MAX - clamped) / (EQ_GAIN_MAX - EQ_GAIN_MIN);
+		return eqMargin + ratio * (eqGraphHeight - eqMargin * 2);
+	}, []);
+
+	const yToGain = useCallback((y: number) => {
+		const ratio = Math.max(
+			0,
+			Math.min(1, (y - eqMargin) / (eqGraphHeight - eqMargin * 2)),
+		);
+		const gain = EQ_GAIN_MAX - ratio * (EQ_GAIN_MAX - EQ_GAIN_MIN);
+		return clampEqGain(gain);
+	}, []);
+
+	const eqPath = useMemo(() => {
+		const points = bandPoints.map((band, index) => ({
+			x: band.x,
+			y: gainToY(eqGains[index] ?? 0),
+		}));
+		if (!points.length) return "";
+		let d = `M ${points[0]?.x ?? 0} ${points[0]?.y ?? 0}`;
+		for (let i = 1; i < points.length; i += 1) {
+			const prev = points[i - 1];
+			const current = points[i];
+			const midX = (prev.x + current.x) / 2;
+			const midY = (prev.y + current.y) / 2;
+			d += ` Q ${prev.x} ${prev.y} ${midX} ${midY}`;
+		}
+		d += ` T ${points.at(-1)?.x ?? 0} ${points.at(-1)?.y ?? 0}`;
+		return d;
+	}, [bandPoints, eqGains, gainToY]);
+
+	const eqAreaPath = useMemo(() => {
+		if (!eqPath) return "";
+		const bottomY = eqGraphHeight - eqMargin;
+		const lastX = bandPoints.at(-1)?.x ?? eqMargin;
+		return `${eqPath} L ${lastX} ${bottomY} L ${bandPoints[0]?.x ?? eqMargin} ${bottomY} Z`;
+	}, [bandPoints, eqPath]);
+
+	const [dragIndex, setDragIndex] = useState<number | null>(null);
+	const svgRef = useRef<SVGSVGElement>(null);
+
+	const handleGraphPointerMove = useCallback(
+		(event: React.PointerEvent<SVGSVGElement>) => {
+			if (dragIndex === null || !eqEnabled || !svgRef.current) return;
+			const rect = svgRef.current.getBoundingClientRect();
+			const relativeY = event.clientY - rect.top;
+			const nextGain = yToGain(relativeY);
+			handleEqBandChange(dragIndex, nextGain);
+		},
+		[dragIndex, eqEnabled, handleEqBandChange, yToGain],
+	);
+
+	const handleHandleDown = useCallback(
+		(index: number) => {
+			if (!eqEnabled) return;
+			setDragIndex(index);
+		},
+		[eqEnabled],
+	);
+
+	const stopDrag = useCallback((_event: React.PointerEvent<SVGSVGElement>) => {
+		setDragIndex(null);
+	}, []);
 
 	function handleTitlebarModeChange(value: string) {
 		const nextMode = value as TitlebarMode;
@@ -460,6 +578,154 @@ function SettingsPage() {
 									void saveSpeedPreset("speedPresetSecondary", e.target.value)
 								}
 							/>
+						</div>
+					</div>
+
+					<Separator className="my-6" />
+
+					<div className="space-y-4">
+						<div className="flex items-center justify-between gap-3">
+							<div>
+								<p className="text-sm text-(--foreground)">Equalizer</p>
+								<p className="mt-0.5 text-xs text-(--muted-foreground)">
+									6-band EQ applied to video audio. Gains are in dB.
+								</p>
+							</div>
+							<div className="flex items-center gap-2">
+								<Badge variant={eqEnabled ? "accent" : "default"}>
+									{eqEnabled ? "Enabled" : "Disabled"}
+								</Badge>
+								<Button
+									variant={eqEnabled ? "secondary" : "default"}
+									size="sm"
+									onClick={() => handleEqToggle(!eqEnabled)}
+								>
+									{eqEnabled ? "Turn off" : "Turn on"}
+								</Button>
+								<Button variant="ghost" size="sm" onClick={resetEq}>
+									Reset
+								</Button>
+							</div>
+						</div>
+
+						<div className="relative w-full overflow-hidden rounded-(--radius) border border-(--border) bg-(--panel)">
+							<svg
+								ref={svgRef}
+								width="100%"
+								height="auto"
+								viewBox={`0 0 ${eqGraphWidth} ${eqGraphHeight}`}
+								className="block"
+								onPointerMove={handleGraphPointerMove}
+								onPointerUp={stopDrag}
+								onPointerLeave={stopDrag}
+							>
+								<title>Equalizer graph</title>
+								<defs>
+									<linearGradient id="eqGradient" x1="0" y1="0" x2="0" y2="1">
+										<stop
+											offset="0%"
+											stopColor="var(--accent)"
+											stopOpacity="0.25"
+										/>
+										<stop
+											offset="100%"
+											stopColor="var(--accent)"
+											stopOpacity="0"
+										/>
+									</linearGradient>
+								</defs>
+
+								<rect
+									width={eqGraphWidth}
+									height={eqGraphHeight}
+									fill="transparent"
+									className={
+										eqEnabled ? "cursor-crosshair" : "cursor-not-allowed"
+									}
+								/>
+
+								{eqEnabled && eqAreaPath && (
+									<path
+										d={eqAreaPath}
+										fill="url(#eqGradient)"
+										className="transition-all duration-100 ease-out"
+									/>
+								)}
+
+								{eqEnabled && eqPath && (
+									<path
+										d={eqPath}
+										fill="none"
+										stroke="var(--accent)"
+										strokeWidth={2.5}
+										className="transition-all duration-100 ease-out"
+									/>
+								)}
+
+								{bandPoints.map((band, index) => {
+									const y = gainToY(eqGains[index] ?? 0);
+									return (
+										<g key={band.label}>
+											<line
+												x1={band.x}
+												y1={eqMargin}
+												x2={band.x}
+												y2={eqGraphHeight - eqMargin}
+												stroke="var(--border)"
+												strokeDasharray="2 4"
+												className="opacity-50"
+											/>
+											<text
+												x={band.x}
+												y={eqGraphHeight - 8}
+												textAnchor="middle"
+												className="text-[10px] fill-(--muted-foreground) font-medium tabular-nums"
+											>
+												{band.label}
+											</text>
+											<text
+												x={band.x}
+												y={y - 10}
+												textAnchor="middle"
+												className="text-[10px] fill-(--foreground) font-medium tabular-nums"
+											>
+												{eqGains[index]?.toFixed(1)} dB
+											</text>
+											{eqEnabled && (
+												<circle
+													cx={band.x}
+													cy={y}
+													r={20}
+													fill="transparent"
+													className="cursor-grab active:cursor-grabbing"
+													onPointerDown={() => handleHandleDown(index)}
+												/>
+											)}
+											<circle
+												cx={band.x}
+												cy={y}
+												r={eqEnabled ? 10 : 8}
+												fill={eqEnabled ? "var(--accent)" : "var(--border)"}
+												className={
+													eqEnabled
+														? "pointer-events-none transition-all duration-150"
+														: "pointer-events-none"
+												}
+											/>
+										</g>
+									);
+								})}
+
+								<line
+									x1={eqMargin}
+									y1={gainToY(0)}
+									x2={eqGraphWidth - eqMargin}
+									y2={gainToY(0)}
+									stroke="var(--border)"
+									strokeDasharray="4 4"
+									className="opacity-50"
+								/>
+							</svg>
 						</div>
 					</div>
 				</SettingsSection>

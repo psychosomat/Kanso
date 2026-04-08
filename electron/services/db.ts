@@ -4,6 +4,7 @@ import path from "node:path";
 import type { Database as DatabaseType } from "better-sqlite3";
 import Database from "better-sqlite3";
 import { DEFAULT_PLAYER_PREFERENCES } from "../../src/lib/constants";
+import { normalizeEqGains } from "../../src/lib/equalizer";
 import type {
 	AddVideoToCategoriesDto,
 	CategoryDto,
@@ -96,6 +97,9 @@ export class DatabaseService {
 	}
 
 	private migrate() {
+		const defaultEqBands = JSON.stringify(
+			DEFAULT_PLAYER_PREFERENCES.playerEqGains,
+		);
 		this.db.exec(`
       CREATE TABLE IF NOT EXISTS library_settings (
         id INTEGER PRIMARY KEY CHECK (id = 1),
@@ -178,6 +182,10 @@ export class DatabaseService {
         player_fit_mode TEXT NOT NULL,
         speed_preset_primary REAL NOT NULL DEFAULT 1,
         speed_preset_secondary REAL NOT NULL DEFAULT 2.2,
+        accent_color TEXT NOT NULL DEFAULT '#c8883a',
+        player_loop INTEGER NOT NULL DEFAULT 0,
+        eq_enabled INTEGER NOT NULL DEFAULT 0,
+        eq_bands TEXT NOT NULL DEFAULT '${defaultEqBands}',
         created_at TEXT NOT NULL,
         updated_at TEXT NOT NULL
       );
@@ -196,6 +204,21 @@ export class DatabaseService {
 			"ui_preferences",
 			"accent_color",
 			"TEXT NOT NULL DEFAULT '#c8883a'",
+		);
+		this.ensureColumn(
+			"ui_preferences",
+			"player_loop",
+			"INTEGER NOT NULL DEFAULT 0",
+		);
+		this.ensureColumn(
+			"ui_preferences",
+			"eq_enabled",
+			"INTEGER NOT NULL DEFAULT 0",
+		);
+		this.ensureColumn(
+			"ui_preferences",
+			"eq_bands",
+			`TEXT NOT NULL DEFAULT '${defaultEqBands}'`,
 		);
 		this.ensureColumn("ui_preferences", "titlebar_mode", "TEXT");
 		this.ensureColumn("categories", "parent_id", "TEXT");
@@ -230,8 +253,8 @@ export class DatabaseService {
 		this.db
 			.prepare(
 				`INSERT OR IGNORE INTO ui_preferences
-         (id, dump_sort, dump_view, sidebar_collapsed, titlebar_mode, player_volume, player_muted, player_fit_mode, speed_preset_primary, speed_preset_secondary, accent_color, created_at, updated_at)
-         VALUES (1, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+         (id, dump_sort, dump_view, sidebar_collapsed, titlebar_mode, player_volume, player_muted, player_fit_mode, speed_preset_primary, speed_preset_secondary, accent_color, player_loop, eq_enabled, eq_bands, created_at, updated_at)
+         VALUES (1, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
 			)
 			.run(
 				DEFAULT_PLAYER_PREFERENCES.dumpSort,
@@ -244,6 +267,9 @@ export class DatabaseService {
 				DEFAULT_PLAYER_PREFERENCES.speedPresetPrimary,
 				DEFAULT_PLAYER_PREFERENCES.speedPresetSecondary,
 				DEFAULT_PLAYER_PREFERENCES.accentColor,
+				Number(DEFAULT_PLAYER_PREFERENCES.playerLoop),
+				Number(DEFAULT_PLAYER_PREFERENCES.playerEqEnabled),
+				JSON.stringify(DEFAULT_PLAYER_PREFERENCES.playerEqGains),
 				now,
 				now,
 			);
@@ -408,6 +434,9 @@ export class DatabaseService {
 				speed_preset_primary: number;
 				speed_preset_secondary: number;
 				accent_color: PlayerPreferencesDto["accentColor"];
+				player_loop: number;
+				eq_enabled: number;
+				eq_bands: string | null;
 			};
 			return {
 				dumpSort: row.dump_sort,
@@ -420,16 +449,21 @@ export class DatabaseService {
 				speedPresetPrimary: row.speed_preset_primary,
 				speedPresetSecondary: row.speed_preset_secondary,
 				accentColor: row.accent_color,
+				playerLoop: Boolean(row.player_loop),
+				playerEqEnabled: Boolean(row.eq_enabled),
+				playerEqGains: this.parseEqGains(row.eq_bands),
 			};
 		});
 	}
 
 	savePlayerPreferences(input: SavePlayerPreferencesDto) {
 		const next = { ...this.getPlayerPreferences(), ...input };
+		const normalizedGains = normalizeEqGains(next.playerEqGains);
+		const eqEnabled = Boolean(next.playerEqEnabled);
 		this.db
 			.prepare(
 				`UPDATE ui_preferences
-         SET dump_sort = ?, dump_view = ?, sidebar_collapsed = ?, titlebar_mode = ?, player_volume = ?, player_muted = ?, player_fit_mode = ?, speed_preset_primary = ?, speed_preset_secondary = ?, accent_color = ?, updated_at = ?
+         SET dump_sort = ?, dump_view = ?, sidebar_collapsed = ?, titlebar_mode = ?, player_volume = ?, player_muted = ?, player_fit_mode = ?, speed_preset_primary = ?, speed_preset_secondary = ?, accent_color = ?, player_loop = ?, eq_enabled = ?, eq_bands = ?, updated_at = ?
          WHERE id = 1`,
 			)
 			.run(
@@ -443,6 +477,9 @@ export class DatabaseService {
 				next.speedPresetPrimary,
 				next.speedPresetSecondary,
 				next.accentColor,
+				Number(next.playerLoop),
+				Number(eqEnabled),
+				JSON.stringify(normalizedGains),
 				new Date().toISOString(),
 			);
 	}
@@ -456,6 +493,26 @@ export class DatabaseService {
 				return mode;
 			default:
 				return getDefaultTitlebarMode();
+		}
+	}
+
+	private parseEqGains(raw: string | null | undefined): number[] {
+		if (typeof raw !== "string") {
+			return [...DEFAULT_PLAYER_PREFERENCES.playerEqGains];
+		}
+
+		try {
+			const parsed = JSON.parse(raw);
+			const numeric = Array.isArray(parsed)
+				? parsed.map((value) => Number(value))
+				: [];
+			return normalizeEqGains(numeric);
+		} catch (error) {
+			console.warn(
+				"[DB] Failed to parse EQ gains, falling back to defaults",
+				error,
+			);
+			return [...DEFAULT_PLAYER_PREFERENCES.playerEqGains];
 		}
 	}
 

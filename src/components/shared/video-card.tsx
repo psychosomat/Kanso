@@ -127,9 +127,12 @@ export function VideoCard({
 									className="h-full w-full object-cover"
 								/>
 							) : (
-								<div className="flex h-full items-center justify-center text-sm text-(--muted-foreground)">
-									<IconPlayerPlayFilled size={32} className="opacity-40" />
-								</div>
+								<video
+									src={video.streamUrl}
+									preload="metadata"
+									muted
+									className="h-full w-full object-cover"
+								/>
 							)}
 
 							<div className="absolute inset-0 bg-linear-to-t from-black/60 via-transparent to-transparent" />

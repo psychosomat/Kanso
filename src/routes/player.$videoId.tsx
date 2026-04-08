@@ -54,8 +54,11 @@ import {
 	SheetTrigger,
 } from "@/components/ui/sheet";
 import { usePlayerHotkeys } from "@/hooks/use-player-hotkeys";
+import { usePlayerUiVisibility } from "@/hooks/use-player-ui-visibility";
 import { CategoryIcon } from "@/lib/category-icons";
 import type { PlayableVideoDto, PlayerPreferencesDto } from "@/lib/contracts";
+import { EQ_BANDS, clampEqGain, normalizeEqGains } from "@/lib/equalizer";
+import type { EqBand } from "@/lib/equalizer";
 import { getPlayerApi } from "@/lib/player-api";
 import { getPlayerReturnTarget } from "@/lib/player-return";
 import {
@@ -129,9 +132,76 @@ export function PlayerPage({
 	const playerContainerRef = useRef<HTMLDivElement | null>(null);
 	const timelineTrackRef = useRef<HTMLDivElement | null>(null);
 	const gaugeButtonRef = useRef<HTMLButtonElement | null>(null);
+	const topBarRef = useRef<HTMLDivElement | null>(null);
+	const bottomBarRef = useRef<HTMLDivElement | null>(null);
 	const previewSeekBusyRef = useRef(false);
 	const previewSeekQueuedRef = useRef<number | null>(null);
 	const wasPlayingBeforeScrubRef = useRef(false);
+	const audioContextRef = useRef<AudioContext | null>(null);
+	const sourceNodeRef = useRef<MediaElementAudioSourceNode | null>(null);
+	const __sourceNodeMapRef = useRef<
+		WeakMap<HTMLVideoElement, MediaElementAudioSourceNode>
+	>(new WeakMap());
+	const eqNodesRef = useRef<BiquadFilterNode[]>([]);
+
+	const { isVisible, resetTimer } = usePlayerUiVisibility();
+
+	const applyEq = useCallback(
+		(enabled: boolean, gains: number[] | undefined) => {
+			const videoElement = videoRef.current;
+			if (!videoElement) return;
+
+			if (!audioContextRef.current) {
+				audioContextRef.current = new AudioContext();
+			}
+			const ctx = audioContextRef.current;
+
+			if (ctx.state === "suspended") {
+				void ctx.resume();
+			}
+
+			// Get or create source node for this video element (can only create once per element)
+			let sourceNode = __sourceNodeMapRef.current.get(videoElement);
+			if (!sourceNode) {
+				sourceNode = ctx.createMediaElementSource(videoElement);
+				__sourceNodeMapRef.current.set(videoElement, sourceNode);
+			}
+			sourceNodeRef.current = sourceNode;
+
+			if (eqNodesRef.current.length === 0) {
+				eqNodesRef.current = EQ_BANDS.map((band: EqBand) => {
+					const node = ctx.createBiquadFilter();
+					node.type = band.type;
+					node.frequency.value = band.frequency;
+					if (band.q) {
+						node.Q.value = band.q;
+					}
+					return node;
+				});
+			}
+
+			const normalized = normalizeEqGains(gains);
+			eqNodesRef.current.forEach((node, index) => {
+				node.gain.value = enabled ? clampEqGain(normalized[index]) : 0;
+			});
+
+			sourceNode.disconnect();
+			eqNodesRef.current.forEach((node) => {
+				node.disconnect();
+			});
+			if (enabled) {
+				let previous: AudioNode = sourceNode;
+				for (const node of eqNodesRef.current) {
+					previous.connect(node);
+					previous = node;
+				}
+				previous.connect(ctx.destination);
+			} else {
+				sourceNode.connect(ctx.destination);
+			}
+		},
+		[],
+	);
 
 	useEffect(() => {
 		if (!window.playerApi) return;
@@ -149,9 +219,10 @@ export function PlayerPage({
 				setPrefs(preferences);
 				setPlaybackRate(preferences.speedPresetPrimary);
 				setIsLooping(preferences.playerLoop ?? false);
+				applyEq(preferences.playerEqEnabled, preferences.playerEqGains);
 			},
 		);
-	}, [mode, sourcePath, videoId]);
+	}, [applyEq, mode, sourcePath, videoId]);
 
 	useEffect(() => {
 		if (
@@ -424,6 +495,7 @@ export function PlayerPage({
 				element.muted = prefs.playerMuted;
 			}
 			element.playbackRate = playbackRate;
+			applyEq(prefs?.playerEqEnabled ?? false, prefs?.playerEqGains);
 		};
 
 		const onTimeUpdate = () => {
@@ -493,7 +565,15 @@ export function PlayerPage({
 			element.removeEventListener("pause", onPause);
 			element.removeEventListener("ended", onEnded);
 		};
-	}, [completedMarked, isLooping, isScrubbing, playbackRate, prefs, video]);
+	}, [
+		applyEq,
+		completedMarked,
+		isLooping,
+		isScrubbing,
+		playbackRate,
+		prefs,
+		video,
+	]);
 
 	useEffect(() => {
 		const previewVideo = previewVideoRef.current;
@@ -507,6 +587,12 @@ export function PlayerPage({
 		if (!element) return;
 		element.playbackRate = playbackRate;
 	}, [playbackRate]);
+
+	useEffect(() => {
+		if (prefs) {
+			applyEq(prefs.playerEqEnabled ?? false, prefs.playerEqGains);
+		}
+	}, [applyEq, prefs?.playerEqEnabled, prefs?.playerEqGains, prefs]);
 
 	const adjustRateFromWheelRef = useRef(adjustRateFromWheel);
 	useEffect(() => {
@@ -525,6 +611,68 @@ export function PlayerPage({
 		button.addEventListener("wheel", handler, { passive: false });
 		return () => button.removeEventListener("wheel", handler);
 	}, []);
+
+	// UI visibility animation with GSAP
+	useGSAP(
+		() => {
+			const topBar = topBarRef.current;
+			const bottomBar = bottomBarRef.current;
+			if (!topBar || !bottomBar) return;
+
+			if (isVisible) {
+				gsap.to([topBar, bottomBar], {
+					opacity: 1,
+					y: 0,
+					duration: 0.3,
+					ease: "power2.out",
+				});
+			} else {
+				gsap.to(topBar, {
+					opacity: 0,
+					y: -20,
+					duration: 0.3,
+					ease: "power2.in",
+				});
+				gsap.to(bottomBar, {
+					opacity: 0,
+					y: 20,
+					duration: 0.3,
+					ease: "power2.in",
+				});
+			}
+		},
+		{ dependencies: [isVisible] },
+	);
+
+	// Reset visibility timer on user interaction
+	useEffect(() => {
+		const container = playerContainerRef.current;
+		if (!container) return;
+
+		const handleInteraction = () => {
+			resetTimer();
+		};
+
+		container.addEventListener("mousemove", handleInteraction);
+		container.addEventListener("mousedown", handleInteraction);
+		container.addEventListener("touchstart", handleInteraction);
+
+		return () => {
+			container.removeEventListener("mousemove", handleInteraction);
+			container.removeEventListener("mousedown", handleInteraction);
+			container.removeEventListener("touchstart", handleInteraction);
+		};
+	}, [resetTimer]);
+
+	// Reset timer on keyboard events
+	useEffect(() => {
+		const handleKeyDown = () => {
+			resetTimer();
+		};
+
+		window.addEventListener("keydown", handleKeyDown);
+		return () => window.removeEventListener("keydown", handleKeyDown);
+	}, [resetTimer]);
 
 	const fitClass = useMemo(() => {
 		if (!prefs) return "object-contain";
@@ -607,7 +755,10 @@ export function PlayerPage({
 				ref={playerContainerRef}
 				className="relative h-full w-full overflow-hidden bg-black"
 			>
-				<div className="absolute inset-x-0 top-0 z-20 flex items-center justify-between bg-linear-to-b from-black/85 to-transparent px-4 pb-10 pt-4">
+				<div
+					ref={topBarRef}
+					className="absolute inset-x-0 top-0 z-20 flex items-center justify-between bg-linear-to-b from-black/85 to-transparent px-4 pb-10 pt-4"
+				>
 					<Button
 						variant="ghost"
 						size="sm"
@@ -795,6 +946,7 @@ export function PlayerPage({
 						<video
 							ref={videoRef}
 							src={video.streamUrl}
+							crossOrigin="anonymous"
 							poster={video.posterUrl ?? undefined}
 							className={`h-full w-full ${fitClass}`}
 							controls={false}
@@ -835,7 +987,10 @@ export function PlayerPage({
 					) : null}
 				</button>
 
-				<div className="absolute inset-x-0 bottom-0 z-20 select-none bg-linear-to-t from-black/95 via-black/60 to-transparent px-5 pb-5 pt-20">
+				<div
+					ref={bottomBarRef}
+					className="absolute inset-x-0 bottom-0 z-20 select-none bg-linear-to-t from-black/95 via-black/60 to-transparent px-5 pb-5 pt-20"
+				>
 					{/* Timeline */}
 					<div
 						ref={timelineTrackRef}

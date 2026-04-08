@@ -13,7 +13,7 @@ export class PosterCacheService {
 	async ensurePoster(
 		videoId: string,
 		sourcePath: string,
-		durationSec: number | null,
+		_durationSec: number | null,
 		modifiedAt: string,
 	) {
 		const binaryPath = ffmpegPath as string | null;
@@ -34,10 +34,7 @@ export class PosterCacheService {
 			return outputPath;
 		} catch {}
 
-		const seekPoint =
-			durationSec && durationSec > 10
-				? Math.max(1, Math.floor(durationSec * 0.15))
-				: 1;
+		const seekPoint = 0;
 
 		// Enhanced logging for macOS debugging
 		if (process.platform === "darwin") {

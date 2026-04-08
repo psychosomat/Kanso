@@ -43,14 +43,15 @@ function sendAppReady() {
 function initializeBackend() {
 	const appData = app.getPath("userData");
 	db = new DatabaseService(path.join(appData, "data", "player.db"));
-	indexer = new LibraryIndexerService(
-		db,
-		new PosterCacheService(path.join(appData, "cache", "posters")),
+	const posterCache = new PosterCacheService(
+		path.join(appData, "cache", "posters"),
 	);
+	indexer = new LibraryIndexerService(db, posterCache);
 
 	cleanupIpc = registerIpc({
 		db,
 		indexer,
+		posterCache,
 		getMainWindow: () => mainWindow,
 	});
 }

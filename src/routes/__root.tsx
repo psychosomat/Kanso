@@ -80,7 +80,7 @@ function RootDocument({ children }: { children: React.ReactNode }) {
 			<head>
 				<HeadContent />
 			</head>
-			<body className="antialiased wrap-anywhere">
+			<body className="antialiased wrap-anywhere select-none">
 				<HotkeysProvider>
 					<AppStateProvider>
 						<AppShell>{children}</AppShell>
