@@ -62,24 +62,6 @@ export function VideoCard({
 	const [removeDialogOpen, setRemoveDialogOpen] = useState(false);
 	const [removing, setRemoving] = useState(false);
 
-	// Disabled hover animations for better LCP
-	// const onPointerEnter = useCallback(() => {
-	// 	if (!cardRef.current) return;
-	// 	gsap.to(cardRef.current, {
-	// 		scale: 1.02,
-	// 		duration: 0.2,
-	// 		ease: "power2.out",
-	// 	});
-	// }, []);
-	// const onPointerLeave = useCallback(() => {
-	// 	if (!cardRef.current) return;
-	// 	gsap.to(cardRef.current, {
-	// 		scale: 1,
-	// 		duration: 0.2,
-	// 		ease: "power2.out",
-	// 	});
-	// }, []);
-
 	const onOpenPlayer = useCallback(() => {
 		savePlayerReturnTarget({
 			pathname: location.pathname,
@@ -122,17 +104,17 @@ export function VideoCard({
 								<img
 									src={video.posterUrl}
 									alt={video.fileName}
-									loading="eager"
+									loading="lazy"
 									decoding="async"
 									className="h-full w-full object-cover"
 								/>
 							) : (
-								<video
-									src={video.streamUrl}
-									preload="metadata"
-									muted
-									className="h-full w-full object-cover"
-								/>
+								<div className="flex h-full w-full items-center justify-center bg-(--panel-strong)">
+									<IconPlayerPlayFilled
+										size={32}
+										className="text-(--muted-foreground)"
+									/>
+								</div>
 							)}
 
 							<div className="absolute inset-0 bg-linear-to-t from-black/60 via-transparent to-transparent" />
@@ -155,16 +137,13 @@ export function VideoCard({
 						<div className="p-4">
 							<div className="flex items-start justify-between gap-3">
 								<div className="min-w-0 flex-1">
-									<h3 className="line-clamp-2 text-sm font-medium text-(--foreground) leading-relaxed">
+									<h3 className="line-clamp-1 text-sm font-medium text-(--foreground) leading-relaxed">
 										{video.fileName}
 									</h3>
 									<p className="mt-1 text-xs text-(--muted-foreground)">
 										{formatResolution(video.width, video.height)}
 									</p>
 								</div>
-								<Badge variant="outline" className="shrink-0">
-									{video.categoryCount}
-								</Badge>
 							</div>
 
 							{caption && (

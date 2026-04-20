@@ -76,12 +76,6 @@ export class LibraryIndexerService {
 
 	async fullScanAll(sourcePaths: string[]) {
 		if (sourcePaths.length === 0) return;
-		console.log(
-			"[LIBRARY SCAN] Starting scan of",
-			sourcePaths.length,
-			"folders",
-		);
-		console.time("[LIBRARY SCAN] Total scan time");
 		this.db.updateScanState({ scanStatus: "scanning", scanError: null });
 		try {
 			const allFiles: string[] = [];
@@ -89,7 +83,6 @@ export class LibraryIndexerService {
 				const files = await listFilesRecursive(sourcePath);
 				allFiles.push(...files);
 			}
-			console.log("[LIBRARY SCAN] Found", allFiles.length, "video files");
 			const seen = new Set<string>();
 			this.lastPublishTime = 0;
 			this.publish({
@@ -103,7 +96,8 @@ export class LibraryIndexerService {
 			});
 
 			// Process files in batches to avoid blocking event loop
-			const BATCH_SIZE = 10;
+			// Increased from 10 to 50 for better performance while maintaining responsiveness
+			const BATCH_SIZE = 50;
 			for (let index = 0; index < allFiles.length; index += 1) {
 				const filePath = allFiles[index];
 				seen.add(filePath);
@@ -142,12 +136,6 @@ export class LibraryIndexerService {
 				scanError: null,
 				lastScanAt: finishedAt,
 			});
-			console.timeEnd("[LIBRARY SCAN] Total scan time");
-			console.log(
-				"[LIBRARY SCAN] Scan complete:",
-				allFiles.length,
-				"files processed",
-			);
 			this.publish({
 				status: "idle",
 				stage: "scan",
@@ -244,11 +232,16 @@ export class LibraryIndexerService {
 	}
 
 	private async processFile(filePath: string) {
-		if (!isSupportedVideo(filePath)) return;
+		console.log("[INDEXER] Processing file:", filePath);
+		if (!isSupportedVideo(filePath)) {
+			console.log("[INDEXER] File not supported, skipping");
+			return;
+		}
 		let stats: Awaited<ReturnType<typeof fs.stat>>;
 		try {
 			stats = await fs.stat(filePath);
 		} catch (error) {
+			console.log("[INDEXER] Error stating file:", error);
 			if (
 				error &&
 				typeof error === "object" &&

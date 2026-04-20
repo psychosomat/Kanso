@@ -2,10 +2,7 @@ import { spawn } from "node:child_process";
 import fs from "node:fs/promises";
 import path from "node:path";
 import ffmpegPath from "ffmpeg-static";
-
-function sanitizeMtime(modifiedAt: string) {
-	return modifiedAt.replace(/[^0-9]/g, "").slice(0, 14);
-}
+import { resolveNativeBinaryPath } from "./binary-resolver";
 
 export class PosterCacheService {
 	constructor(private readonly cacheDir: string) {}
@@ -15,37 +12,33 @@ export class PosterCacheService {
 		sourcePath: string,
 		_durationSec: number | null,
 		modifiedAt: string,
-	) {
-		const binaryPath = ffmpegPath as string | null;
-		if (!binaryPath) return null;
+	): Promise<string | null> {
+		const binaryPath = resolveNativeBinaryPath(ffmpegPath);
+		if (!binaryPath) {
+			console.error(
+				"[FFMPEG] ffmpeg binary not found (tried:",
+				ffmpegPath,
+				")",
+			);
+			return null;
+		}
 
 		// Ensure cache directory exists
 		await fs.mkdir(this.cacheDir, { recursive: true });
 
-		// Normalize source path for macOS compatibility
 		const normalizedSourcePath = path.resolve(sourcePath);
-		const outputPath = path.join(
-			this.cacheDir,
-			`${videoId}-${sanitizeMtime(modifiedAt)}.jpg`,
-		);
+		const sanitizedMtime = modifiedAt.replace(/[^0-9]/g, "").slice(0, 14);
+		const cacheKey = `${videoId}-${sanitizedMtime}`;
+		const outputPath = path.join(this.cacheDir, `${cacheKey}.jpg`);
 
 		try {
 			await fs.access(outputPath);
 			return outputPath;
-		} catch {}
-
-		const seekPoint = 0;
-
-		// Enhanced logging for macOS debugging
-		if (process.platform === "darwin") {
-			console.log("[POSTER CACHE] macOS generating poster:", {
-				videoId,
-				sourcePath: normalizedSourcePath,
-				outputPath,
-				seekPoint,
-			});
+		} catch {
+			// File doesn't exist, generate it
 		}
 
+		const seekPoint = 0;
 		const generated = await new Promise<boolean>((resolve) => {
 			const child = spawn(binaryPath, [
 				"-y",
@@ -61,17 +54,10 @@ export class PosterCacheService {
 			]);
 
 			child.on("close", (code: number | null) => {
-				const success = code === 0;
-				if (process.platform === "darwin") {
-					console.log("[POSTER CACHE] macOS ffmpeg result:", { code, success });
-				}
-				resolve(success);
+				resolve(code === 0);
 			});
 
-			child.on("error", (error) => {
-				if (process.platform === "darwin") {
-					console.error("[POSTER CACHE] macOS ffmpeg error:", error);
-				}
+			child.on("error", () => {
 				resolve(false);
 			});
 		});

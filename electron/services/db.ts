@@ -624,6 +624,9 @@ export class DatabaseService {
 			.get(videoId) as VideoRow | undefined;
 		if (!row) return null;
 
+		console.log("[DB] getVideoById - durationSec:", row.duration_sec);
+		console.log("[DB] getVideoById - posterPath:", row.poster_path);
+
 		const categoryCount = this.db
 			.prepare(
 				"SELECT COUNT(*) as count FROM category_posts WHERE video_id = ?",
@@ -697,6 +700,15 @@ export class DatabaseService {
 					LIMIT @limit OFFSET @offset`,
 				)
 				.all(params) as VideoRow[];
+
+			console.log(
+				"[DB] getDumpPage - first video durationSec:",
+				rows[0]?.duration_sec,
+			);
+			console.log(
+				"[DB] getDumpPage - first video posterPath:",
+				rows[0]?.poster_path,
+			);
 
 			const countRow = this.db
 				.prepare(`SELECT COUNT(*) as total FROM videos ${where}`)
@@ -1152,9 +1164,7 @@ export class DatabaseService {
 			width: row.width,
 			height: row.height,
 			modifiedAt: row.modified_at,
-			posterUrl: row.poster_path
-				? `video://local/${encodeURIComponent(row.poster_path)}`
-				: null,
+			posterUrl: row.poster_path ? `file://${row.poster_path}` : null,
 			streamUrl: `video://local/${encodeURIComponent(row.source_path)}`,
 			resumeSec: row.resume_sec,
 			lastPlayedAt: row.last_played_at,

@@ -24,6 +24,10 @@
     "noUnusedLocals": true,
     "noUnusedParameters": true,
     "noFallthroughCasesInSwitch": true,
-    "noUncheckedSideEffectImports": true
-  }
+    "noUncheckedSideEffectImports": true,
+
+    /* tsgo specific */
+    "useDefineForClassFields": true
+  },
+  "tsc": "tsgo"
 }

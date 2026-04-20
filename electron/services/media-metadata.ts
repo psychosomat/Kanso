@@ -1,5 +1,6 @@
 import { spawn } from "node:child_process";
 import ffprobeStatic from "ffprobe-static";
+import { resolveNativeBinaryPath } from "./binary-resolver";
 
 export type MediaMetadata = {
 	durationSec: number | null;
@@ -11,6 +12,16 @@ export type MediaMetadata = {
 	bitrate: number | null;
 };
 
+const EMPTY_METADATA: MediaMetadata = {
+	durationSec: null,
+	width: null,
+	height: null,
+	fps: null,
+	codecVideo: null,
+	codecAudio: null,
+	bitrate: null,
+};
+
 function parseFps(value: string | undefined) {
 	if (!value?.includes("/")) return null;
 	const [numerator, denominator] = value.split("/").map(Number);
@@ -19,17 +30,14 @@ function parseFps(value: string | undefined) {
 }
 
 export async function probeMedia(sourcePath: string): Promise<MediaMetadata> {
-	const ffprobePath = ffprobeStatic.path;
+	const ffprobePath = resolveNativeBinaryPath(ffprobeStatic.path);
 	if (!ffprobePath) {
-		return {
-			durationSec: null,
-			width: null,
-			height: null,
-			fps: null,
-			codecVideo: null,
-			codecAudio: null,
-			bitrate: null,
-		};
+		console.error(
+			"[FFPROBE] ffprobe binary not found (tried:",
+			ffprobeStatic.path,
+			")",
+		);
+		return EMPTY_METADATA;
 	}
 
 	const stdout = await new Promise<string>((resolve, reject) => {
@@ -60,18 +68,13 @@ export async function probeMedia(sourcePath: string): Promise<MediaMetadata> {
 				reject(new Error(error || `ffprobe exited with code ${code}`));
 			}
 		});
-	}).catch(() => "");
+	}).catch((error) => {
+		console.error("[FFPROBE] probe failed for", sourcePath, error);
+		return "";
+	});
 
 	if (!stdout) {
-		return {
-			durationSec: null,
-			width: null,
-			height: null,
-			fps: null,
-			codecVideo: null,
-			codecAudio: null,
-			bitrate: null,
-		};
+		return EMPTY_METADATA;
 	}
 
 	const parsed = JSON.parse(stdout) as {

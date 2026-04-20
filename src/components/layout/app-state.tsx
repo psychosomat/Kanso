@@ -67,24 +67,13 @@ export function AppStateProvider({ children }: PropsWithChildren) {
 	);
 
 	const refreshAll = useCallback(async () => {
-		console.time("[PERF] refreshAll");
 		try {
-			// Load all in parallel, don't block UI
-			console.time("[PERF] refreshPreferences");
-			const prefsPromise = refreshPreferences().then(() => {
-				console.timeEnd("[PERF] refreshPreferences");
-			});
-			console.time("[PERF] refreshLibrary");
-			const libPromise = refreshLibrary().then(() => {
-				console.timeEnd("[PERF] refreshLibrary");
-			});
-			console.time("[PERF] refreshCategories");
-			const catsPromise = refreshCategories().then(() => {
-				console.timeEnd("[PERF] refreshCategories");
-			});
+			const prefsPromise = refreshPreferences();
+			const libPromise = refreshLibrary();
+			const catsPromise = refreshCategories();
 			await Promise.all([prefsPromise, libPromise, catsPromise]);
 		} finally {
-			console.timeEnd("[PERF] refreshAll");
+			// cleanup if needed
 		}
 	}, [refreshCategories, refreshLibrary, refreshPreferences]);
 
@@ -93,14 +82,10 @@ export function AppStateProvider({ children }: PropsWithChildren) {
 		let cancelled = false;
 		let unsubscribe: (() => void) | undefined;
 
-		// Start loading essential data first, load categories in background
-		console.log("[APP STATE] Starting data load");
-		console.time("[APP STATE] First data ready");
-
 		void Promise.all([refreshPreferences(), refreshLibrary()])
 			.then(() => {
 				if (!cancelled) {
-					console.timeEnd("[APP STATE] First data ready");
+					// Data loaded
 				}
 			})
 			.finally(() => {

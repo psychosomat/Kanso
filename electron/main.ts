@@ -4,13 +4,26 @@ import type { AddressInfo } from "node:net";
 import path from "node:path";
 import { Readable } from "node:stream";
 import type { ReadableStream as NodeReadableStream } from "node:stream/web";
-import { fileURLToPath, pathToFileURL } from "node:url";
-import { app, BrowserWindow, nativeImage, protocol, shell } from "electron";
+import { fileURLToPath } from "node:url";
+import {
+	app,
+	BrowserWindow,
+	nativeImage,
+	protocol,
+	screen,
+	shell,
+} from "electron";
 import { SUPPORTED_VIDEO_EXTENSIONS } from "../src/lib/constants";
 import { registerIpc } from "./ipc/register-ipc";
 import { DatabaseService } from "./services/db";
 import { LibraryIndexerService } from "./services/library-indexer";
 import { PosterCacheService } from "./services/poster-cache";
+
+// Disable hardware video decoding to prevent crashes with 4K HEVC video
+// This is a workaround for GPU decoder crashes on some systems
+// GPU is still used for rendering, only video decoding is affected
+app.commandLine.appendSwitch("disable-gpu-video-decoder");
+app.commandLine.appendSwitch("disable-features", "UseSkiaRenderer");
 
 let mainWindow: BrowserWindow | null = null;
 let cleanupIpc: (() => void) | null = null;
@@ -20,8 +33,6 @@ let prodServer: http.Server | null = null;
 let prodServerUrl: string | null = null;
 const pendingOpenPaths: string[] = [];
 const gotSingleInstanceLock = app.requestSingleInstanceLock();
-
-type StreamingRequestInit = RequestInit & { duplex?: "half" };
 
 function toNodeReadableStream(stream: globalThis.ReadableStream) {
 	return stream as unknown as NodeReadableStream;
@@ -41,12 +52,15 @@ function sendAppReady() {
 }
 
 function initializeBackend() {
+	console.log("[BACKEND] Initializing backend services...");
 	const appData = app.getPath("userData");
+	console.log("[BACKEND] User data path:", appData);
 	db = new DatabaseService(path.join(appData, "data", "player.db"));
 	const posterCache = new PosterCacheService(
 		path.join(appData, "cache", "posters"),
 	);
 	indexer = new LibraryIndexerService(db, posterCache);
+	console.log("[BACKEND] Backend services initialized");
 
 	cleanupIpc = registerIpc({
 		db,
@@ -100,6 +114,34 @@ function queueOpenPath(targetPath: string) {
 	flushPendingOpenPaths();
 }
 
+function getWindowSize() {
+	const primaryDisplay = screen.getPrimaryDisplay();
+	const { width, height } = primaryDisplay.workAreaSize;
+
+	// Base dimensions (logical pixels)
+	const baseWidth = 1480;
+	const baseHeight = 960;
+	const minBaseWidth = 1120;
+	const minBaseHeight = 760;
+
+	// Calculate available space with margins
+	const availableWidth = width * 0.85; // 85% of screen width
+	const availableHeight = height * 0.85; // 85% of screen height
+
+	// Calculate final dimensions (ensure they fit within available space)
+	const windowWidth = Math.min(baseWidth, availableWidth);
+	const windowHeight = Math.min(baseHeight, availableHeight);
+	const minWidth = Math.min(minBaseWidth, availableWidth);
+	const minHeight = Math.min(minBaseHeight, availableHeight);
+
+	return {
+		width: Math.round(windowWidth),
+		height: Math.round(windowHeight),
+		minWidth: Math.round(minWidth),
+		minHeight: Math.round(minHeight),
+	};
+}
+
 function focusMainWindow() {
 	if (!mainWindow || mainWindow.isDestroyed()) {
 		return;
@@ -123,38 +165,23 @@ async function getProdServerUrl() {
 		return prodServerUrl;
 	}
 
-	const serverEntryPath = path.join(
-		app.getAppPath(),
-		"dist",
-		"server",
-		"server.js",
-	);
-	const serverEntryModule = (await import(
-		pathToFileURL(serverEntryPath).href
-	)) as {
-		default?: {
-			fetch(request: Request): Promise<Response>;
-		};
-	};
-	const serverEntry = serverEntryModule.default;
-
-	if (!serverEntry) {
-		throw new Error("Production server entry is missing.");
-	}
+	const clientRoot = path.join(app.getAppPath(), "dist");
+	console.log("[PROD SERVER] Client root path:", clientRoot);
+	console.log("[PROD SERVER] Dist exists:", existsSync(clientRoot));
 
 	prodServer = http.createServer(async (request, response) => {
 		try {
 			const requestUrl = new URL(
 				request.url ?? "/",
-				prodServerUrl ?? "http://127.0.0.1",
+				`http://${request.headers.host ?? "127.0.0.1"}`,
 			);
-			const clientRoot = path.join(app.getAppPath(), "dist", "client");
 			const relativePath = decodeURIComponent(requestUrl.pathname).replace(
 				/^\/+/,
 				"",
 			);
 			const staticPath = path.join(clientRoot, relativePath);
 
+			// Serve static files if they exist
 			if (
 				(request.method === "GET" || request.method === "HEAD") &&
 				relativePath &&
@@ -181,48 +208,35 @@ async function getProdServerUrl() {
 				}
 			}
 
-			const headers = new Headers();
-			for (const [key, value] of Object.entries(request.headers)) {
-				if (Array.isArray(value)) {
-					for (const item of value) {
-						headers.append(key, item);
-					}
-					continue;
-				}
+			// For SPA, serve index.html for all non-file requests
+			if (request.method === "GET") {
+				const indexPath = path.join(clientRoot, "index.html");
+				if (existsSync(indexPath)) {
+					const indexResponse = createStaticAssetResponse(indexPath);
+					if (indexResponse) {
+						response.statusCode = indexResponse.status;
+						response.statusMessage = indexResponse.statusText;
+						indexResponse.headers.forEach((value, key) => {
+							response.setHeader(key, value);
+						});
 
-				if (typeof value === "string") {
-					headers.set(key, value);
-				}
-			}
+						if (!indexResponse.body) {
+							response.end();
+							return;
+						}
 
-			const origin = prodServerUrl ?? "http://127.0.0.1";
-			const body =
-				request.method === "GET" || request.method === "HEAD"
-					? undefined
-					: toNodeReadableStream(
-							Readable.toWeb(request) as unknown as globalThis.ReadableStream,
+						Readable.fromWeb(toNodeReadableStream(indexResponse.body)).pipe(
+							response,
 						);
-			const webRequest = new Request(`${origin}${request.url ?? "/"}`, {
-				method: request.method,
-				headers,
-				body,
-				duplex: body ? "half" : undefined,
-			} as StreamingRequestInit);
-			const webResponse = await serverEntry.fetch(webRequest);
-
-			response.statusCode = webResponse.status;
-			response.statusMessage = webResponse.statusText;
-			webResponse.headers.forEach((value, key) => {
-				response.setHeader(key, value);
-			});
-
-			if (!webResponse.body) {
-				response.end();
-				return;
+						return;
+					}
+				}
 			}
 
-			Readable.fromWeb(toNodeReadableStream(webResponse.body)).pipe(response);
+			response.statusCode = 404;
+			response.end("Not Found");
 		} catch (error) {
+			console.error("Error serving static file:", error);
 			response.statusCode = 500;
 			response.end(
 				error instanceof Error ? error.message : "Failed to render app.",
@@ -248,11 +262,14 @@ async function getProdServerUrl() {
 }
 
 async function createMainWindow() {
+	console.log("[WINDOW] Creating main window...");
+	const { width, height, minWidth, minHeight } = getWindowSize();
+
 	mainWindow = new BrowserWindow({
-		width: 1480,
-		height: 960,
-		minWidth: 1120,
-		minHeight: 760,
+		width,
+		height,
+		minWidth,
+		minHeight,
 		title: "Kanso",
 		backgroundColor: "#090b0f",
 		autoHideMenuBar: true,
@@ -262,18 +279,16 @@ async function createMainWindow() {
 			preload: getPreloadPath(),
 			contextIsolation: true,
 			nodeIntegration: false,
-			webSecurity: !process.env.VITE_DEV_SERVER_URL,
-			devTools: false,
+			webSecurity: false,
+			devTools: true,
+			offscreen: false,
+			webgl: true,
+			experimentalFeatures: false,
 		},
 	});
 
 	if (!process.env.VITE_DEV_SERVER_URL) {
-		const iconPath = path.join(
-			app.getAppPath(),
-			"dist",
-			"client",
-			"favicon.ico",
-		);
+		const iconPath = path.join(app.getAppPath(), "dist", "favicon.ico");
 		try {
 			mainWindow.setIcon(nativeImage.createFromPath(iconPath));
 		} catch {}
@@ -284,36 +299,13 @@ async function createMainWindow() {
 		return { action: "deny" };
 	});
 
-	// Disable debugging in production
-	if (!process.env.VITE_DEV_SERVER_URL) {
-		mainWindow.webContents.on("before-input-event", (event, input) => {
-			// Block F12, Ctrl+Shift+I, Ctrl+Shift+J, Ctrl+Shift+C, Ctrl+U
-			if (
-				input.key === "F12" ||
-				(input.control &&
-					input.shift &&
-					(input.key === "I" || input.key === "J" || input.key === "C")) ||
-				(input.control && input.key === "U")
-			) {
-				event.preventDefault();
-			}
-		});
-
-		// Disable right-click context menu
-		mainWindow.webContents.on("context-menu", (event) => {
-			event.preventDefault();
-		});
-
-		// Block DevTools via code
-		mainWindow.webContents.on("devtools-opened", () => {
-			mainWindow?.webContents.closeDevTools();
-		});
-	}
-
 	if (process.env.VITE_DEV_SERVER_URL) {
 		await loadDevUrlWithRetry(mainWindow, process.env.VITE_DEV_SERVER_URL);
+		mainWindow.webContents.openDevTools({ mode: "detach" });
 	} else {
-		await mainWindow.loadURL(await getProdServerUrl());
+		const prodUrl = await getProdServerUrl();
+		console.log("[WINDOW] Loading production URL:", prodUrl);
+		await mainWindow.loadURL(prodUrl);
 	}
 
 	flushPendingOpenPaths();
@@ -482,7 +474,12 @@ protocol.registerSchemesAsPrivileged([
 ]);
 
 async function bootstrap() {
+	console.log("[BOOTSTRAP] Starting Kanso bootstrap...");
+	console.log("[BOOTSTRAP] Platform:", process.platform);
+	console.log("[BOOTSTRAP] App path:", app.getAppPath());
+
 	if (!gotSingleInstanceLock) {
+		console.log("[BOOTSTRAP] Single instance lock not acquired, quitting");
 		return;
 	}
 

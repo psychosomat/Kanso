@@ -48,6 +48,7 @@ function DumpPage() {
 	const [view, setView] =
 		useState<PlayerPreferencesDto["dumpView"]>("comfortable");
 	const [loading, setLoading] = useState(false);
+	const [_currentPage, _setCurrentPage] = useState(1);
 	useScrollRestore("/dump", !loading);
 	const [folderPending, setFolderPending] = useState(false);
 	const [assignOpen, setAssignOpen] = useState(false);
@@ -58,41 +59,13 @@ function DumpPage() {
 	const deferredSearch = useDeferredValue(search);
 	const gridRef = useRef<HTMLDivElement>(null);
 
-	// Stagger animation for video cards - disabled for better LCP
-	// useGSAP(
-	// 	() => {
-	// 		if (!gridRef.current || loading || !data?.items.length) return;
-	// 		const cards = gridRef.current.querySelectorAll("[data-video-card]");
-	// 		if (cards.length === 0) return;
-	// 		gsap.fromTo(
-	// 			cards,
-	// 			{ opacity: 0, y: 20, scale: 0.96 },
-	// 			{
-	// 				opacity: 1,
-	// 				y: 0,
-	// 				scale: 1,
-	// 				duration: 0.35,
-	// 				ease: "power2.out",
-	// 				stagger: {
-	// 					each: 0.05,
-	// 					from: "start",
-	// 				},
-	// 			},
-	// 		);
-	// 	},
-	// 	{ dependencies: [data, loading] },
-	// );
-
 	useEffect(() => {
 		if (!window.playerApi) return;
 		setElectronReady(Boolean(window.playerApi.app.isElectron));
 
-		// Load preferences immediately
-		console.time("[DUMP PERF] getPreferences");
 		void getPlayerApi()
 			.player.getPreferences()
 			.then((preferences) => {
-				console.timeEnd("[DUMP PERF] getPreferences");
 				setSort(preferences.dumpSort);
 				setView(preferences.dumpView);
 			});
@@ -107,8 +80,6 @@ function DumpPage() {
 		const api = getPlayerApi();
 		let cancelled = false;
 		setLoading(true);
-		console.time("[DUMP PERF] getDumpPage");
-		// Load only first page for fast initial render
 		void api.library
 			.getDumpPage({
 				search: deferredSearch,
@@ -122,14 +93,7 @@ function DumpPage() {
 				if (cancelled) {
 					return;
 				}
-				console.timeEnd("[DUMP PERF] getDumpPage");
-				console.time("[DUMP PERF] setData + render");
 				setData(response);
-				// Measure when React actually renders
-				setTimeout(() => {
-					console.timeEnd("[DUMP PERF] setData + render");
-					console.log("[DUMP PERF] Videos rendered:", response.items.length);
-				}, 0);
 			})
 			.finally(() => {
 				if (!cancelled) {
@@ -287,8 +251,8 @@ function DumpPage() {
 								: "grid gap-3 lg:grid-cols-2"
 						}
 					>
-						{data.items.map((video) => (
-							<div key={video.id} data-video-card>
+						{data.items.map((video, index) => (
+							<div key={video.id} data-video-card data-index={index}>
 								<VideoCard
 									video={video}
 									onAssign={(videoId) => void openAssign(videoId)}

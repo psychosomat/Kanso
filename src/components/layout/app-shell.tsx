@@ -46,6 +46,7 @@ const SIDEBAR_COLLAPSED_KEY = "player:sidebar:collapsed";
 const SIDEBAR_AUTO_COLLAPSE_KEY = "player:sidebar:auto-collapsed";
 const SIDEBAR_PRE_PLAYER_KEY = "player:sidebar:pre-player";
 const COLLAPSED_CATEGORIES_KEY = "player:sidebar:collapsed-categories";
+const SIDEBAR_WIDTH_KEY = "player:sidebar:width";
 
 function canUseDom() {
 	return typeof window !== "undefined" && typeof document !== "undefined";
@@ -551,6 +552,13 @@ export function AppShell({ children }: { children: React.ReactNode }) {
 	const [collapsed, setCollapsed] = useState(
 		() => getSessionStorageItem(SIDEBAR_COLLAPSED_KEY) === "1",
 	);
+	const [sidebarHidden, setSidebarHidden] = useState(false);
+	const [sidebarHovered, setSidebarHovered] = useState(false);
+	const [sidebarWidth, setSidebarWidth] = useState(() => {
+		const stored = localStorage.getItem(SIDEBAR_WIDTH_KEY);
+		return stored ? parseInt(stored, 10) : 256;
+	});
+	const [isResizing, setIsResizing] = useState(false);
 
 	function toggleCollapsed() {
 		const next = !collapsed;
@@ -558,6 +566,36 @@ export function AppShell({ children }: { children: React.ReactNode }) {
 		setSessionStorageItem(SIDEBAR_COLLAPSED_KEY, next ? "1" : "0");
 		setSessionStorageItem(SIDEBAR_AUTO_COLLAPSE_KEY, "0");
 	}
+
+	function handleMouseDown(e: React.MouseEvent) {
+		if (collapsed) return;
+		setIsResizing(true);
+		e.preventDefault();
+	}
+
+	useEffect(() => {
+		if (!isResizing) return;
+
+		const handleMouseMove = (e: MouseEvent) => {
+			const newWidth = e.clientX;
+			if (newWidth >= 200 && newWidth <= 500) {
+				setSidebarWidth(newWidth);
+			}
+		};
+
+		const handleMouseUp = () => {
+			setIsResizing(false);
+			localStorage.setItem(SIDEBAR_WIDTH_KEY, sidebarWidth.toString());
+		};
+
+		document.addEventListener("mousemove", handleMouseMove);
+		document.addEventListener("mouseup", handleMouseUp);
+
+		return () => {
+			document.removeEventListener("mousemove", handleMouseMove);
+			document.removeEventListener("mouseup", handleMouseUp);
+		};
+	}, [isResizing, sidebarWidth]);
 
 	useEffect(() => {
 		initNoise();
@@ -583,6 +621,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
 		}
 
 		if (!autoCollapsed) {
+			setSidebarHidden(false);
 			return;
 		}
 
@@ -591,6 +630,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
 		setCollapsed(previousCollapsed);
 		setSessionStorageItem(SIDEBAR_COLLAPSED_KEY, previousCollapsed ? "1" : "0");
 		setSessionStorageItem(SIDEBAR_AUTO_COLLAPSE_KEY, "0");
+		setSidebarHidden(false);
 	}, [location.pathname]);
 
 	useEffect(() => {
@@ -603,6 +643,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
 			setSessionStorageItem(SIDEBAR_AUTO_COLLAPSE_KEY, collapsed ? "0" : "1");
 			setCollapsed(true);
 			setSessionStorageItem(SIDEBAR_COLLAPSED_KEY, "1");
+			setSidebarHidden(true);
 			void router.navigate({
 				to: "/player/external",
 				search: { path: filePath },
@@ -616,23 +657,67 @@ export function AppShell({ children }: { children: React.ReactNode }) {
 				mode={resolveTitlebarMode(preferences?.titlebarMode ?? "auto")}
 			/>
 			<div className="flex min-h-0 flex-1">
+				{/* Hover zone for hidden sidebar */}
+				{sidebarHidden && (
+					<div
+						className="hidden lg:block"
+						style={{ width: "20px" }}
+						onMouseEnter={() => setSidebarHovered(true)}
+						onMouseLeave={() => setSidebarHovered(false)}
+						role="presentation"
+						aria-hidden="true"
+					/>
+				)}
+
 				{/* Desktop sidebar */}
 				<aside
 					className={cn(
 						"relative hidden min-h-0 shrink-0 flex-col border-r border-(--border) bg-(--panel-elevated) lg:flex",
-						"transition-[width] duration-200 ease-in-out",
-						collapsed ? "w-16" : "w-64",
+						isResizing ? "" : "transition-[width] duration-200 ease-in-out",
+						sidebarHidden && !sidebarHovered
+							? "w-0 overflow-hidden border-none"
+							: collapsed
+								? "w-16"
+								: "",
 					)}
+					style={
+						!collapsed && !sidebarHidden
+							? { width: `${sidebarWidth}px` }
+							: undefined
+					}
+					onMouseEnter={() => sidebarHidden && setSidebarHovered(true)}
+					onMouseLeave={() => sidebarHidden && setSidebarHovered(false)}
 				>
 					<div className="flex min-h-0 flex-1 flex-col overflow-hidden p-3">
 						<SidebarContent collapsed={collapsed} />
 					</div>
 
+					{/* Resize handle */}
+					{!collapsed && (
+						<button
+							type="button"
+							className={cn(
+								"absolute right-0 top-0 h-full w-1 cursor-col-resize bg-transparent hover:bg-(--accent) transition-colors",
+								isResizing && "bg-(--accent)",
+							)}
+							onMouseDown={handleMouseDown}
+							aria-label="Resize sidebar"
+						/>
+					)}
+
 					{/* Collapse toggle */}
 					<button
 						type="button"
-						onClick={toggleCollapsed}
-						className="absolute -right-3 top-3 z-10 flex h-6 w-6 items-center justify-center rounded-full border border-(--border) bg-(--background) text-(--muted-foreground) shadow-md transition-colors hover:text-(--foreground) hover:bg-(--panel-strong)"
+						onClick={() => {
+							toggleCollapsed();
+							if (sidebarHidden) {
+								setSidebarHidden(false);
+							}
+						}}
+						className={cn(
+							"absolute -right-3 top-3 z-10 flex h-6 w-6 items-center justify-center rounded-full border border-(--border) bg-(--background) text-(--muted-foreground) shadow-md transition-colors hover:text-(--foreground) hover:bg-(--panel-strong)",
+							sidebarHidden && !sidebarHovered && "hidden",
+						)}
 						aria-label={collapsed ? "Expand sidebar" : "Collapse sidebar"}
 					>
 						{collapsed ? (

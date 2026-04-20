@@ -5,8 +5,6 @@ import { fileURLToPath } from 'node:url'
 import path from 'node:path'
 import fs from 'node:fs'
 
-import { tanstackStart } from '@tanstack/react-start/plugin/vite'
-
 import viteReact from '@vitejs/plugin-react'
 import tailwindcss from '@tailwindcss/vite'
 
@@ -62,8 +60,16 @@ const config = defineConfig({
     ...(process.env.NODE_ENV === 'development' ? [devtools()] : []),
     tsconfigPaths({ projects: ['./tsconfig.json'] }),
     tailwindcss(),
-    tanstackStart(),
-    viteReact(),
+    viteReact({
+      babel: {
+        plugins: [
+          ['@babel/plugin-transform-typescript', {
+            allowDeclareFields: true,
+            isTSX: true,
+          }],
+        ],
+      },
+    }),
     copyPublicFiles(),
   ],
 })

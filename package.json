@@ -1,187 +1,182 @@
 {
-	"name": "kanso",
-	"version": "0.1.2",
-	"description": "Kanso - Modern Media Player",
-	"author": "psychosomat(Dmitrii Dark) <hello@ddark.dev>",
-	"private": true,
-	"type": "module",
-	"main": "dist-electron/main.js",
-	"imports": {
-		"#/*": "./src/*"
-	},
-	"scripts": {
-		"postinstall": "electron-builder install-app-deps",
-		"rebuild:native": "electron-builder install-app-deps",
-		"lint": "biome lint ./src ./electron",
-		"lint:fix": "biome lint ./src ./electron --write",
-		"format": "biome format . --write",
-		"check": "biome check . --write",
-		"dev": "concurrently -k \"bun:dev:web\" \"bun:dev:electron:build\" \"bun:dev:electron:start\"",
-		"dev:web": "vite dev --port 3000 --strictPort",
-		"dev:electron:build": "concurrently -k \"bun:dev:electron:build:main\" \"bun:dev:electron:build:preload\"",
-		"dev:electron:build:main": "tsup electron/main.ts --watch --format esm --out-dir dist-electron --external electron",
-		"dev:electron:build:preload": "tsup electron/preload.ts --watch --format cjs --out-dir dist-electron --external electron",
-		"dev:electron:start": "wait-on http://localhost:3000 file:dist-electron/main.js && cross-env VITE_DEV_SERVER_URL=http://localhost:3000 electron dist-electron/main.js",
-		"build": "bun run build:renderer && bun run build:electron",
-		"build:renderer": "vite build --logLevel error",
-		"build:electron": "bun run build:electron:main && bun run build:electron:preload",
-		"build:electron:main": "tsup electron/main.ts --format esm --out-dir dist-electron --external electron",
-		"build:electron:preload": "tsup electron/preload.ts --format cjs --out-dir dist-electron --external electron",
-		"dist": "bun run build && electron-builder",
-		"dist:win": "bun run build && electron-builder --win nsis",
-		"dist:linux": "bun run build && electron-builder --linux deb tar.gz",
-		"dist:mac": "bun run build && electron-builder --mac dmg zip",
-		"preview": "vite preview",
-		"test": "vitest run"
-	},
-	"dependencies": {
-		"@gsap/react": "^2.1.2",
-		"@radix-ui/react-alert-dialog": "^1.1.15",
-		"@radix-ui/react-context-menu": "^2.2.16",
-		"@radix-ui/react-dialog": "^1.1.15",
-		"@radix-ui/react-dropdown-menu": "^2.1.16",
-		"@radix-ui/react-scroll-area": "^1.2.10",
-		"@radix-ui/react-select": "^2.2.6",
-		"@radix-ui/react-separator": "^1.1.8",
-		"@radix-ui/react-slider": "^1.3.6",
-		"@radix-ui/react-slot": "^1.2.4",
-		"@radix-ui/react-tabs": "^1.1.13",
-		"@radix-ui/react-tooltip": "^1.2.8",
-		"@tabler/icons-react": "^3.41.1",
-		"@tailwindcss/vite": "^4.1.18",
-		"@tanstack/react-hotkeys": "^0.9.1",
-		"@tanstack/react-router": "latest",
-		"@tanstack/react-router-ssr-query": "latest",
-		"@tanstack/react-start": "latest",
-		"@tanstack/router-plugin": "^1.132.0",
-		"better-sqlite3": "^12.8.0",
-		"chokidar": "^5.0.0",
-		"class-variance-authority": "^0.7.1",
-		"clsx": "^2.1.1",
-		"ffmpeg-static": "^5.3.0",
-		"ffprobe-static": "^3.1.0",
-		"gsap": "^3.14.2",
-		"lucide-react": "^0.545.0",
-		"react": "^19.2.0",
-		"react-dom": "^19.2.0",
-		"tailwind-merge": "^3.5.0",
-		"tailwindcss": "^4.1.18",
-		"zod": "^4.3.6"
-	},
-	"devDependencies": {
-		"@biomejs/biome": "^2.4.10",
-		"@tailwindcss/typography": "^0.5.16",
-		"@tanstack/devtools-vite": "latest",
-		"@tanstack/react-devtools": "latest",
-		"@tanstack/react-router-devtools": "latest",
-		"@testing-library/dom": "^10.4.1",
-		"@testing-library/react": "^16.3.0",
-		"@types/better-sqlite3": "^7.6.13",
-		"@types/node": "^22.10.2",
-		"@types/react": "^19.2.0",
-		"@types/react-dom": "^19.2.0",
-		"@vitejs/plugin-react": "^5.1.4",
-		"concurrently": "^9.2.1",
-		"cross-env": "^10.1.0",
-		"electron": "^41.1.1",
-		"electron-builder": "^26.8.1",
-		"jsdom": "^28.1.0",
-		"tsup": "^8.5.1",
-		"tsx": "^4.21.0",
-		"typescript": "^5.7.2",
-		"vite": "^7.3.1",
-		"vite-tsconfig-paths": "^5.1.4",
-		"vitest": "^3.0.5",
-		"wait-on": "^9.0.4"
-	},
-	"pnpm": {
-		"onlyBuiltDependencies": [
-			"esbuild",
-			"lightningcss"
-		]
-	},
-	"build": {
-		"appId": "com.dark.kanso",
-		"productName": "Kanso",
-		"directories": {
-			"output": "release",
-			"buildResources": "public"
-		},
-		"files": [
-			"dist/**/*",
-			"dist-electron/**/*",
-			"package.json",
-			"!src/**/*",
-			"!electron/**/*",
-			"!public/**/*",
-			"!*.config.*",
-			"!biome.json",
-			"!.bunignore",
-			"!.gitignore",
-			"!README.md",
-			"!LICENSE",
-			"!**/*.md",
-			"!**/*.ts",
-			"!**/*.tsx",
-			"!**/*.js.map",
-			"!**/*.d.ts"
-		],
-		"asar": true,
-		"asarUnpack": [
-			"node_modules/better-sqlite3/**/*",
-			"node_modules/ffmpeg-static/**/*",
-			"node_modules/ffprobe-static/**/*"
-		],
-		"compression": "maximum",
-		"artifactName": "${productName}-${version}-${os}-${arch}.${ext}",
-		"icon": "public/favicon.ico",
-		"fileAssociations": [
-			{
-				"ext": [
-					"mp4",
-					"mkv",
-					"webm",
-					"mov",
-					"avi",
-					"m4v",
-					"ts"
-				],
-				"name": "Kanso Video",
-				"description": "Video file opened in Kanso",
-				"role": "Viewer"
-			}
-		],
-		"mac": {
-			"category": "public.app-category.video",
-			"target": [
-				"dmg",
-				"zip"
-			],
-			"icon": "public/icon.png"
-		},
-		"win": {
-			"target": [
-				"nsis"
-			],
-			"icon": "public/favicon.ico",
-			"compression": "maximum"
-		},
-		"linux": {
-			"category": "AudioVideo",
-			"target": [
-				"deb",
-				"tar.gz"
-			],
-			"icon": "public/icon.png"
-		},
-		"nsis": {
-			"oneClick": false,
-			"allowToChangeInstallationDirectory": true,
-			"createDesktopShortcut": "always",
-			"createStartMenuShortcut": true
-		},
-		"deb": {
-			"priority": "optional"
-		}
-	}
+  "name": "kanso",
+  "version": "0.1.5",
+  "description": "Kanso - Modern Media Player",
+  "author": "psychosomat(Dmitrii Dark) <hello@ddark.dev>",
+  "private": true,
+  "type": "module",
+  "main": "dist-electron/main.js",
+  "imports": {
+    "#/*": "./src/*"
+  },
+  "scripts": {
+    "postinstall": "electron-builder install-app-deps",
+    "format": "biome format . --write",
+    "lint": "biome lint ./src ./electron",
+    "check": "biome check . --write",
+    "test": "vitest run",
+    "dev:web": "vite dev --port 3000 --strictPort",
+    "dev:desktop": "concurrently -k \"bun:dev:web\" \"tsup electron/main.ts --watch --format esm --out-dir dist-electron --external electron\" \"tsup electron/preload.ts --watch --format cjs --out-dir dist-electron --external electron\" \"wait-on http://localhost:3000 file:dist-electron/main.js file:dist-electron/preload.cjs && cross-env VITE_DEV_SERVER_URL=http://localhost:3000 electron dist-electron/main.js\"",
+    "build": "vite build --logLevel error && tsup electron/main.ts --format esm --out-dir dist-electron --external electron && tsup electron/preload.ts --format cjs --out-dir dist-electron --external electron",
+    "build:thumbnail:win": "powershell -ExecutionPolicy Bypass -File build-resources/windows-thumbnail-provider/build.ps1",
+    "build:thumbnail:mac": "chmod +x build-resources/macos-quicklook/build.sh && build-resources/macos-quicklook/build.sh",
+    "dist": "bun run build && electron-builder",
+    "dist:win": "bun run build && bun run build:thumbnail:win && electron-builder --win nsis",
+    "dist:linux": "bun run build && electron-builder --linux deb tar.gz",
+    "dist:mac": "bun run build && bun run build:thumbnail:mac && electron-builder --mac dmg zip"
+  },
+  "dependencies": {
+    "@gsap/react": "^2.1.2",
+    "@radix-ui/react-alert-dialog": "^1.1.15",
+    "@radix-ui/react-context-menu": "^2.2.16",
+    "@radix-ui/react-dialog": "^1.1.15",
+    "@radix-ui/react-dropdown-menu": "^2.1.16",
+    "@radix-ui/react-scroll-area": "^1.2.10",
+    "@radix-ui/react-select": "^2.2.6",
+    "@radix-ui/react-separator": "^1.1.8",
+    "@radix-ui/react-slider": "^1.3.6",
+    "@radix-ui/react-slot": "^1.2.4",
+    "@radix-ui/react-tabs": "^1.1.13",
+    "@radix-ui/react-tooltip": "^1.2.8",
+    "@tabler/icons-react": "^3.41.1",
+    "@tailwindcss/vite": "^4.1.18",
+    "@tanstack/react-hotkeys": "^0.9.1",
+    "@tanstack/react-router": "latest",
+    "@tanstack/router-plugin": "^1.132.0",
+    "better-sqlite3": "^12.8.0",
+    "chokidar": "^5.0.0",
+    "class-variance-authority": "^0.7.1",
+    "clsx": "^2.1.1",
+    "ffmpeg-static": "^5.3.0",
+    "ffprobe-static": "^3.1.0",
+    "gsap": "^3.14.2",
+    "react": "^19.2.0",
+    "react-dom": "^19.2.0",
+    "tailwind-merge": "^3.5.0",
+    "tailwindcss": "^4.1.18",
+    "zod": "^4.3.6"
+  },
+  "devDependencies": {
+    "@babel/plugin-transform-typescript": "^7.28.6",
+    "@biomejs/biome": "^2.4.10",
+    "@tailwindcss/typography": "^0.5.16",
+    "@tanstack/devtools-vite": "latest",
+    "@testing-library/dom": "^10.4.1",
+    "@testing-library/react": "^16.3.0",
+    "@types/better-sqlite3": "^7.6.13",
+    "@types/node": "^22.10.2",
+    "@types/react": "^19.2.0",
+    "@types/react-dom": "^19.2.0",
+    "@typescript/native-preview": "^7.0.0-dev.20260419.1",
+    "@vitejs/plugin-react": "^5.1.4",
+    "concurrently": "^9.2.1",
+    "cross-env": "^10.1.0",
+    "electron": "^41.1.1",
+    "electron-builder": "^26.8.1",
+    "jsdom": "^28.1.0",
+    "tsup": "^8.5.1",
+    "tsx": "^4.21.0",
+    "vite": "^7.3.1",
+    "vite-tsconfig-paths": "^5.1.4",
+    "vitest": "^3.0.5",
+    "wait-on": "^9.0.4"
+  },
+  "pnpm": {
+    "onlyBuiltDependencies": [
+      "esbuild",
+      "lightningcss"
+    ]
+  },
+  "build": {
+    "appId": "com.dark.kanso",
+    "productName": "Kanso",
+    "directories": {
+      "output": "release",
+      "buildResources": "public"
+    },
+    "files": [
+      "dist/**/*",
+      "dist-electron/**/*",
+      "package.json",
+      "!src/**/*",
+      "!electron/**/*",
+      "!public/**/*",
+      "!*.config.*",
+      "!biome.json",
+      "!.bunignore",
+      "!.gitignore",
+      "!README.md",
+      "!LICENSE",
+      "!**/*.md",
+      "build-resources/**/*",
+      "!build-resources/installer.nsh",
+      "!build-resources/windows-thumbnail-provider/obj/**/*",
+      "!build-resources/windows-thumbnail-provider/*.cs",
+      "!build-resources/windows-thumbnail-provider/*.csproj",
+      "!build-resources/windows-thumbnail-provider/*.ps1",
+      "!build-resources/windows-thumbnail-provider/*.bat",
+      "!build-resources/windows-thumbnail-provider/NuGet.Config",
+      "!build-resources/windows-thumbnail-provider/bin/*.pdb"
+    ],
+    "asar": true,
+    "asarUnpack": [
+      "node_modules/better-sqlite3/**/*",
+      "node_modules/ffmpeg-static/**/*",
+      "node_modules/ffprobe-static/**/*",
+      "build-resources/**/*"
+    ],
+    "compression": "maximum",
+    "artifactName": "${productName}-${version}-${os}-${arch}.${ext}",
+    "icon": "public/favicon.ico",
+    "fileAssociations": [
+      {
+        "ext": [
+          "mp4",
+          "mkv",
+          "webm",
+          "mov",
+          "avi",
+          "m4v",
+          "ts"
+        ],
+        "name": "Kanso Video",
+        "description": "Video file opened in Kanso",
+        "role": "Viewer"
+      }
+    ],
+    "mac": {
+      "category": "public.app-category.video",
+      "target": [
+        "dmg",
+        "zip"
+      ],
+      "icon": "public/icon.png"
+    },
+    "win": {
+      "target": [
+        "nsis"
+      ],
+      "icon": "public/favicon.ico",
+      "compression": "maximum"
+    },
+    "linux": {
+      "category": "AudioVideo",
+      "target": [
+        "deb",
+        "tar.gz"
+      ],
+      "icon": "public/icon.png"
+    },
+    "nsis": {
+      "oneClick": false,
+      "allowToChangeInstallationDirectory": true,
+      "createDesktopShortcut": "always",
+      "createStartMenuShortcut": true,
+      "include": "build-resources/installer.nsh"
+    },
+    "deb": {
+      "priority": "optional"
+    }
+  },
+  "packageManager": "npm@11.12.1"
 }

@@ -305,12 +305,22 @@ export function PlayerPage({
 	const togglePlay = useCallback(async () => {
 		const element = videoRef.current;
 		if (!element) return;
+		if (!video?.streamUrl) {
+			console.error("Cannot play: video has no valid stream URL");
+			return;
+		}
 		if (element.paused) {
-			await element.play();
+			try {
+				await element.play();
+			} catch (error) {
+				console.error("Failed to play video:", error);
+				// Reset playing state on error
+				setPlaying(false);
+			}
 		} else {
 			element.pause();
 		}
-	}, []);
+	}, [video]);
 
 	const seekTo = useCallback(
 		(next: number) => {
@@ -474,7 +484,14 @@ export function PlayerPage({
 			seekTo(timelinePreview.time);
 			setTimelinePreview((current) => ({ ...current, visible: false }));
 			if (wasPlayingBeforeScrubRef.current) {
-				await videoRef.current?.play();
+				try {
+					await videoRef.current?.play();
+				} catch (error) {
+					// Ignore AbortError from rapid play/pause during scrubbing
+					if ((error as Error).name !== "AbortError") {
+						console.error("Failed to resume playback after scrubbing:", error);
+					}
+				}
 			}
 		},
 		[isScrubbing, seekTo, timelinePreview.time],
@@ -942,7 +959,7 @@ export function PlayerPage({
 						}
 					}}
 				>
-					{video ? (
+					{video?.streamUrl ? (
 						<video
 							ref={videoRef}
 							src={video.streamUrl}
@@ -953,7 +970,7 @@ export function PlayerPage({
 							preload="metadata"
 							playsInline
 						>
-							<track kind="captions" src="" label="No captions available" />
+							<track kind="captions" />
 						</video>
 					) : null}
 
