@@ -23,6 +23,7 @@ import { APP_NAME } from "@/lib/constants";
 import type { CategoryDto } from "@/lib/contracts";
 import { getPlayerApi } from "@/lib/player-api";
 import { cn, resolveTitlebarMode } from "@/lib/utils";
+import { getDraggedVideoId, hasDraggedVideo } from "@/lib/video-drag";
 import { CategoryFormDialog } from "../categories/category-form-dialog";
 import { Button } from "../ui/button";
 import {
@@ -130,7 +131,8 @@ function NavItem({
 }
 
 function SidebarContent({ collapsed = false }: { collapsed?: boolean }) {
-	const { categories, library, scanStatus, refreshCategories } = useAppState();
+	const { categories, library, scanStatus, refreshAll, refreshCategories } =
+		useAppState();
 	const location = useLocation();
 	const categoryTree = buildCategoryTree(categories);
 	const [boardsExpanded, setBoardsExpanded] = useState(
@@ -212,6 +214,14 @@ function SidebarContent({ collapsed = false }: { collapsed?: boolean }) {
 		});
 		await refreshCategories();
 		setEditingCategory(null);
+	}
+
+	async function handleDropVideo(videoId: string, categoryId: string) {
+		await getPlayerApi().categories.addVideo({
+			videoId,
+			categories: [{ categoryId }],
+		});
+		await refreshAll();
 	}
 
 	return (
@@ -323,6 +333,7 @@ function SidebarContent({ collapsed = false }: { collapsed?: boolean }) {
 								onEdit={(nextCategory) => setEditingCategory(nextCategory)}
 								onToggleCollapsed={toggleCategoryCollapsed}
 								isCollapsed={isCategoryCollapsed}
+								onDropVideo={handleDropVideo}
 							/>
 						))}
 						{categories.length === 0 && (
@@ -345,20 +356,12 @@ function SidebarContent({ collapsed = false }: { collapsed?: boolean }) {
 				{collapsed && categories.length > 0 && (
 					<div className="mt-2 flex flex-wrap justify-center gap-1">
 						{flattenCategoryTree(categoryTree).map((category) => (
-							<Link
+							<CollapsedCategoryItem
 								key={category.id}
-								to="/categories/$categorySlug"
-								params={{ categorySlug: category.slug }}
-								title={category.name}
-								className={cn(
-									"flex h-7 w-7 items-center justify-center rounded-md transition-colors",
-									location.pathname === `/categories/${category.slug}`
-										? "bg-(--accent-subtle) text-(--accent)"
-										: "text-(--muted-foreground) hover:bg-(--panel-strong) hover:text-(--foreground)",
-								)}
-							>
-								<CategoryIcon name={category.icon} size={16} />
-							</Link>
+								category={category}
+								pathname={location.pathname}
+								onDropVideo={handleDropVideo}
+							/>
 						))}
 					</div>
 				)}
@@ -450,6 +453,7 @@ function CategoryTreeItem({
 	onEdit,
 	onToggleCollapsed,
 	isCollapsed,
+	onDropVideo,
 }: {
 	category: CategoryTreeNode;
 	pathname: string;
@@ -457,12 +461,56 @@ function CategoryTreeItem({
 	onEdit: (category: CategoryDto) => void;
 	onToggleCollapsed: (categoryId: string) => void;
 	isCollapsed: (categoryId: string) => boolean;
+	onDropVideo: (videoId: string, categoryId: string) => Promise<void>;
 }) {
+	const [dragOver, setDragOver] = useState(false);
+	const [dropping, setDropping] = useState(false);
+
 	const handleMouseDown = (e: React.MouseEvent) => {
 		if (e.button === 1) {
 			e.preventDefault();
 		}
 	};
+
+	function handleDragOver(e: React.DragEvent<HTMLAnchorElement>) {
+		if (!hasDraggedVideo(e.dataTransfer)) {
+			return;
+		}
+		e.preventDefault();
+		e.dataTransfer.dropEffect = "copy";
+		setDragOver(true);
+	}
+
+	function handleDragLeave(e: React.DragEvent<HTMLAnchorElement>) {
+		const relatedTarget = e.relatedTarget;
+		if (
+			relatedTarget instanceof Node &&
+			e.currentTarget.contains(relatedTarget)
+		) {
+			return;
+		}
+		setDragOver(false);
+	}
+
+	async function handleDrop(e: React.DragEvent<HTMLAnchorElement>) {
+		if (!hasDraggedVideo(e.dataTransfer)) {
+			return;
+		}
+		e.preventDefault();
+		setDragOver(false);
+
+		const videoId = getDraggedVideoId(e.dataTransfer);
+		if (!videoId) {
+			return;
+		}
+
+		setDropping(true);
+		try {
+			await onDropVideo(videoId, category.id);
+		} finally {
+			setDropping(false);
+		}
+	}
 
 	const hasChildren = category.children.length > 0;
 	const collapsed = isCollapsed(category.id);
@@ -474,9 +522,11 @@ function CategoryTreeItem({
 					<div
 						className={cn(
 							"flex items-center justify-between rounded-sm px-3 py-1.5 text-sm transition-colors duration-150",
-							pathname === `/categories/${category.slug}`
-								? "bg-(--accent-subtle) text-(--accent-strong) font-medium"
-								: "text-(--muted-foreground) hover:bg-(--panel-strong) hover:text-(--foreground)",
+							dragOver || dropping
+								? "bg-(--accent-subtle) text-(--accent-strong) ring-1 ring-(--accent)/40"
+								: pathname === `/categories/${category.slug}`
+									? "bg-(--accent-subtle) text-(--accent-strong) font-medium"
+									: "text-(--muted-foreground) hover:bg-(--panel-strong) hover:text-(--foreground)",
 						)}
 						style={{ marginLeft: `${category.depth * 14}px` }}
 					>
@@ -484,6 +534,9 @@ function CategoryTreeItem({
 							to="/categories/$categorySlug"
 							params={{ categorySlug: category.slug }}
 							onMouseDown={handleMouseDown}
+							onDragOver={handleDragOver}
+							onDragLeave={handleDragLeave}
+							onDrop={handleDrop}
 							className="flex min-w-0 flex-1 items-center gap-2"
 						>
 							<CategoryIcon name={category.icon} size={15} />
@@ -538,9 +591,84 @@ function CategoryTreeItem({
 						onEdit={onEdit}
 						onToggleCollapsed={onToggleCollapsed}
 						isCollapsed={isCollapsed}
+						onDropVideo={onDropVideo}
 					/>
 				))}
 		</>
+	);
+}
+
+function CollapsedCategoryItem({
+	category,
+	pathname,
+	onDropVideo,
+}: {
+	category: CategoryTreeNode;
+	pathname: string;
+	onDropVideo: (videoId: string, categoryId: string) => Promise<void>;
+}) {
+	const [dragOver, setDragOver] = useState(false);
+	const [dropping, setDropping] = useState(false);
+
+	function handleDragOver(e: React.DragEvent<HTMLAnchorElement>) {
+		if (!hasDraggedVideo(e.dataTransfer)) {
+			return;
+		}
+		e.preventDefault();
+		e.dataTransfer.dropEffect = "copy";
+		setDragOver(true);
+	}
+
+	function handleDragLeave(e: React.DragEvent<HTMLAnchorElement>) {
+		const relatedTarget = e.relatedTarget;
+		if (
+			relatedTarget instanceof Node &&
+			e.currentTarget.contains(relatedTarget)
+		) {
+			return;
+		}
+		setDragOver(false);
+	}
+
+	async function handleDrop(e: React.DragEvent<HTMLAnchorElement>) {
+		if (!hasDraggedVideo(e.dataTransfer)) {
+			return;
+		}
+		e.preventDefault();
+		setDragOver(false);
+
+		const videoId = getDraggedVideoId(e.dataTransfer);
+		if (!videoId) {
+			return;
+		}
+
+		setDropping(true);
+		try {
+			await onDropVideo(videoId, category.id);
+		} finally {
+			setDropping(false);
+		}
+	}
+
+	return (
+		<Link
+			to="/categories/$categorySlug"
+			params={{ categorySlug: category.slug }}
+			title={category.name}
+			onDragOver={handleDragOver}
+			onDragLeave={handleDragLeave}
+			onDrop={handleDrop}
+			className={cn(
+				"flex h-7 w-7 items-center justify-center rounded-md transition-colors",
+				dragOver || dropping
+					? "bg-(--accent-subtle) text-(--accent) ring-1 ring-(--accent)/40"
+					: pathname === `/categories/${category.slug}`
+						? "bg-(--accent-subtle) text-(--accent)"
+						: "text-(--muted-foreground) hover:bg-(--panel-strong) hover:text-(--foreground)",
+			)}
+		>
+			<CategoryIcon name={category.icon} size={16} />
+		</Link>
 	);
 }
 

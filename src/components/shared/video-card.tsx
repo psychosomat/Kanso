@@ -38,6 +38,7 @@ import {
 	savePlayerReturnTarget,
 } from "@/lib/player-return";
 import { formatDateTime, formatDuration, formatResolution } from "@/lib/utils";
+import { setDraggedVideoId } from "@/lib/video-drag";
 
 type Props = {
 	video: VideoCardDto;
@@ -75,6 +76,13 @@ export function VideoCard({
 		}
 	}, []);
 
+	const handleDragStart = useCallback(
+		(e: React.DragEvent<HTMLAnchorElement>) => {
+			setDraggedVideoId(e.dataTransfer, video.id);
+		},
+		[video.id],
+	);
+
 	async function handleRemove() {
 		if (!onRemove) return;
 		setRemoving(true);
@@ -97,6 +105,8 @@ export function VideoCard({
 						onClickCapture={onOpenPlayer}
 						onClick={onOpenPlayer}
 						onMouseDown={handleMouseDown}
+						onDragStart={handleDragStart}
+						draggable
 						className="group relative block overflow-hidden rounded-lg border border-(--border) bg-(--panel) transition-[border-color,box-shadow] duration-300 hover:border-(--accent)/30 hover:shadow-lg"
 					>
 						<div className="relative aspect-video overflow-hidden bg-(--panel-strong)">
