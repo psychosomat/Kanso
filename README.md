@@ -9,7 +9,6 @@
 *Zen-like desktop player with forum-style organization, noise texture, and smooth motion.*
 
 [![Release](https://img.shields.io/github/v/release/psychosomat/Kanso?display_name=tag&sort=semver&style=for-the-badge&labelColor=24283b&color=24283b)](https://github.com/psychosomat/Kanso/releases)
-[![Downloads](https://img.shields.io/github/downloads/psychosomat/Kanso/total?style=for-the-badge&labelColor=24283b&color=24283b)](https://github.com/psychosomat/Kanso/releases)
 [![License](https://img.shields.io/github/license/psychosomat/Kanso?style=for-the-badge&labelColor=24283b&color=24283b)](https://github.com/psychosomat/Kanso/blob/main/LICENSE)
 [![Issues](https://img.shields.io/github/issues/psychosomat/Kanso?style=for-the-badge&labelColor=24283b&color=24283b)](https://github.com/psychosomat/Kanso/issues)
 [![Stars](https://img.shields.io/github/stars/psychosomat/Kanso?style=for-the-badge&labelColor=24283b&color=24283b)](https://github.com/psychosomat/Kanso/stargazers)
