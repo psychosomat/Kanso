@@ -49,32 +49,8 @@ const SIDEBAR_PRE_PLAYER_KEY = "player:sidebar:pre-player";
 const COLLAPSED_CATEGORIES_KEY = "player:sidebar:collapsed-categories";
 const SIDEBAR_WIDTH_KEY = "player:sidebar:width";
 
-function canUseDom() {
-	return typeof window !== "undefined" && typeof document !== "undefined";
-}
-
-function getSessionStorageItem(key: string) {
-	if (typeof window === "undefined") {
-		return null;
-	}
-
-	return window.sessionStorage.getItem(key);
-}
-
-function setSessionStorageItem(key: string, value: string) {
-	if (typeof window === "undefined") {
-		return;
-	}
-
-	window.sessionStorage.setItem(key, value);
-}
-
 function initNoise() {
-	if (!canUseDom()) {
-		return;
-	}
-
-	const stored = window.localStorage.getItem(NOISE_STORAGE_KEY);
+	const stored = localStorage.getItem(NOISE_STORAGE_KEY);
 	if (stored !== null) {
 		document.documentElement.style.setProperty("--noise-opacity", stored);
 	}
@@ -136,11 +112,11 @@ function SidebarContent({ collapsed = false }: { collapsed?: boolean }) {
 	const location = useLocation();
 	const categoryTree = buildCategoryTree(categories);
 	const [boardsExpanded, setBoardsExpanded] = useState(
-		() => getSessionStorageItem("player:sidebar:boards") !== "0",
+		() => sessionStorage.getItem("player:sidebar:boards") !== "0",
 	);
 	const [collapsedCategoryIds, setCollapsedCategoryIds] = useState<Set<string>>(
 		() => {
-			const stored = getSessionStorageItem(COLLAPSED_CATEGORIES_KEY);
+			const stored = sessionStorage.getItem(COLLAPSED_CATEGORIES_KEY);
 			if (stored) {
 				try {
 					return new Set(JSON.parse(stored));
@@ -155,7 +131,7 @@ function SidebarContent({ collapsed = false }: { collapsed?: boolean }) {
 	function toggleBoards() {
 		const next = !boardsExpanded;
 		setBoardsExpanded(next);
-		setSessionStorageItem("player:sidebar:boards", next ? "1" : "0");
+		sessionStorage.setItem("player:sidebar:boards", next ? "1" : "0");
 	}
 
 	function toggleCategoryCollapsed(categoryId: string) {
@@ -166,7 +142,7 @@ function SidebarContent({ collapsed = false }: { collapsed?: boolean }) {
 			} else {
 				next.add(categoryId);
 			}
-			setSessionStorageItem(
+			sessionStorage.setItem(
 				COLLAPSED_CATEGORIES_KEY,
 				JSON.stringify([...next]),
 			);
@@ -472,7 +448,7 @@ function CategoryTreeItem({
 		}
 	};
 
-	function handleDragOver(e: React.DragEvent<HTMLAnchorElement>) {
+	function handleDragOver(e: React.DragEvent<HTMLDivElement>) {
 		if (!hasDraggedVideo(e.dataTransfer)) {
 			return;
 		}
@@ -481,7 +457,7 @@ function CategoryTreeItem({
 		setDragOver(true);
 	}
 
-	function handleDragLeave(e: React.DragEvent<HTMLAnchorElement>) {
+	function handleDragLeave(e: React.DragEvent<HTMLDivElement>) {
 		const relatedTarget = e.relatedTarget;
 		if (
 			relatedTarget instanceof Node &&
@@ -492,7 +468,7 @@ function CategoryTreeItem({
 		setDragOver(false);
 	}
 
-	async function handleDrop(e: React.DragEvent<HTMLAnchorElement>) {
+	async function handleDrop(e: React.DragEvent<HTMLDivElement>) {
 		if (!hasDraggedVideo(e.dataTransfer)) {
 			return;
 		}
@@ -519,6 +495,7 @@ function CategoryTreeItem({
 		<>
 			<ContextMenu>
 				<ContextMenuTrigger asChild>
+					{/* biome-ignore lint/a11y/noStaticElementInteractions: drop target for video drag-and-drop */}
 					<div
 						className={cn(
 							"flex items-center justify-between rounded-sm px-3 py-1.5 text-sm transition-colors duration-150",
@@ -529,14 +506,14 @@ function CategoryTreeItem({
 									: "text-(--muted-foreground) hover:bg-(--panel-strong) hover:text-(--foreground)",
 						)}
 						style={{ marginLeft: `${category.depth * 14}px` }}
+						onDragOver={handleDragOver}
+						onDragLeave={handleDragLeave}
+						onDrop={handleDrop}
 					>
 						<Link
 							to="/categories/$categorySlug"
 							params={{ categorySlug: category.slug }}
 							onMouseDown={handleMouseDown}
-							onDragOver={handleDragOver}
-							onDragLeave={handleDragLeave}
-							onDrop={handleDrop}
 							className="flex min-w-0 flex-1 items-center gap-2"
 						>
 							<CategoryIcon name={category.icon} size={15} />
@@ -678,7 +655,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
 	const { preferences } = useAppState();
 	const [mobileOpen, setMobileOpen] = useState(false);
 	const [collapsed, setCollapsed] = useState(
-		() => getSessionStorageItem(SIDEBAR_COLLAPSED_KEY) === "1",
+		() => sessionStorage.getItem(SIDEBAR_COLLAPSED_KEY) === "1",
 	);
 	const [sidebarHidden, setSidebarHidden] = useState(false);
 	const [sidebarHovered, setSidebarHovered] = useState(false);
@@ -691,8 +668,8 @@ export function AppShell({ children }: { children: React.ReactNode }) {
 	function toggleCollapsed() {
 		const next = !collapsed;
 		setCollapsed(next);
-		setSessionStorageItem(SIDEBAR_COLLAPSED_KEY, next ? "1" : "0");
-		setSessionStorageItem(SIDEBAR_AUTO_COLLAPSE_KEY, "0");
+		sessionStorage.setItem(SIDEBAR_COLLAPSED_KEY, next ? "1" : "0");
+		sessionStorage.setItem(SIDEBAR_AUTO_COLLAPSE_KEY, "0");
 	}
 
 	function handleMouseDown(e: React.MouseEvent) {
@@ -732,19 +709,19 @@ export function AppShell({ children }: { children: React.ReactNode }) {
 	useEffect(() => {
 		const inPlayerRoute = location.pathname.startsWith("/player/");
 		const autoCollapsed =
-			getSessionStorageItem(SIDEBAR_AUTO_COLLAPSE_KEY) === "1";
+			sessionStorage.getItem(SIDEBAR_AUTO_COLLAPSE_KEY) === "1";
 
 		if (inPlayerRoute) {
 			const currentCollapsed =
-				getSessionStorageItem(SIDEBAR_COLLAPSED_KEY) === "1";
+				sessionStorage.getItem(SIDEBAR_COLLAPSED_KEY) === "1";
 			if (currentCollapsed) {
 				return;
 			}
 
-			setSessionStorageItem(SIDEBAR_PRE_PLAYER_KEY, "0");
-			setSessionStorageItem(SIDEBAR_AUTO_COLLAPSE_KEY, "1");
+			sessionStorage.setItem(SIDEBAR_PRE_PLAYER_KEY, "0");
+			sessionStorage.setItem(SIDEBAR_AUTO_COLLAPSE_KEY, "1");
 			setCollapsed(true);
-			setSessionStorageItem(SIDEBAR_COLLAPSED_KEY, "1");
+			sessionStorage.setItem(SIDEBAR_COLLAPSED_KEY, "1");
 			return;
 		}
 
@@ -754,10 +731,10 @@ export function AppShell({ children }: { children: React.ReactNode }) {
 		}
 
 		const previousCollapsed =
-			getSessionStorageItem(SIDEBAR_PRE_PLAYER_KEY) === "1";
+			sessionStorage.getItem(SIDEBAR_PRE_PLAYER_KEY) === "1";
 		setCollapsed(previousCollapsed);
-		setSessionStorageItem(SIDEBAR_COLLAPSED_KEY, previousCollapsed ? "1" : "0");
-		setSessionStorageItem(SIDEBAR_AUTO_COLLAPSE_KEY, "0");
+		sessionStorage.setItem(SIDEBAR_COLLAPSED_KEY, previousCollapsed ? "1" : "0");
+		sessionStorage.setItem(SIDEBAR_AUTO_COLLAPSE_KEY, "0");
 		setSidebarHidden(false);
 	}, [location.pathname]);
 
@@ -767,10 +744,10 @@ export function AppShell({ children }: { children: React.ReactNode }) {
 		}
 
 		return window.playerApi.app.subscribeOpenVideo(({ filePath }) => {
-			setSessionStorageItem(SIDEBAR_PRE_PLAYER_KEY, collapsed ? "1" : "0");
-			setSessionStorageItem(SIDEBAR_AUTO_COLLAPSE_KEY, collapsed ? "0" : "1");
+			sessionStorage.setItem(SIDEBAR_PRE_PLAYER_KEY, collapsed ? "1" : "0");
+			sessionStorage.setItem(SIDEBAR_AUTO_COLLAPSE_KEY, collapsed ? "0" : "1");
 			setCollapsed(true);
-			setSessionStorageItem(SIDEBAR_COLLAPSED_KEY, "1");
+			sessionStorage.setItem(SIDEBAR_COLLAPSED_KEY, "1");
 			setSidebarHidden(true);
 			void router.navigate({
 				to: "/player/external",

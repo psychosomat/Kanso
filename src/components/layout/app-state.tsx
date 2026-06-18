@@ -67,14 +67,10 @@ export function AppStateProvider({ children }: PropsWithChildren) {
 	);
 
 	const refreshAll = useCallback(async () => {
-		try {
-			const prefsPromise = refreshPreferences();
-			const libPromise = refreshLibrary();
-			const catsPromise = refreshCategories();
-			await Promise.all([prefsPromise, libPromise, catsPromise]);
-		} finally {
-			// cleanup if needed
-		}
+		const prefsPromise = refreshPreferences();
+		const libPromise = refreshLibrary();
+		const catsPromise = refreshCategories();
+		await Promise.all([prefsPromise, libPromise, catsPromise]);
 	}, [refreshCategories, refreshLibrary, refreshPreferences]);
 
 	useEffect(() => {

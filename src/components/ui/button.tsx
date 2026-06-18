@@ -1,11 +1,10 @@
 import { Slot } from "@radix-ui/react-slot";
 import { cva, type VariantProps } from "class-variance-authority";
-import gsap from "gsap";
 import * as React from "react";
 import { cn } from "@/lib/utils";
 
 const buttonVariants = cva(
-	"inline-flex items-center justify-center gap-2 whitespace-nowrap text-sm font-medium transition-colors duration-200 disabled:pointer-events-none disabled:opacity-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-(--ring)",
+	"inline-flex items-center justify-center gap-2 whitespace-nowrap text-sm font-medium transition-all duration-200 disabled:pointer-events-none disabled:opacity-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-(--ring) hover:scale-[1.02] active:scale-[0.96]",
 	{
 		variants: {
 			variant: {
@@ -44,88 +43,12 @@ export interface ButtonProps
 }
 
 const Button = React.forwardRef<HTMLButtonElement, ButtonProps>(
-	(
-		{
-			className,
-			variant,
-			size,
-			asChild = false,
-			onPointerEnter,
-			onPointerLeave,
-			onPointerDown,
-			onPointerUp,
-			...props
-		},
-		ref,
-	) => {
-		const localRef = React.useRef<HTMLButtonElement>(null);
-		const buttonRef = (ref as React.RefObject<HTMLButtonElement>) || localRef;
-
-		const handlePointerEnter = React.useCallback(
-			(e: React.PointerEvent<HTMLButtonElement>) => {
-				if (buttonRef.current && !props.disabled) {
-					gsap.to(buttonRef.current, {
-						scale: 1.02,
-						duration: 0.15,
-						ease: "power2.out",
-					});
-				}
-				onPointerEnter?.(e);
-			},
-			[onPointerEnter, props.disabled, buttonRef],
-		);
-
-		const handlePointerLeave = React.useCallback(
-			(e: React.PointerEvent<HTMLButtonElement>) => {
-				if (buttonRef.current) {
-					gsap.to(buttonRef.current, {
-						scale: 1,
-						duration: 0.15,
-						ease: "power2.out",
-					});
-				}
-				onPointerLeave?.(e);
-			},
-			[onPointerLeave, buttonRef],
-		);
-
-		const handlePointerDown = React.useCallback(
-			(e: React.PointerEvent<HTMLButtonElement>) => {
-				if (buttonRef.current && !props.disabled) {
-					gsap.to(buttonRef.current, {
-						scale: 0.96,
-						duration: 0.08,
-						ease: "power2.out",
-					});
-				}
-				onPointerDown?.(e);
-			},
-			[onPointerDown, props.disabled, buttonRef],
-		);
-
-		const handlePointerUp = React.useCallback(
-			(e: React.PointerEvent<HTMLButtonElement>) => {
-				if (buttonRef.current && !props.disabled) {
-					gsap.to(buttonRef.current, {
-						scale: 1.02,
-						duration: 0.15,
-						ease: "back.out(1.7)",
-					});
-				}
-				onPointerUp?.(e);
-			},
-			[onPointerUp, props.disabled, buttonRef],
-		);
-
+	({ className, variant, size, asChild = false, ...props }, ref) => {
 		const Comp = asChild ? Slot : "button";
 		return (
 			<Comp
 				className={cn(buttonVariants({ variant, size, className }))}
-				ref={buttonRef}
-				onPointerEnter={handlePointerEnter}
-				onPointerLeave={handlePointerLeave}
-				onPointerDown={handlePointerDown}
-				onPointerUp={handlePointerUp}
+				ref={ref}
 				{...props}
 			/>
 		);

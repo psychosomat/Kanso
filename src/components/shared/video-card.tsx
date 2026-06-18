@@ -17,7 +17,7 @@ import {
 	AlertDialogFooter,
 	AlertDialogHeader,
 	AlertDialogTitle,
-} from "@/components/ui/alert-dialog";
+} from "@/components/ui/alert-dialog-impl";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import {
@@ -107,7 +107,7 @@ export function VideoCard({
 						onMouseDown={handleMouseDown}
 						onDragStart={handleDragStart}
 						draggable
-						className="group relative block overflow-hidden rounded-lg border border-(--border) bg-(--panel) transition-[border-color,box-shadow] duration-300 hover:border-(--accent)/30 hover:shadow-lg"
+						className="group relative block overflow-hidden rounded-lg border border-(--border) bg-(--panel) transition-[border-color,box-shadow] duration-300 hover:border-(--accent)/30 hover:shadow-lg cursor-grab active:cursor-grabbing"
 					>
 						<div className="relative aspect-video overflow-hidden bg-(--panel-strong)">
 							{video.posterUrl ? (

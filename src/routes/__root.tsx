@@ -1,4 +1,3 @@
-import { HotkeysProvider } from "@tanstack/react-hotkeys";
 import { createRootRoute, Outlet } from "@tanstack/react-router";
 import { useEffect } from "react";
 import { AppShell } from "@/components/layout/app-shell";
@@ -49,12 +48,10 @@ function RootDocument() {
 	}, []);
 
 	return (
-		<HotkeysProvider>
-			<AppStateProvider>
-				<AppShell>
-					<Outlet />
-				</AppShell>
-			</AppStateProvider>
-		</HotkeysProvider>
+		<AppStateProvider>
+			<AppShell>
+				<Outlet />
+			</AppShell>
+		</AppStateProvider>
 	);
 }

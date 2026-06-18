@@ -6,6 +6,7 @@ import { DatabaseService } from "./db";
 import { FileWatchService } from "./file-watch";
 import { probeMedia } from "./media-metadata";
 import { PosterCacheService } from "./poster-cache";
+import { TransmuxerService } from "./transmuxer";
 
 function isSupportedVideo(filePath: string) {
 	return SUPPORTED_VIDEO_EXTENSIONS.includes(
@@ -49,6 +50,7 @@ export class LibraryIndexerService {
 	constructor(
 		private readonly db: DatabaseService,
 		private readonly posterCache: PosterCacheService,
+		private readonly transmuxer?: TransmuxerService,
 	) {}
 
 	subscribe(listener: (status: ScanStatusDto) => void) {
@@ -302,6 +304,14 @@ export class LibraryIndexerService {
 			bitrate: metadata.bitrate,
 			posterPath,
 		});
+
+		if (this.transmuxer && path.extname(filePath).toLowerCase() === ".ts") {
+			// Pre-emptively remux .ts files so the cached MP4 is ready on first play
+			this.transmuxer.ensureTransmuxed(filePath).catch((error) => {
+				console.error("[INDEXER] Background transmux failed:", filePath, error);
+			});
+		}
+
 		return true;
 	}
 }

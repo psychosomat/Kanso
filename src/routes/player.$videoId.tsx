@@ -35,7 +35,7 @@ import {
 	AlertDialogFooter,
 	AlertDialogHeader,
 	AlertDialogTitle,
-} from "@/components/ui/alert-dialog";
+} from "@/components/ui/alert-dialog-impl";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import {
@@ -980,6 +980,7 @@ export function PlayerPage({
 						muted
 						preload="auto"
 						playsInline
+						crossOrigin="anonymous"
 					/>
 					<canvas ref={previewCanvasRef} className="hidden" />
 

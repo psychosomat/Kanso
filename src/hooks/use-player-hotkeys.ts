@@ -1,4 +1,3 @@
-import { useHotkeys } from "@tanstack/react-hotkeys";
 import { useEffect } from "react";
 
 type UsePlayerHotkeysOptions = {
@@ -30,66 +29,6 @@ export function usePlayerHotkeys({
 	onToggleMute,
 	onTogglePlay,
 }: UsePlayerHotkeysOptions) {
-	useHotkeys(
-		[
-			{
-				hotkey: "Space",
-				callback: () => void onTogglePlay(),
-				options: {
-					meta: {
-						name: "Toggle Play",
-						description: "Play or pause the current video.",
-					},
-				},
-			},
-			{
-				hotkey: "ArrowLeft",
-				callback: onSeekBackward,
-				options: {
-					meta: {
-						name: "Seek Backward",
-						description: "Seek backward by the default step.",
-					},
-				},
-			},
-			{
-				hotkey: "ArrowRight",
-				callback: onSeekForward,
-				options: {
-					meta: {
-						name: "Seek Forward",
-						description: "Seek forward by the default step.",
-					},
-				},
-			},
-			{
-				hotkey: "ArrowUp",
-				callback: () => void onVolumeUp(),
-				options: {
-					meta: {
-						name: "Volume Up",
-						description: "Increase volume by 5 percent.",
-					},
-				},
-			},
-			{
-				hotkey: "ArrowDown",
-				callback: () => void onVolumeDown(),
-				options: {
-					meta: {
-						name: "Volume Down",
-						description: "Decrease volume by 5 percent.",
-					},
-				},
-			},
-		],
-		{
-			enabled,
-			preventDefault: true,
-			target: typeof window === "undefined" ? null : window,
-		},
-	);
-
 	useEffect(() => {
 		if (!enabled) return;
 
@@ -97,17 +36,28 @@ export function usePlayerHotkeys({
 			if (event.repeat || isEditableTarget(event.target)) return;
 
 			switch (event.code) {
+				case "Space":
 				case "KeyK":
 					event.preventDefault();
 					void onTogglePlay();
 					return;
+				case "ArrowLeft":
 				case "KeyJ":
 					event.preventDefault();
 					onSeekBackward();
 					return;
+				case "ArrowRight":
 				case "KeyL":
 					event.preventDefault();
 					onSeekForward();
+					return;
+				case "ArrowUp":
+					event.preventDefault();
+					void onVolumeUp();
+					return;
+				case "ArrowDown":
+					event.preventDefault();
+					void onVolumeDown();
 					return;
 				case "KeyM":
 					event.preventDefault();
@@ -137,5 +87,7 @@ export function usePlayerHotkeys({
 		onToggleMute,
 		onTogglePlay,
 		onToggleLoop,
+		onVolumeDown,
+		onVolumeUp,
 	]);
 }

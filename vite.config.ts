@@ -1,5 +1,6 @@
 import { defineConfig } from 'vite'
 import { devtools } from '@tanstack/devtools-vite'
+import { TanStackRouterVite } from '@tanstack/router-plugin/vite'
 import tsconfigPaths from 'vite-tsconfig-paths'
 import { fileURLToPath } from 'node:url'
 import path from 'node:path'
@@ -56,22 +57,23 @@ const config = defineConfig({
       },
     },
   },
-  plugins: [
-    ...(process.env.NODE_ENV === 'development' ? [devtools()] : []),
-    tsconfigPaths({ projects: ['./tsconfig.json'] }),
-    tailwindcss(),
-    viteReact({
-      babel: {
-        plugins: [
-          ['@babel/plugin-transform-typescript', {
-            allowDeclareFields: true,
-            isTSX: true,
-          }],
-        ],
-      },
-    }),
-    copyPublicFiles(),
-  ],
+	plugins: [
+		...(process.env.NODE_ENV === 'development' ? [devtools()] : []),
+		TanStackRouterVite({ target: 'react', autoCodeSplitting: true }),
+		tsconfigPaths({ projects: ['./tsconfig.json'] }),
+		tailwindcss(),
+		viteReact({
+			babel: {
+				plugins: [
+					['@babel/plugin-transform-typescript', {
+						allowDeclareFields: true,
+						isTSX: true,
+					}],
+				],
+			},
+		}),
+		copyPublicFiles(),
+	],
 })
 
 export default config

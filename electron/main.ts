@@ -18,6 +18,7 @@ import { registerIpc } from "./ipc/register-ipc";
 import { DatabaseService } from "./services/db";
 import { LibraryIndexerService } from "./services/library-indexer";
 import { PosterCacheService } from "./services/poster-cache";
+import { TransmuxerService } from "./services/transmuxer";
 
 // Disable hardware video decoding to prevent crashes with 4K HEVC video
 // This is a workaround for GPU decoder crashes on some systems
@@ -29,6 +30,7 @@ let mainWindow: BrowserWindow | null = null;
 let cleanupIpc: (() => void) | null = null;
 let db: DatabaseService | null = null;
 let indexer: LibraryIndexerService | null = null;
+let transmuxer: TransmuxerService | null = null;
 let prodServer: http.Server | null = null;
 let prodServerUrl: string | null = null;
 const pendingOpenPaths: string[] = [];
@@ -59,7 +61,8 @@ function initializeBackend() {
 	const posterCache = new PosterCacheService(
 		path.join(appData, "cache", "posters"),
 	);
-	indexer = new LibraryIndexerService(db, posterCache);
+	transmuxer = new TransmuxerService(path.join(appData, "cache", "transmux"));
+	indexer = new LibraryIndexerService(db, posterCache, transmuxer);
 	console.log("[BACKEND] Backend services initialized");
 
 	cleanupIpc = registerIpc({
@@ -388,21 +391,36 @@ function parseRangeHeader(rangeHeader: string | null, fileSize: number) {
 	return { start, end };
 }
 
-function createMediaResponse(targetPath: string, request: Request) {
-	// Normalize path for macOS compatibility
-	let normalizedPath = targetPath;
-	if (process.platform === "darwin") {
-		// Ensure path is properly resolved for macOS
-		normalizedPath = path.resolve(targetPath);
-		console.log("[MEDIA RESPONSE] macOS normalized path:", normalizedPath);
+function corsHeaders() {
+	return {
+		"Access-Control-Allow-Origin": "*",
+		"Access-Control-Allow-Methods": "GET, HEAD, OPTIONS",
+	};
+}
+
+async function createMediaResponse(targetPath: string, request: Request) {
+	let resolved = path.resolve(targetPath);
+
+	// Remux .ts (MPEG-TS) to .mp4 on-the-fly for browser compatibility
+	if (path.extname(resolved).toLowerCase() === ".ts" && transmuxer) {
+		console.log("[MEDIA] Remuxing .ts file:", resolved);
+		resolved = await transmuxer.ensureTransmuxed(resolved);
+		console.log("[MEDIA] Served path after remux:", resolved);
 	}
 
-	const stats = statSync(normalizedPath);
-	const mimeType = getMimeType(normalizedPath);
+	const stats = statSync(resolved);
+	const mimeType = getMimeType(resolved);
 	const range = parseRangeHeader(request.headers.get("range"), stats.size);
 
+	const baseHeaders = {
+		...corsHeaders(),
+		"Accept-Ranges": "bytes",
+		"Content-Type": mimeType,
+		"Cache-Control": "no-cache",
+	};
+
 	if (range) {
-		const stream = createReadStream(normalizedPath, {
+		const stream = createReadStream(resolved, {
 			start: range.start,
 			end: range.end,
 		});
@@ -412,26 +430,22 @@ function createMediaResponse(targetPath: string, request: Request) {
 			{
 				status: 206,
 				headers: {
-					"Accept-Ranges": "bytes",
+					...baseHeaders,
 					"Content-Length": String(range.end - range.start + 1),
 					"Content-Range": `bytes ${range.start}-${range.end}/${stats.size}`,
-					"Content-Type": mimeType,
-					"Cache-Control": "no-cache",
 				},
 			},
 		);
 	}
 
-	const stream = createReadStream(normalizedPath);
+	const stream = createReadStream(resolved);
 	return new Response(
 		Readable.toWeb(stream) as unknown as globalThis.ReadableStream,
 		{
 			status: 200,
 			headers: {
-				"Accept-Ranges": "bytes",
+				...baseHeaders,
 				"Content-Length": String(stats.size),
-				"Content-Type": mimeType,
-				"Cache-Control": "no-cache",
 			},
 		},
 	);
@@ -523,7 +537,7 @@ async function bootstrap() {
 				console.log("[VIDEO PROTOCOL] macOS request:", filePath);
 			}
 
-			const response = createMediaResponse(filePath, request);
+			const response = await createMediaResponse(filePath, request);
 
 			// Log success on macOS
 			if (process.platform === "darwin") {
