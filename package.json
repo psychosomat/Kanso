@@ -1,6 +1,6 @@
 {
   "name": "kanso",
-  "version": "0.1.5",
+  "version": "0.1.6",
   "description": "Kanso - Modern Media Player",
   "author": "psychosomat(Dmitrii Dark) <hello@ddark.dev>",
   "private": true,
@@ -10,20 +10,19 @@
     "#/*": "./src/*"
   },
   "scripts": {
-    "postinstall": "electron-builder install-app-deps",
+    "postinstall": "electron-builder install-app-deps && node node_modules/electron/install.js",
     "format": "biome format . --write",
     "lint": "biome lint ./src ./electron",
     "check": "biome check . --write",
     "test": "vitest run",
-    "dev:web": "vite dev --port 3000 --strictPort",
-    "dev:desktop": "concurrently -k \"bun:dev:web\" \"tsup electron/main.ts --watch --format esm --out-dir dist-electron --external electron\" \"tsup electron/preload.ts --watch --format cjs --out-dir dist-electron --external electron\" \"wait-on http://localhost:3000 file:dist-electron/main.js file:dist-electron/preload.cjs && cross-env VITE_DEV_SERVER_URL=http://localhost:3000 electron dist-electron/main.js\"",
+    "dev": "concurrently -k \"vite dev --port 3000 --strictPort\" \"tsup electron/main.ts --watch --format esm --out-dir dist-electron --external electron\" \"tsup electron/preload.ts --watch --format cjs --out-dir dist-electron --external electron\" \"wait-on http://localhost:3000 file:dist-electron/main.js file:dist-electron/preload.cjs && cross-env VITE_DEV_SERVER_URL=http://localhost:3000 electron dist-electron/main.js\"",
     "build": "vite build --logLevel error && tsup electron/main.ts --format esm --out-dir dist-electron --external electron && tsup electron/preload.ts --format cjs --out-dir dist-electron --external electron",
     "build:thumbnail:win": "powershell -ExecutionPolicy Bypass -File build-resources/windows-thumbnail-provider/build.ps1",
     "build:thumbnail:mac": "chmod +x build-resources/macos-quicklook/build.sh && build-resources/macos-quicklook/build.sh",
-    "dist": "npm run build && electron-builder",
-    "dist:win": "npm run build && npm run build:thumbnail:win && electron-builder --win nsis",
-    "dist:linux": "npm run build && electron-builder --linux deb pacman tar.gz",
-    "dist:mac": "npm run build && npm run build:thumbnail:mac && electron-builder --mac dmg zip"
+    "dist": "bun run build && electron-builder",
+    "dist:win": "bun run build && bun run build:thumbnail:win && electron-builder --win nsis",
+    "dist:linux": "bun run build && electron-builder --linux deb pacman tar.gz",
+    "dist:mac": "bun run build && bun run build:thumbnail:mac && electron-builder --mac dmg zip"
   },
   "dependencies": {
     "@gsap/react": "^2.1.2",
@@ -79,12 +78,6 @@
     "vite-tsconfig-paths": "^5.1.4",
     "vitest": "^3.0.5",
     "wait-on": "^9.0.4"
-  },
-  "pnpm": {
-    "onlyBuiltDependencies": [
-      "esbuild",
-      "lightningcss"
-    ]
   },
   "build": {
     "appId": "com.dark.kanso",
@@ -178,5 +171,5 @@
       "priority": "optional"
     }
   },
-  "packageManager": "npm@11.12.1"
+  "packageManager": "bun@1.22.5"
 }

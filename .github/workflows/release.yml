@@ -4,116 +4,276 @@ on:
   push:
     tags:
       - 'v*'
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: 'Tag to release (e.g. v0.1.6)'
+        required: true
+        type: string
 
 permissions:
   contents: write
 
+env:
+  BUN_VERSION: 'latest'
+  RELEASE_TAG: ${{ github.event.inputs.tag || github.ref_name }}
+
 jobs:
-  create-release:
+  lint-test:
+    name: Lint & Test
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Create GitHub Release
-        uses: softprops/action-gh-release@v2
+      - name: Setup Bun
+        uses: oven-sh/setup-bun@v2
         with:
-          name: Kanso ${{ github.ref_name }}
-          draft: false
-          generate_release_notes: true
+          bun-version: ${{ env.BUN_VERSION }}
 
-  build-linux:
-    needs: create-release
-    runs-on: ubuntu-latest
-    steps:
-      - name: Checkout
-        uses: actions/checkout@v4
-
-      - name: Setup Node.js
-        uses: actions/setup-node@v4
+      - name: Restore Bun cache
+        uses: actions/cache@v4
         with:
-          node-version: 22
-          cache: npm
+          path: ~/.bun/install/cache
+          key: ${{ runner.os }}-bun-${{ hashFiles('bun.lock') }}
+          restore-keys: ${{ runner.os }}-bun-
 
       - name: Install dependencies
-        run: npm ci
+        run: bun install --frozen-lockfile
+
+      - name: Lint
+        run: bun run lint
+
+      - name: Test
+        run: bun test
+
+  build-linux:
+    name: Build Linux
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install system dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y dpkg fakeroot libarchive-tools zstd
+
+      - name: Setup Bun
+        uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: ${{ env.BUN_VERSION }}
+
+      - name: Restore Bun cache
+        uses: actions/cache@v4
+        with:
+          path: ~/.bun/install/cache
+          key: ${{ runner.os }}-bun-${{ hashFiles('bun.lock') }}
+          restore-keys: ${{ runner.os }}-bun-
+
+      - name: Restore Electron cache
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cache/electron
+            ~/.cache/electron-builder
+          key: ${{ runner.os }}-electron-${{ hashFiles('bun.lock') }}
+
+      - name: Install dependencies
+        run: bun install --frozen-lockfile
 
       - name: Build Linux packages
-        run: npm run dist:linux
+        run: bun run dist:linux
 
-      - name: Upload Linux tarball for AUR
+      - name: Upload artifacts
         uses: actions/upload-artifact@v4
         with:
-          name: kanso-linux-tarball
-          path: release/Kanso-*-linux-x64.tar.gz
+          name: linux-artifacts
+          path: release/*
           if-no-files-found: error
 
-      - name: Upload Linux assets to GitHub Release
-        uses: softprops/action-gh-release@v2
-        with:
-          files: |
-            release/Kanso-*-linux-*.deb
-            release/Kanso-*-linux-*.pkg.tar.zst
-            release/Kanso-*-linux-*.tar.gz
-
   build-windows:
-    needs: create-release
+    name: Build Windows
     runs-on: windows-latest
     steps:
       - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Setup Node.js
-        uses: actions/setup-node@v4
+      - name: Setup Bun
+        uses: oven-sh/setup-bun@v2
         with:
-          node-version: 22
-          cache: npm
+          bun-version: ${{ env.BUN_VERSION }}
+
+      - name: Setup .NET
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '8.x'
+
+      - name: Restore Bun cache
+        uses: actions/cache@v4
+        with:
+          path: ~/.bun/install/cache
+          key: ${{ runner.os }}-bun-${{ hashFiles('bun.lock') }}
+          restore-keys: ${{ runner.os }}-bun-
+
+      - name: Restore Electron cache
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/AppData/Local/electron/Cache
+            ~/AppData/Local/electron-builder/Cache
+          key: ${{ runner.os }}-electron-${{ hashFiles('bun.lock') }}
+
+      - name: Restore NuGet cache
+        uses: actions/cache@v4
+        with:
+          path: ~/.nuget/packages
+          key: ${{ runner.os }}-nuget-${{ hashFiles('build-resources/windows-thumbnail-provider/*.csproj') }}
 
       - name: Install dependencies
-        run: npm ci
+        run: bun install --frozen-lockfile
 
       - name: Build Windows installer
-        run: npm run dist:win
+        run: bun run dist:win
 
-      - name: Upload Windows assets to GitHub Release
-        uses: softprops/action-gh-release@v2
+      - name: Upload artifacts
+        uses: actions/upload-artifact@v4
         with:
-          files: release/Kanso-*-win-*.exe
+          name: windows-artifacts
+          path: release/*
+          if-no-files-found: error
 
-  build-macos:
-    needs: create-release
-    strategy:
-      fail-fast: false
-      matrix:
-        runner: [macos-15-intel, macos-latest]
-    runs-on: ${{ matrix.runner }}
+  build-macos-intel:
+    name: Build macOS Intel
+    runs-on: macos-13
     env:
       CSC_IDENTITY_AUTO_DISCOVERY: false
     steps:
       - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Setup Node.js
-        uses: actions/setup-node@v4
+      - name: Setup Bun
+        uses: oven-sh/setup-bun@v2
         with:
-          node-version: 22
-          cache: npm
+          bun-version: ${{ env.BUN_VERSION }}
+
+      - name: Restore Bun cache
+        uses: actions/cache@v4
+        with:
+          path: ~/.bun/install/cache
+          key: macos-intel-bun-${{ hashFiles('bun.lock') }}
+          restore-keys: macos-intel-bun-
+
+      - name: Restore Electron cache
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/Library/Caches/electron
+            ~/Library/Caches/electron-builder
+          key: macos-intel-electron-${{ hashFiles('bun.lock') }}
+
+      - name: Restore Xcode DerivedData
+        uses: actions/cache@v4
+        with:
+          path: build-resources/macos-quicklook/build/DerivedData
+          key: macos-intel-xcode-derived-data-${{ hashFiles('build-resources/macos-quicklook/**/*.swift', 'build-resources/macos-quicklook/**/*.pbxproj') }}
 
       - name: Install dependencies
-        run: npm ci
+        run: bun install --frozen-lockfile
 
-      - name: Build macOS app image
-        run: npm run dist:mac
+      - name: Build macOS packages
+        run: bun run dist:mac
 
-      - name: Upload macOS assets to GitHub Release
+      - name: Upload artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: macos-intel-artifacts
+          path: release/*
+          if-no-files-found: error
+
+  build-macos-arm:
+    name: Build macOS Apple Silicon
+    runs-on: macos-latest
+    env:
+      CSC_IDENTITY_AUTO_DISCOVERY: false
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Bun
+        uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: ${{ env.BUN_VERSION }}
+
+      - name: Restore Bun cache
+        uses: actions/cache@v4
+        with:
+          path: ~/.bun/install/cache
+          key: macos-arm-bun-${{ hashFiles('bun.lock') }}
+          restore-keys: macos-arm-bun-
+
+      - name: Restore Electron cache
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/Library/Caches/electron
+            ~/Library/Caches/electron-builder
+          key: macos-arm-electron-${{ hashFiles('bun.lock') }}
+
+      - name: Restore Xcode DerivedData
+        uses: actions/cache@v4
+        with:
+          path: build-resources/macos-quicklook/build/DerivedData
+          key: macos-arm-xcode-derived-data-${{ hashFiles('build-resources/macos-quicklook/**/*.swift', 'build-resources/macos-quicklook/**/*.pbxproj') }}
+
+      - name: Install dependencies
+        run: bun install --frozen-lockfile
+
+      - name: Build macOS packages
+        run: bun run dist:mac
+
+      - name: Upload artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: macos-arm-artifacts
+          path: release/*
+          if-no-files-found: error
+
+  publish-release:
+    name: Publish GitHub Release
+    needs:
+      - lint-test
+      - build-linux
+      - build-windows
+      - build-macos-intel
+      - build-macos-arm
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Download all artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: release
+          pattern: '*-artifacts'
+          merge-multiple: true
+
+      - name: List release artifacts
+        run: ls -la release/
+
+      - name: Create GitHub Release
         uses: softprops/action-gh-release@v2
         with:
-          files: |
-            release/Kanso-*-mac-*.dmg
-            release/Kanso-*-mac-*.zip
+          name: Kanso ${{ env.RELEASE_TAG }}
+          tag_name: ${{ env.RELEASE_TAG }}
+          draft: false
+          generate_release_notes: true
+          files: release/*
 
-  update-aur:
-    needs: build-linux
+  publish-aur:
+    name: Publish AUR package
+    needs: publish-release
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
@@ -122,7 +282,7 @@ jobs:
       - name: Download Linux tarball
         uses: actions/download-artifact@v4
         with:
-          name: kanso-linux-tarball
+          name: linux-artifacts
           path: release
 
       - name: Compute tarball SHA256
@@ -137,8 +297,9 @@ jobs:
           ssh-private-key: ${{ secrets.AUR_SSH_PRIVATE_KEY }}
 
       - name: Render AUR packaging files
+        shell: bash
         env:
-          VERSION: ${{ github.ref_name }}
+          VERSION: ${{ env.RELEASE_TAG }}
         run: |
           VERSION=${VERSION#v}
           SOURCE_URL="https://github.com/${{ github.repository }}/releases/download/v${VERSION}/Kanso-${VERSION}-linux-x64.tar.gz"
@@ -153,12 +314,13 @@ jobs:
             echo "No AUR packaging changes to commit."
             exit 0
           fi
-          git commit -m "chore(aur): update kanso-bin packaging for ${{ github.ref_name }}"
+          git commit -m "chore(aur): update kanso-bin packaging for ${{ env.RELEASE_TAG }}"
           git push
 
       - name: Publish AUR package update
+        shell: bash
         env:
-          VERSION: ${{ github.ref_name }}
+          VERSION: ${{ env.RELEASE_TAG }}
         run: |
           VERSION=${VERSION#v}
           SOURCE_URL="https://github.com/${{ github.repository }}/releases/download/v${VERSION}/Kanso-${VERSION}-linux-x64.tar.gz"
