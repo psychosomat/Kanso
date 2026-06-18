@@ -4,6 +4,10 @@ import path from "node:path";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { DatabaseService } from "./db";
 
+function sleep(ms: number) {
+	return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
 describe("DatabaseService", () => {
 	let tempDir: string;
 	let db: DatabaseService;
@@ -74,7 +78,7 @@ describe("DatabaseService", () => {
 		expect(second.path).toBe(first.path);
 	});
 
-	it("returns category feeds ordered by newest post", () => {
+	it("returns category feeds ordered by newest post", async () => {
 		const videoOne = db.upsertVideo({
 			sourcePath: "C:\\library\\a.mp4",
 			fileName: "a.mp4",
@@ -110,6 +114,7 @@ describe("DatabaseService", () => {
 			videoId: videoOne,
 			categories: [{ categoryId: category.id, caption: "older" }],
 		});
+		await sleep(5);
 		db.addVideoToCategories({
 			videoId: videoTwo,
 			categories: [{ categoryId: category.id, caption: "newer" }],
