@@ -1,17 +1,25 @@
-//
-//  QuickLookThumbnailProvider.swift
-//  Kanso Video Quick Look Generator
-//
-//  Generates thumbnails for video files in macOS Finder
-//
-
 import Cocoa
-import QuickLook
 import AVFoundation
 
-class QuickLookThumbnailProvider: QLThumbnailProvider {
+#if canImport(QuickLookUI)
+import QuickLookUI
+#else
+import QuickLook
+#endif
 
-    override func provideThumbnail(for request: QLFileThumbnailRequest, completionHandler: @escaping (QLThumbnailReply?, Error?) -> Void) {
+#if canImport(QuickLookUI)
+typealias QLProvider = QLThumbnailProvider
+typealias QLFileRequest = QLFileThumbnailRequest
+typealias QLReply = QLThumbnailReply
+#else
+typealias QLProvider = QLThumbnailProvider
+typealias QLFileRequest = QLFileThumbnailRequest
+typealias QLReply = QLThumbnailReply
+#endif
+
+class QuickLookThumbnailProvider: QLProvider {
+
+    override func provideThumbnail(for request: QLFileRequest, completionHandler: @escaping (QLReply?, Error?) -> Void) {
         guard let fileURL = request.fileURL else {
             completionHandler(nil, NSError(domain: "KansoThumbnail", code: -1, userInfo: [NSLocalizedDescriptionKey: "Invalid file URL"]))
             return
@@ -26,7 +34,12 @@ class QuickLookThumbnailProvider: QLThumbnailProvider {
                         NSGraphicsContext.saveGraphicsState()
                         let context = NSGraphicsContext.current?.cgContext
                         context?.interpolationQuality = .high
-                        context?.draw(image.cgImage(forProposedRect: nil, context: nil, hints: nil)!, in: CGRect(origin: .zero, size: size))
+                        let rect = CGRect(origin: .zero, size: size)
+                        #if canImport(QuickLookUI)
+                        context?.draw(image.cgImage(forProposedRect: nil, context: nil, hints: nil)!, in: rect)
+                        #else
+                        context?.draw(image.cgImage(forProposedRect: nil, contextSize: size, hints: nil)!, in: rect)
+                        #endif
                         NSGraphicsContext.restoreGraphicsState()
                         return true
                     })

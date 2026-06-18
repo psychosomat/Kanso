@@ -952,10 +952,10 @@ export class DatabaseService {
 		const offset = (page - 1) * pageSize;
 		const orderBy =
 			input.sort === "name"
-				? "v.file_name COLLATE NOCASE ASC"
+				? "v.file_name COLLATE NOCASE ASC, cp.rowid ASC"
 				: input.sort === "lastPlayed"
-					? "COALESCE(v.last_played_at, v.modified_at) DESC"
-					: "cp.created_at DESC";
+					? "COALESCE(v.last_played_at, v.modified_at) DESC, cp.rowid ASC"
+					: "cp.created_at DESC, cp.rowid ASC";
 
 		const rows = this.db
 			.prepare(

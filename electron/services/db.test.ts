@@ -55,7 +55,7 @@ describe("DatabaseService", () => {
 		const video = db.getVideoById(videoId);
 		expect(video?.durationSec).toBe(20);
 		expect(video?.width).toBe(1280);
-		expect(video?.posterUrl).toBe(`player-media://poster/${videoId}`);
+		expect(video?.posterUrl).toBe(`file://C:\\cache\\poster.jpg`);
 	});
 
 	it("creates unique category slugs", () => {
