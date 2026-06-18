@@ -233,6 +233,8 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
 
       - name: Download Linux tarball
         uses: actions/download-artifact@v4
@@ -264,13 +266,14 @@ jobs:
         run: |
           git config user.name "Kanso Release Bot"
           git config user.email "github-actions@kanso.local"
+          git checkout main
           git add packaging/aur/PKGBUILD packaging/aur/.SRCINFO
           if git diff --cached --quiet; then
             echo "No AUR packaging changes to commit."
             exit 0
           fi
           git commit -m "chore(aur): update kanso-bin packaging for ${{ env.RELEASE_TAG }}"
-          git push
+          git push origin main
 
       - name: Publish AUR package update
         shell: bash
