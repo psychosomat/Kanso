@@ -45,7 +45,7 @@ jobs:
         run: bun run lint
 
       - name: Test
-        run: bun test
+        run: npx vitest run
 
   build-linux:
     name: Build Linux
