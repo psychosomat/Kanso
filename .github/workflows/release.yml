@@ -253,6 +253,11 @@ jobs:
         with:
           ssh-private-key: ${{ secrets.AUR_SSH_PRIVATE_KEY }}
 
+      - name: Add AUR to known_hosts
+        run: |
+          mkdir -p ~/.ssh
+          ssh-keyscan -t ed25519 aur.archlinux.org >> ~/.ssh/known_hosts
+
       - name: Render AUR packaging files
         shell: bash
         env:
