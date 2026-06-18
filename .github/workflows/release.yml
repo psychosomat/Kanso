@@ -1,0 +1,165 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - 'v*'
+
+permissions:
+  contents: write
+
+jobs:
+  create-release:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          name: Kanso ${{ github.ref_name }}
+          draft: false
+          generate_release_notes: true
+
+  build-linux:
+    needs: create-release
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Build Linux packages
+        run: npm run dist:linux
+
+      - name: Upload Linux tarball for AUR
+        uses: actions/upload-artifact@v4
+        with:
+          name: kanso-linux-tarball
+          path: release/Kanso-*-linux-x64.tar.gz
+          if-no-files-found: error
+
+      - name: Upload Linux assets to GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          files: |
+            release/Kanso-*-linux-*.deb
+            release/Kanso-*-linux-*.pkg.tar.zst
+            release/Kanso-*-linux-*.tar.gz
+
+  build-windows:
+    needs: create-release
+    runs-on: windows-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Build Windows installer
+        run: npm run dist:win
+
+      - name: Upload Windows assets to GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          files: release/Kanso-*-win-*.exe
+
+  build-macos:
+    needs: create-release
+    strategy:
+      fail-fast: false
+      matrix:
+        runner: [macos-15-intel, macos-latest]
+    runs-on: ${{ matrix.runner }}
+    env:
+      CSC_IDENTITY_AUTO_DISCOVERY: false
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Build macOS app image
+        run: npm run dist:mac
+
+      - name: Upload macOS assets to GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          files: |
+            release/Kanso-*-mac-*.dmg
+            release/Kanso-*-mac-*.zip
+
+  update-aur:
+    needs: build-linux
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Download Linux tarball
+        uses: actions/download-artifact@v4
+        with:
+          name: kanso-linux-tarball
+          path: release
+
+      - name: Compute tarball SHA256
+        id: sha
+        run: |
+          sha=$(sha256sum release/Kanso-*-linux-x64.tar.gz | cut -d' ' -f1)
+          echo "sha=$sha" >> "$GITHUB_OUTPUT"
+
+      - name: Setup SSH for AUR
+        uses: webfactory/ssh-agent@v0.9.0
+        with:
+          ssh-private-key: ${{ secrets.AUR_SSH_PRIVATE_KEY }}
+
+      - name: Render AUR packaging files
+        env:
+          VERSION: ${{ github.ref_name }}
+        run: |
+          VERSION=${VERSION#v}
+          SOURCE_URL="https://github.com/${{ github.repository }}/releases/download/v${VERSION}/Kanso-${VERSION}-linux-x64.tar.gz"
+          ./scripts/render-aur.sh "$VERSION" "$SOURCE_URL" "${{ steps.sha.outputs.sha }}"
+
+      - name: Commit updated AUR packaging files
+        run: |
+          git config user.name "Kanso Release Bot"
+          git config user.email "github-actions@kanso.local"
+          git add packaging/aur/PKGBUILD packaging/aur/.SRCINFO
+          if git diff --cached --quiet; then
+            echo "No AUR packaging changes to commit."
+            exit 0
+          fi
+          git commit -m "chore(aur): update kanso-bin packaging for ${{ github.ref_name }}"
+          git push
+
+      - name: Publish AUR package update
+        env:
+          VERSION: ${{ github.ref_name }}
+        run: |
+          VERSION=${VERSION#v}
+          SOURCE_URL="https://github.com/${{ github.repository }}/releases/download/v${VERSION}/Kanso-${VERSION}-linux-x64.tar.gz"
+          ./scripts/update-aur.sh "$VERSION" "$SOURCE_URL" "${{ steps.sha.outputs.sha }}"

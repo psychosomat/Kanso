@@ -20,10 +20,10 @@
     "build": "vite build --logLevel error && tsup electron/main.ts --format esm --out-dir dist-electron --external electron && tsup electron/preload.ts --format cjs --out-dir dist-electron --external electron",
     "build:thumbnail:win": "powershell -ExecutionPolicy Bypass -File build-resources/windows-thumbnail-provider/build.ps1",
     "build:thumbnail:mac": "chmod +x build-resources/macos-quicklook/build.sh && build-resources/macos-quicklook/build.sh",
-    "dist": "bun run build && electron-builder",
-    "dist:win": "bun run build && bun run build:thumbnail:win && electron-builder --win nsis",
-    "dist:linux": "bun run build && electron-builder --linux deb tar.gz",
-    "dist:mac": "bun run build && bun run build:thumbnail:mac && electron-builder --mac dmg zip"
+    "dist": "npm run build && electron-builder",
+    "dist:win": "npm run build && npm run build:thumbnail:win && electron-builder --win nsis",
+    "dist:linux": "npm run build && electron-builder --linux deb pacman tar.gz",
+    "dist:mac": "npm run build && npm run build:thumbnail:mac && electron-builder --mac dmg zip"
   },
   "dependencies": {
     "@gsap/react": "^2.1.2",
@@ -163,6 +163,7 @@
       "category": "AudioVideo",
       "target": [
         "deb",
+        "pacman",
         "tar.gz"
       ],
       "icon": "public/icon.png"
