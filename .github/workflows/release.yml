@@ -44,6 +44,9 @@ jobs:
       - name: Lint
         run: bun run lint
 
+      - name: Rebuild better-sqlite3 for Node.js
+        run: npm rebuild better-sqlite3
+
       - name: Test
         run: npx vitest run
 

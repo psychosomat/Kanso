@@ -8,12 +8,16 @@
 
 /* Begin PBXBuildFile section */
 		5E2D9681502210E000000001 /* QuickLookThumbnailProvider.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5E2D9681502210E000000002 /* QuickLookThumbnailProvider.swift */; };
+		5E2D9681502210E000000013 /* QuickLook.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 5E2D9681502210E000000014 /* QuickLook.framework */; };
+		5E2D9681502210E000000015 /* AVFoundation.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 5E2D9681502210E000000016 /* AVFoundation.framework */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXFileReference section */
 		5E2D9681502210E000000002 /* QuickLookThumbnailProvider.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = QuickLookThumbnailProvider.swift; sourceTree = "<group>"; };
 		5E2D9681502210E000000003 /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist.xml; path = Info.plist; sourceTree = "<group>"; };
 		5E2D9681502210E000000004 /* KansoQuickLook.qlgenerator */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = KansoQuickLook.qlgenerator; sourceTree = BUILT_PRODUCTS_DIR; };
+		5E2D9681502210E000000014 /* QuickLook.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = QuickLook.framework; path = System/Library/Frameworks/QuickLook.framework; sourceTree = SDKROOT; };
+		5E2D9681502210E000000016 /* AVFoundation.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = AVFoundation.framework; path = System/Library/Frameworks/AVFoundation.framework; sourceTree = SDKROOT; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -21,6 +25,8 @@
 			isa = PBXFrameworksBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				5E2D9681502210E000000013 /* QuickLook.framework in Frameworks */,
+				5E2D9681502210E000000015 /* AVFoundation.framework in Frameworks */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
