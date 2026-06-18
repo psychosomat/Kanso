@@ -1,5 +1,5 @@
 pkgname=kanso-bin
-pkgver=0.1.2
+pkgver=0.1.6
 pkgrel=1
 pkgdesc="Modern media player focused on convenience, beauty, and performance"
 arch=("x86_64")
@@ -16,9 +16,9 @@ optdepends=(
 )
 provides=("kanso")
 conflicts=("kanso")
-source_x86_64=("kanso-${pkgver}.tar.gz::https://github.com/psychosomat/Kanso/releases/download/v${pkgver}/Kanso-${pkgver}-linux-x64.tar.gz"
-           "logo512.png::https://raw.githubusercontent.com/psychosomat/Kanso/v${pkgver}/public/logo512.png")
-sha256sums_x86_64=("f90b0e23fdb19f953cdd7246d1949ba64ef3227690081eabcb13902b8cb55085"
+source_x86_64=("kanso-${pkgver}.tar.gz::https://github.com/psychosomat/Kanso/releases/download/v0.1.6/Kanso-0.1.6-linux-x64.tar.gz"
+           "logo512.png::https://raw.githubusercontent.com/psychosomat/Kanso/v0.1.6/public/logo512.png")
+sha256sums_x86_64=("e709881b8629b26e71393b843f4924ddf24f32afa4187e51bd50237a7db5b5dc"
              "SKIP")
 
 package() {
