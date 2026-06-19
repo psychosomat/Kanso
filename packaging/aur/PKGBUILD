@@ -18,7 +18,7 @@ provides=("kanso")
 conflicts=("kanso")
 source_x86_64=("kanso-${pkgver}.tar.gz::https://github.com/psychosomat/Kanso/releases/download/v0.1.6/Kanso-0.1.6-linux-x64.tar.gz"
            "logo512.png::https://raw.githubusercontent.com/psychosomat/Kanso/v0.1.6/public/logo512.png")
-sha256sums_x86_64=("e709881b8629b26e71393b843f4924ddf24f32afa4187e51bd50237a7db5b5dc"
+sha256sums_x86_64=("04b2011aa51861f4869441a03308b5cfbb17c27dba9e98ea6bc17b994ae09302"
              "SKIP")
 
 package() {
