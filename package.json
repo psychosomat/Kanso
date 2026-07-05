@@ -89,7 +89,9 @@
       "output": "release",
       "buildResources": "public"
     },
-    "electronLanguages": ["en-US"],
+    "electronLanguages": [
+      "en-US"
+    ],
     "afterPack": "./build-resources/after-pack.cjs",
     "files": [
       "dist/**/*",
