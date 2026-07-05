@@ -138,27 +138,29 @@
     ],
     "mac": {
       "category": "public.app-category.video",
-      "target": [
-        "dmg",
-        "zip"
-      ],
+      "target": ["dmg", "zip"],
+      "artifactName": "${productName}-${version}-mac-${arch}.${ext}",
       "icon": "public/icon.png"
     },
     "win": {
-      "target": [
-        "nsis"
-      ],
+      "target": ["nsis"],
+      "artifactName": "${productName}-${version}-win-${arch}.${ext}",
       "icon": "public/favicon.ico",
       "compression": "maximum"
     },
     "linux": {
       "category": "AudioVideo",
-      "target": [
-        "deb",
-        "pacman",
-        "tar.gz"
-      ],
-      "icon": "public/icon.png"
+      "target": ["deb", "pacman", "tar.gz", "AppImage"],
+      "artifactName": "${productName}-${version}-linux-${arch}.${ext}",
+      "icon": "public/icon.png",
+      "fileAssociations": [
+        {
+          "ext": "mp4;mkv;webm;mov;avi;m4v;ts",
+          "name": "Kanso Video",
+          "description": "Video file opened in Kanso",
+          "role": "Viewer"
+        }
+      ]
     },
     "nsis": {
       "oneClick": false,

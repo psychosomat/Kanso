@@ -61,7 +61,7 @@ jobs:
       - name: Install system dependencies
         run: |
           sudo apt-get update
-          sudo apt-get install -y dpkg fakeroot libarchive-tools zstd
+          sudo apt-get install -y dpkg fakeroot libarchive-tools zstd libfuse2
 
       - name: Setup Bun
         uses: oven-sh/setup-bun@v2
@@ -86,8 +86,18 @@ jobs:
       - name: Install dependencies
         run: bun install --frozen-lockfile
 
+      - name: Build application
+        run: bun run build
+
       - name: Build Linux packages
-        run: bun run dist:linux
+        run: bunx electron-builder --linux deb pacman tar.gz AppImage
+
+      - name: Normalize AppImage extension
+        run: |
+          for f in release/*.AppImage; do
+            [ -e "$f" ] || continue
+            mv "$f" "${f%.AppImage}.appimage"
+          done
 
       - name: Upload artifacts
         uses: actions/upload-artifact@v4
@@ -137,8 +147,14 @@ jobs:
       - name: Install dependencies
         run: bun install --frozen-lockfile
 
+      - name: Build application
+        run: bun run build
+
+      - name: Build Windows thumbnail provider
+        run: bun run build:thumbnail:win
+
       - name: Build Windows installer
-        run: bun run dist:win
+        run: bunx electron-builder --win nsis
 
       - name: Upload artifacts
         uses: actions/upload-artifact@v4
@@ -147,9 +163,9 @@ jobs:
           path: release/*
           if-no-files-found: error
 
-  build-macos-arm:
-    name: Build macOS Apple Silicon
-    runs-on: macos-latest
+  build-macos-arm64:
+    name: Build macOS (arm64)
+    runs-on: macos-14
     env:
       CSC_IDENTITY_AUTO_DISCOVERY: false
     steps:
@@ -165,8 +181,8 @@ jobs:
         uses: actions/cache@v4
         with:
           path: ~/.bun/install/cache
-          key: macos-arm-bun-${{ hashFiles('bun.lock') }}
-          restore-keys: macos-arm-bun-
+          key: macos-arm64-bun-${{ hashFiles('bun.lock') }}
+          restore-keys: macos-arm64-bun-
 
       - name: Restore Electron cache
         uses: actions/cache@v4
@@ -174,24 +190,84 @@ jobs:
           path: |
             ~/Library/Caches/electron
             ~/Library/Caches/electron-builder
-          key: macos-arm-electron-${{ hashFiles('bun.lock') }}
+          key: macos-arm64-electron-${{ hashFiles('bun.lock') }}
 
       - name: Restore Xcode DerivedData
         uses: actions/cache@v4
         with:
           path: build-resources/macos-quicklook/build/DerivedData
-          key: macos-arm-xcode-derived-data-${{ hashFiles('build-resources/macos-quicklook/**/*.swift', 'build-resources/macos-quicklook/**/*.pbxproj') }}
+          key: macos-arm64-xcode-derived-data-${{ hashFiles('build-resources/macos-quicklook/**/*.swift', 'build-resources/macos-quicklook/**/*.pbxproj') }}
 
       - name: Install dependencies
         run: bun install --frozen-lockfile
 
-      - name: Build macOS packages
-        run: bun run dist:mac
+      - name: Build application
+        run: bun run build
+
+      - name: Build macOS thumbnail provider
+        run: bun run build:thumbnail:mac
+
+      - name: Build macOS packages (arm64)
+        run: bunx electron-builder --mac --arm64 dmg zip
 
       - name: Upload artifacts
         uses: actions/upload-artifact@v4
         with:
-          name: macos-arm-artifacts
+          name: macos-arm64-artifacts
+          path: release/*
+          if-no-files-found: error
+
+  build-macos-x64:
+    name: Build macOS (x64)
+    runs-on: macos-15-intel
+    env:
+      CSC_IDENTITY_AUTO_DISCOVERY: false
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Bun
+        uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: ${{ env.BUN_VERSION }}
+
+      - name: Restore Bun cache
+        uses: actions/cache@v4
+        with:
+          path: ~/.bun/install/cache
+          key: macos-x64-bun-${{ hashFiles('bun.lock') }}
+          restore-keys: macos-x64-bun-
+
+      - name: Restore Electron cache
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/Library/Caches/electron
+            ~/Library/Caches/electron-builder
+          key: macos-x64-electron-${{ hashFiles('bun.lock') }}
+
+      - name: Restore Xcode DerivedData
+        uses: actions/cache@v4
+        with:
+          path: build-resources/macos-quicklook/build/DerivedData
+          key: macos-x64-xcode-derived-data-${{ hashFiles('build-resources/macos-quicklook/**/*.swift', 'build-resources/macos-quicklook/**/*.pbxproj') }}
+
+      - name: Install dependencies
+        run: bun install --frozen-lockfile
+
+      - name: Build application
+        run: bun run build
+
+      - name: Build macOS thumbnail provider
+        run: bun run build:thumbnail:mac
+
+      - name: Build macOS packages (x64)
+        run: bunx electron-builder --mac --x64 dmg zip
+
+      - name: Upload artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: macos-x64-artifacts
           path: release/*
           if-no-files-found: error
 
@@ -201,7 +277,8 @@ jobs:
       - lint-test
       - build-linux
       - build-windows
-      - build-macos-arm
+      - build-macos-arm64
+      - build-macos-x64
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
@@ -230,6 +307,10 @@ jobs:
     name: Publish AUR package
     needs: publish-release
     runs-on: ubuntu-latest
+    env:
+      PACKAGE_NAME: kanso-bin
+      AUR_REPO_URL: aur@aur.archlinux.org:kanso-bin.git
+      OUT_DIR: packaging/aur
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -259,32 +340,115 @@ jobs:
           ssh-keyscan -t ed25519 aur.archlinux.org >> ~/.ssh/known_hosts
 
       - name: Render AUR packaging files
-        shell: bash
         env:
           VERSION: ${{ env.RELEASE_TAG }}
+          SOURCE_SHA: ${{ steps.sha.outputs.sha }}
         run: |
           VERSION=${VERSION#v}
           SOURCE_URL="https://github.com/${{ github.repository }}/releases/download/v${VERSION}/Kanso-${VERSION}-linux-x64.tar.gz"
-          ./scripts/render-aur.sh "$VERSION" "$SOURCE_URL" "${{ steps.sha.outputs.sha }}"
+          LOGO_URL="https://raw.githubusercontent.com/${{ github.repository }}/v${VERSION}/public/logo512.png"
 
-      - name: Commit updated AUR packaging files
+          mkdir -p "$OUT_DIR"
+
+          cat > "${OUT_DIR}/PKGBUILD" <<EOF
+          pkgname=${PACKAGE_NAME}
+          pkgver=${VERSION}
+          pkgrel=1
+          pkgdesc="Modern media player focused on convenience, beauty, and performance"
+          arch=("x86_64")
+          url="https://github.com/${{ github.repository }}"
+          license=("MIT")
+          depends=(
+            "gtk3"
+            "libsecret"
+            "nss"
+            "alsa-lib"
+          )
+          optdepends=(
+            "ffmpeg: broader codec support from the system stack"
+          )
+          provides=("kanso")
+          conflicts=("kanso")
+          source_x86_64=("kanso-\${pkgver}.tar.gz::${SOURCE_URL}"
+                     "logo512.png::${LOGO_URL}")
+          sha256sums_x86_64=("${SOURCE_SHA}"
+                       "SKIP")
+
+          package() {
+            install -dm755 "\${pkgdir}/opt/kanso"
+            cp -a "\${srcdir}/Kanso-\${pkgver}-linux-x64/"* "\${pkgdir}/opt/kanso/"
+
+            install -dm755 "\${pkgdir}/usr/bin"
+            ln -sf "/opt/kanso/kanso" "\${pkgdir}/usr/bin/kanso"
+
+            install -Dm644 "\${srcdir}/logo512.png" \\
+              "\${pkgdir}/usr/share/pixmaps/kanso.png"
+
+            install -Dm644 /dev/stdin "\${pkgdir}/usr/share/applications/kanso.desktop" <<'DESKTOP'
+          [Desktop Entry]
+          Name=Kanso
+          Exec=/usr/bin/kanso %U
+          Terminal=false
+          Type=Application
+          Icon=kanso
+          StartupWMClass=Kanso
+          Categories=AudioVideo;Video;
+          MimeType=video/mp4;video/x-matroska;video/webm;video/quicktime;video/x-msvideo;video/x-m4v;video/mp2t;
+          DESKTOP
+          }
+          EOF
+
+          cat > "${OUT_DIR}/.SRCINFO" <<EOF
+          pkgbase = ${PACKAGE_NAME}
+          	pkgdesc = Modern media player focused on convenience, beauty, and performance
+          	pkgver = ${VERSION}
+          	pkgrel = 1
+          	url = https://github.com/${{ github.repository }}
+          	arch = x86_64
+          	license = MIT
+          	depends = gtk3
+          	depends = libsecret
+          	depends = nss
+          	depends = alsa-lib
+          	optdepends = ffmpeg: broader codec support from the system stack
+          	provides = kanso
+          	conflicts = kanso
+          	source_x86_64 = kanso-${VERSION}.tar.gz::${SOURCE_URL}
+          	source_x86_64 = logo512.png::${LOGO_URL}
+          	sha256sums_x86_64 = ${SOURCE_SHA}
+          	sha256sums_x86_64 = SKIP
+
+          pkgname = ${PACKAGE_NAME}
+          EOF
+
+      - name: Commit updated AUR packaging files to main
         run: |
           git config user.name "Kanso Release Bot"
           git config user.email "github-actions@kanso.local"
           git checkout main
-          git add packaging/aur/PKGBUILD packaging/aur/.SRCINFO
+          git add "${OUT_DIR}/PKGBUILD" "${OUT_DIR}/.SRCINFO"
           if git diff --cached --quiet; then
             echo "No AUR packaging changes to commit."
+          else
+            git commit -m "chore(aur): update kanso-bin packaging for ${{ env.RELEASE_TAG }}"
+            git push origin main
+          fi
+
+      - name: Publish to AUR
+        run: |
+          WORKDIR=$(mktemp -d)
+          trap 'rm -rf "$WORKDIR"' EXIT
+
+          git clone "$AUR_REPO_URL" "$WORKDIR/kanso-bin"
+          cp "${OUT_DIR}/PKGBUILD" "${OUT_DIR}/.SRCINFO" "$WORKDIR/kanso-bin/"
+
+          cd "$WORKDIR/kanso-bin"
+          git add PKGBUILD .SRCINFO
+          if git diff --cached --quiet; then
+            echo "AUR package already up to date for ${{ env.RELEASE_TAG }}."
             exit 0
           fi
-          git commit -m "chore(aur): update kanso-bin packaging for ${{ env.RELEASE_TAG }}"
-          git push origin main
 
-      - name: Publish AUR package update
-        shell: bash
-        env:
-          VERSION: ${{ env.RELEASE_TAG }}
-        run: |
-          VERSION=${VERSION#v}
-          SOURCE_URL="https://github.com/${{ github.repository }}/releases/download/v${VERSION}/Kanso-${VERSION}-linux-x64.tar.gz"
-          ./scripts/update-aur.sh "$VERSION" "$SOURCE_URL" "${{ steps.sha.outputs.sha }}"
+          git -c user.email="github-actions@kanso.local" -c user.name="Kanso Release Bot" \
+            commit -m "Release ${{ env.RELEASE_TAG }}"
+          git push
