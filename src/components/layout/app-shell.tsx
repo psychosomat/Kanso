@@ -733,7 +733,10 @@ export function AppShell({ children }: { children: React.ReactNode }) {
 		const previousCollapsed =
 			sessionStorage.getItem(SIDEBAR_PRE_PLAYER_KEY) === "1";
 		setCollapsed(previousCollapsed);
-		sessionStorage.setItem(SIDEBAR_COLLAPSED_KEY, previousCollapsed ? "1" : "0");
+		sessionStorage.setItem(
+			SIDEBAR_COLLAPSED_KEY,
+			previousCollapsed ? "1" : "0",
+		);
 		sessionStorage.setItem(SIDEBAR_AUTO_COLLAPSE_KEY, "0");
 		setSidebarHidden(false);
 	}, [location.pathname]);

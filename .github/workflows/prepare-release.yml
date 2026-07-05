@@ -10,6 +10,7 @@ on:
 
 permissions:
   contents: write
+  actions: write
 
 jobs:
   tag-release:
@@ -69,7 +70,15 @@ jobs:
           git tag "${{ steps.version.outputs.tag }}"
           git push origin "${{ steps.version.outputs.tag }}"
 
+      - name: Trigger Release workflow
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          gh workflow run release.yml \
+            --ref "${{ steps.version.outputs.tag }}" \
+            -f tag="${{ steps.version.outputs.tag }}"
+
       - name: Summary
         run: |
-          echo "Tag ${{ steps.version.outputs.tag }} pushed."
-          echo "The Release workflow will now build and publish it: https://github.com/${{ github.repository }}/actions/workflows/release.yml"
+          echo "Tag ${{ steps.version.outputs.tag }} pushed and Release workflow dispatched."
+          echo "https://github.com/${{ github.repository }}/actions/workflows/release.yml"

@@ -53,6 +53,7 @@ jobs:
 
   build-linux:
     name: Build Linux
+    needs: lint-test
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
@@ -108,6 +109,7 @@ jobs:
 
   build-windows:
     name: Build Windows
+    needs: lint-test
     runs-on: windows-latest
     steps:
       - name: Checkout
@@ -165,6 +167,7 @@ jobs:
 
   build-macos-arm64:
     name: Build macOS (arm64)
+    needs: lint-test
     runs-on: macos-14
     env:
       CSC_IDENTITY_AUTO_DISCOVERY: false
@@ -208,7 +211,7 @@ jobs:
         run: bun run build:thumbnail:mac
 
       - name: Build macOS packages (arm64)
-        run: bunx electron-builder --mac --arm64 dmg zip
+        run: bunx electron-builder --mac --arm64
 
       - name: Upload artifacts
         uses: actions/upload-artifact@v4
@@ -219,6 +222,7 @@ jobs:
 
   build-macos-x64:
     name: Build macOS (x64)
+    needs: lint-test
     runs-on: macos-15-intel
     env:
       CSC_IDENTITY_AUTO_DISCOVERY: false
@@ -262,7 +266,7 @@ jobs:
         run: bun run build:thumbnail:mac
 
       - name: Build macOS packages (x64)
-        run: bunx electron-builder --mac --x64 dmg zip
+        run: bunx electron-builder --mac --x64
 
       - name: Upload artifacts
         uses: actions/upload-artifact@v4
