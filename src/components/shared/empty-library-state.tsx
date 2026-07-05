@@ -1,5 +1,6 @@
-import { IconFolderOpen, IconPlayerSkipBackFilled } from "@tabler/icons-react";
 import { APP_NAME } from "@/lib/constants";
+import IconFolderOpen from "~icons/tabler/folder-open";
+import IconPlayerSkipBackFilled from "~icons/tabler/player-skip-back-filled";
 import { Button } from "../ui/button";
 
 export function EmptyLibraryState({

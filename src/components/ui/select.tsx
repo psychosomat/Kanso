@@ -1,6 +1,7 @@
 import * as SelectPrimitive from "@radix-ui/react-select";
-import { IconCheck, IconChevronDown } from "@tabler/icons-react";
 import { cn } from "@/lib/utils";
+import IconCheck from "~icons/tabler/check";
+import IconChevronDown from "~icons/tabler/chevron-down";
 
 export const Select = SelectPrimitive.Root;
 export const SelectValue = SelectPrimitive.Value;

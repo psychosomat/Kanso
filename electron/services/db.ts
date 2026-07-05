@@ -4,7 +4,6 @@ import path from "node:path";
 import type { Database as DatabaseType } from "better-sqlite3";
 import Database from "better-sqlite3";
 import { DEFAULT_PLAYER_PREFERENCES } from "../../src/lib/constants";
-import { normalizeEqGains } from "../../src/lib/equalizer";
 import type {
 	AddVideoToCategoriesDto,
 	CategoryDto,
@@ -21,6 +20,7 @@ import type {
 	VideoCardDto,
 	VideoDetailDto,
 } from "../../src/lib/contracts";
+import { normalizeEqGains } from "../../src/lib/equalizer";
 import { slugify } from "../../src/lib/utils";
 
 // Simple timing helper for performance debugging

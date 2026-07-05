@@ -1,29 +1,27 @@
-import {
-	IconChevronDown,
-	IconChevronRight,
-	IconFolderPlus,
-	IconInbox,
-	IconLayoutGrid,
-	IconLayoutSidebarLeftCollapse,
-	IconLayoutSidebarLeftExpand,
-	IconMenu2,
-	IconPencil,
-	IconPlayerSkipBackFilled,
-	IconSettings,
-} from "@tabler/icons-react";
 import { Link, useLocation, useRouter } from "@tanstack/react-router";
 import { useEffect, useState } from "react";
 import { CategoryIcon } from "@/lib/category-icons";
 import {
 	buildCategoryTree,
-	flattenCategoryTree,
 	type CategoryTreeNode,
+	flattenCategoryTree,
 } from "@/lib/category-tree";
 import { APP_NAME } from "@/lib/constants";
 import type { CategoryDto } from "@/lib/contracts";
 import { getPlayerApi } from "@/lib/player-api";
 import { cn, resolveTitlebarMode } from "@/lib/utils";
 import { getDraggedVideoId, hasDraggedVideo } from "@/lib/video-drag";
+import IconChevronDown from "~icons/tabler/chevron-down";
+import IconChevronRight from "~icons/tabler/chevron-right";
+import IconFolderPlus from "~icons/tabler/folder-plus";
+import IconInbox from "~icons/tabler/inbox";
+import IconLayoutGrid from "~icons/tabler/layout-grid";
+import IconLayoutSidebarLeftCollapse from "~icons/tabler/layout-sidebar-left-collapse";
+import IconLayoutSidebarLeftExpand from "~icons/tabler/layout-sidebar-left-expand";
+import IconMenu2 from "~icons/tabler/menu-2";
+import IconPencil from "~icons/tabler/pencil";
+import IconPlayerSkipBackFilled from "~icons/tabler/player-skip-back-filled";
+import IconSettings from "~icons/tabler/settings";
 import { CategoryFormDialog } from "../categories/category-form-dialog";
 import { Button } from "../ui/button";
 import {

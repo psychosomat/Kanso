@@ -1,22 +1,22 @@
 name: Release
 
 on:
-  push:
-    tags:
-      - 'v*'
   workflow_dispatch:
     inputs:
-      tag:
-        description: 'Tag to release (e.g. v0.1.6)'
-        required: true
+      version:
+        description: 'Version to release, e.g. 0.1.7 (leave empty to auto-bump patch)'
+        required: false
         type: string
 
 permissions:
   contents: write
 
+concurrency:
+  group: release
+  cancel-in-progress: false
+
 env:
   BUN_VERSION: 'latest'
-  RELEASE_TAG: ${{ github.event.inputs.tag || github.ref_name }}
   GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
 jobs:
@@ -51,13 +51,71 @@ jobs:
       - name: Test
         run: npx vitest run
 
+  prepare:
+    name: Bump version & tag
+    needs: lint-test
+    runs-on: ubuntu-latest
+    outputs:
+      tag: ${{ steps.version.outputs.tag }}
+      version: ${{ steps.version.outputs.version }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Determine target version
+        id: version
+        run: |
+          LATEST_TAG=$(git describe --tags --abbrev=0 2>/dev/null || echo "v0.0.0")
+          echo "Latest tag: $LATEST_TAG"
+
+          INPUT_VERSION="${{ github.event.inputs.version }}"
+          if [ -n "$INPUT_VERSION" ]; then
+            TARGET_VERSION="${INPUT_VERSION#v}"
+          else
+            CLEAN_TAG="${LATEST_TAG#v}"
+            if [[ "$CLEAN_TAG" =~ ^([0-9]+)\.([0-9]+)\.([0-9]+)$ ]]; then
+              TARGET_VERSION="${BASH_REMATCH[1]}.${BASH_REMATCH[2]}.$((${BASH_REMATCH[3]} + 1))"
+            else
+              TARGET_VERSION="1.0.0"
+            fi
+          fi
+
+          TAG="v${TARGET_VERSION}"
+
+          if git ls-remote --tags origin "refs/tags/${TAG}" | grep -q "${TAG}$"; then
+            echo "::error::Tag ${TAG} already exists on the remote."
+            exit 1
+          fi
+
+          echo "version=${TARGET_VERSION}" >> "$GITHUB_OUTPUT"
+          echo "tag=${TAG}" >> "$GITHUB_OUTPUT"
+
+      - name: Bump package.json version
+        run: npm version "${{ steps.version.outputs.version }}" --no-git-tag-version --allow-same-version
+
+      - name: Commit version bump & tag
+        run: |
+          git config user.name "Kanso Release Bot"
+          git config user.email "github-actions@kanso.local"
+          git add package.json
+          if ! git diff --cached --quiet; then
+            git commit -m "chore: bump version to ${{ steps.version.outputs.version }}"
+            git push origin HEAD:${{ github.ref_name }}
+          fi
+          git tag "${{ steps.version.outputs.tag }}"
+          git push origin "${{ steps.version.outputs.tag }}"
+
   build-linux:
     name: Build Linux
-    needs: lint-test
+    needs: prepare
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
         uses: actions/checkout@v4
+        with:
+          ref: ${{ needs.prepare.outputs.tag }}
 
       - name: Install system dependencies
         run: |
@@ -109,11 +167,13 @@ jobs:
 
   build-windows:
     name: Build Windows
-    needs: lint-test
+    needs: prepare
     runs-on: windows-latest
     steps:
       - name: Checkout
         uses: actions/checkout@v4
+        with:
+          ref: ${{ needs.prepare.outputs.tag }}
 
       - name: Setup Bun
         uses: oven-sh/setup-bun@v2
@@ -167,13 +227,15 @@ jobs:
 
   build-macos-arm64:
     name: Build macOS (arm64)
-    needs: lint-test
+    needs: prepare
     runs-on: macos-14
     env:
       CSC_IDENTITY_AUTO_DISCOVERY: false
     steps:
       - name: Checkout
         uses: actions/checkout@v4
+        with:
+          ref: ${{ needs.prepare.outputs.tag }}
 
       - name: Setup Bun
         uses: oven-sh/setup-bun@v2
@@ -222,13 +284,15 @@ jobs:
 
   build-macos-x64:
     name: Build macOS (x64)
-    needs: lint-test
+    needs: prepare
     runs-on: macos-15-intel
     env:
       CSC_IDENTITY_AUTO_DISCOVERY: false
     steps:
       - name: Checkout
         uses: actions/checkout@v4
+        with:
+          ref: ${{ needs.prepare.outputs.tag }}
 
       - name: Setup Bun
         uses: oven-sh/setup-bun@v2
@@ -278,7 +342,7 @@ jobs:
   publish-release:
     name: Publish GitHub Release
     needs:
-      - lint-test
+      - prepare
       - build-linux
       - build-windows
       - build-macos-arm64
@@ -301,20 +365,23 @@ jobs:
       - name: Create GitHub Release
         uses: softprops/action-gh-release@v2
         with:
-          name: Kanso ${{ env.RELEASE_TAG }}
-          tag_name: ${{ env.RELEASE_TAG }}
+          name: Kanso ${{ needs.prepare.outputs.tag }}
+          tag_name: ${{ needs.prepare.outputs.tag }}
           draft: false
           generate_release_notes: true
           files: release/*
 
   publish-aur:
     name: Publish AUR package
-    needs: publish-release
+    needs:
+      - prepare
+      - publish-release
     runs-on: ubuntu-latest
     env:
       PACKAGE_NAME: kanso-bin
       AUR_REPO_URL: aur@aur.archlinux.org:kanso-bin.git
       OUT_DIR: packaging/aur
+      RELEASE_TAG: ${{ needs.prepare.outputs.tag }}
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -345,10 +412,9 @@ jobs:
 
       - name: Render AUR packaging files
         env:
-          VERSION: ${{ env.RELEASE_TAG }}
+          VERSION: ${{ needs.prepare.outputs.version }}
           SOURCE_SHA: ${{ steps.sha.outputs.sha }}
         run: |
-          VERSION=${VERSION#v}
           SOURCE_URL="https://github.com/${{ github.repository }}/releases/download/v${VERSION}/Kanso-${VERSION}-linux-x64.tar.gz"
           LOGO_URL="https://raw.githubusercontent.com/${{ github.repository }}/v${VERSION}/public/logo512.png"
 
@@ -434,7 +500,7 @@ jobs:
           if git diff --cached --quiet; then
             echo "No AUR packaging changes to commit."
           else
-            git commit -m "chore(aur): update kanso-bin packaging for ${{ env.RELEASE_TAG }}"
+            git commit -m "chore(aur): update kanso-bin packaging for ${RELEASE_TAG}"
             git push origin main
           fi
 
@@ -449,10 +515,10 @@ jobs:
           cd "$WORKDIR/kanso-bin"
           git add PKGBUILD .SRCINFO
           if git diff --cached --quiet; then
-            echo "AUR package already up to date for ${{ env.RELEASE_TAG }}."
+            echo "AUR package already up to date for ${RELEASE_TAG}."
             exit 0
           fi
 
           git -c user.email="github-actions@kanso.local" -c user.name="Kanso Release Bot" \
-            commit -m "Release ${{ env.RELEASE_TAG }}"
+            commit -m "Release ${RELEASE_TAG}"
           git push

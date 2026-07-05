@@ -1,4 +1,3 @@
-import { IconRefresh } from "@tabler/icons-react";
 import { createFileRoute } from "@tanstack/react-router";
 import {
 	startTransition,
@@ -32,6 +31,7 @@ import type {
 	VideoDetailDto,
 } from "@/lib/contracts";
 import { getPlayerApi } from "@/lib/player-api";
+import IconRefresh from "~icons/tabler/refresh";
 
 export const Route = createFileRoute("/dump")({
 	component: DumpPage,

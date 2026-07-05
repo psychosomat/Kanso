@@ -1,29 +1,27 @@
-import {
-	IconBolt,
-	IconBookmark,
-	IconBrain,
-	IconCloud,
-	IconCrown,
-	IconDeviceTv,
-	IconDiamond,
-	IconDroplet,
-	IconFlame,
-	IconFolder,
-	IconFolders,
-	IconGhost2,
-	IconHeart,
-	IconLeaf,
-	IconMoon,
-	IconMusic,
-	IconPaw,
-	IconPhoto,
-	IconPlayerPlayFilled,
-	IconRocket,
-	IconSkull,
-	IconSparkles,
-	IconStar,
-	IconSun,
-} from "@tabler/icons-react";
+import IconBolt from "~icons/tabler/bolt";
+import IconBookmark from "~icons/tabler/bookmark";
+import IconBrain from "~icons/tabler/brain";
+import IconCloud from "~icons/tabler/cloud";
+import IconCrown from "~icons/tabler/crown";
+import IconDeviceTv from "~icons/tabler/device-tv";
+import IconDiamond from "~icons/tabler/diamond";
+import IconDroplet from "~icons/tabler/droplet";
+import IconFlame from "~icons/tabler/flame";
+import IconFolder from "~icons/tabler/folder";
+import IconFolders from "~icons/tabler/folders";
+import IconGhost2 from "~icons/tabler/ghost-2";
+import IconHeart from "~icons/tabler/heart";
+import IconLeaf from "~icons/tabler/leaf";
+import IconMoon from "~icons/tabler/moon";
+import IconMusic from "~icons/tabler/music";
+import IconPaw from "~icons/tabler/paw";
+import IconPhoto from "~icons/tabler/photo";
+import IconPlayerPlayFilled from "~icons/tabler/player-play-filled";
+import IconRocket from "~icons/tabler/rocket";
+import IconSkull from "~icons/tabler/skull";
+import IconSparkles from "~icons/tabler/sparkles";
+import IconStar from "~icons/tabler/star";
+import IconSun from "~icons/tabler/sun";
 import type { CategoryIconName } from "./contracts";
 
 type CategoryIconDefinition = {

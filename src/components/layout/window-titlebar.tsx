@@ -1,6 +1,8 @@
-import { IconMinus, IconSquare, IconX } from "@tabler/icons-react";
 import { APP_NAME } from "@/lib/constants";
 import type { TitlebarMode } from "@/lib/contracts";
+import IconMinus from "~icons/tabler/minus";
+import IconSquare from "~icons/tabler/square";
+import IconX from "~icons/tabler/x";
 import { Button } from "../ui/button";
 
 type WindowTitlebarProps = {

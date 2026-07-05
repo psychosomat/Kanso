@@ -8,6 +8,7 @@ import fs from 'node:fs'
 
 import viteReact from '@vitejs/plugin-react'
 import tailwindcss from '@tailwindcss/vite'
+import Icons from 'unplugin-icons/vite'
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url))
 
@@ -21,6 +22,10 @@ function copyPublicFiles(): import('vite').Plugin {
       if (fs.existsSync(publicDir) && fs.existsSync(outDir)) {
         const files = fs.readdirSync(publicDir)
         for (const file of files) {
+          if (file === 'preview.png') {
+            continue
+          }
+
           const srcPath = path.join(publicDir, file)
           const destPath = path.join(outDir, file)
 
@@ -62,6 +67,7 @@ const config = defineConfig({
 		TanStackRouterVite({ target: 'react', autoCodeSplitting: true }),
 		tsconfigPaths({ projects: ['./tsconfig.json'] }),
 		tailwindcss(),
+		Icons({ compiler: 'jsx', jsx: 'react' }),
 		viteReact({
 			babel: {
 				plugins: [

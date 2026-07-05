@@ -1,19 +1,4 @@
 import { useGSAP } from "@gsap/react";
-import {
-	IconArrowLeft,
-	IconFolder,
-	IconGauge,
-	IconLayoutSidebarRight,
-	IconMaximize,
-	IconPlayerPauseFilled,
-	IconPlayerPlayFilled,
-	IconPlayerSkipBack,
-	IconPlayerSkipForward,
-	IconRepeat,
-	IconTrash,
-	IconVolume,
-	IconVolumeOff,
-} from "@tabler/icons-react";
 import { createFileRoute, useRouter } from "@tanstack/react-router";
 import gsap from "gsap";
 import {
@@ -57,8 +42,8 @@ import { usePlayerHotkeys } from "@/hooks/use-player-hotkeys";
 import { usePlayerUiVisibility } from "@/hooks/use-player-ui-visibility";
 import { CategoryIcon } from "@/lib/category-icons";
 import type { PlayableVideoDto, PlayerPreferencesDto } from "@/lib/contracts";
-import { EQ_BANDS, clampEqGain, normalizeEqGains } from "@/lib/equalizer";
 import type { EqBand } from "@/lib/equalizer";
+import { clampEqGain, EQ_BANDS, normalizeEqGains } from "@/lib/equalizer";
 import { getPlayerApi } from "@/lib/player-api";
 import { getPlayerReturnTarget } from "@/lib/player-return";
 import {
@@ -68,6 +53,19 @@ import {
 	formatResolution,
 	shouldResume,
 } from "@/lib/utils";
+import IconArrowLeft from "~icons/tabler/arrow-left";
+import IconFolder from "~icons/tabler/folder";
+import IconGauge from "~icons/tabler/gauge";
+import IconLayoutSidebarRight from "~icons/tabler/layout-sidebar-right";
+import IconMaximize from "~icons/tabler/maximize";
+import IconPlayerPauseFilled from "~icons/tabler/player-pause-filled";
+import IconPlayerPlayFilled from "~icons/tabler/player-play-filled";
+import IconPlayerSkipBack from "~icons/tabler/player-skip-back";
+import IconPlayerSkipForward from "~icons/tabler/player-skip-forward";
+import IconRepeat from "~icons/tabler/repeat";
+import IconTrash from "~icons/tabler/trash";
+import IconVolume from "~icons/tabler/volume";
+import IconVolumeOff from "~icons/tabler/volume-off";
 
 export const Route = createFileRoute("/player/$videoId")({
 	component: LibraryPlayerRoute,

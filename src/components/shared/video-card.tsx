@@ -1,11 +1,3 @@
-import {
-	IconCopy,
-	IconDots,
-	IconFolder,
-	IconFolderSearch,
-	IconPlayerPlayFilled,
-	IconTrash,
-} from "@tabler/icons-react";
 import { Link, useLocation } from "@tanstack/react-router";
 import { useCallback, useRef, useState } from "react";
 import {
@@ -39,6 +31,12 @@ import {
 } from "@/lib/player-return";
 import { formatDateTime, formatDuration, formatResolution } from "@/lib/utils";
 import { setDraggedVideoId } from "@/lib/video-drag";
+import IconCopy from "~icons/tabler/copy";
+import IconDots from "~icons/tabler/dots";
+import IconFolder from "~icons/tabler/folder";
+import IconFolderSearch from "~icons/tabler/folder-search";
+import IconPlayerPlayFilled from "~icons/tabler/player-play-filled";
+import IconTrash from "~icons/tabler/trash";
 
 type Props = {
 	video: VideoCardDto;

@@ -1,4 +1,3 @@
-import { IconFolderPlus } from "@tabler/icons-react";
 import { useEffect, useState } from "react";
 import {
 	ContextMenu,
@@ -20,6 +19,7 @@ import { CategoryIcon } from "@/lib/category-icons";
 import { buildCategoryTree, flattenCategoryTree } from "@/lib/category-tree";
 import type { CategoryDto, VideoDetailDto } from "@/lib/contracts";
 import { getPlayerApi } from "@/lib/player-api";
+import IconFolderPlus from "~icons/tabler/folder-plus";
 import { Button } from "../ui/button";
 import { CategoryFormDialog } from "./category-form-dialog";
 

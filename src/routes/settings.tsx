@@ -1,17 +1,3 @@
-import {
-	IconDatabase,
-	IconEye,
-	IconEyeOff,
-	IconFolder,
-	IconFolderOpen,
-	IconFolderPlus,
-	IconInfoCircle,
-	IconPalette,
-	IconPlayerPlay,
-	IconRefresh,
-	IconTrash,
-	IconBrandGithub,
-} from "@tabler/icons-react";
 import { createFileRoute } from "@tanstack/react-router";
 import type React from "react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
@@ -32,14 +18,26 @@ import { useScrollRestore } from "@/hooks/use-scroll-restore";
 import { APP_NAME } from "@/lib/constants";
 import type { TitlebarMode } from "@/lib/contracts";
 import {
+	clampEqGain,
 	EQ_BANDS,
 	EQ_GAIN_MAX,
 	EQ_GAIN_MIN,
-	clampEqGain,
 	normalizeEqGains,
 } from "@/lib/equalizer";
 import { getPlayerApi } from "@/lib/player-api";
 import { formatDateTime } from "@/lib/utils";
+import IconBrandGithub from "~icons/tabler/brand-github";
+import IconDatabase from "~icons/tabler/database";
+import IconEye from "~icons/tabler/eye";
+import IconEyeOff from "~icons/tabler/eye-off";
+import IconFolder from "~icons/tabler/folder";
+import IconFolderOpen from "~icons/tabler/folder-open";
+import IconFolderPlus from "~icons/tabler/folder-plus";
+import IconInfoCircle from "~icons/tabler/info-circle";
+import IconPalette from "~icons/tabler/palette";
+import IconPlayerPlay from "~icons/tabler/player-play";
+import IconRefresh from "~icons/tabler/refresh";
+import IconTrash from "~icons/tabler/trash";
 
 const NOISE_STORAGE_KEY = "player:noiseOpacity";
 const ACCENT_STORAGE_KEY = "player:accentColor";
