@@ -4,7 +4,7 @@ export type SortOrder = "asc" | "desc";
 export type DumpView = "compact" | "comfortable";
 export type PlayerFitMode = "contain" | "cover" | "native";
 export type TitlebarMode = "windows" | "macos" | "hidden" | "auto";
-export type CategoryFeedSort = "newestPost" | "name" | "lastPlayed";
+export type CategoryFeedSort = "newestPost" | "name" | "lastPlayed" | "manual";
 export type CategoryIconName =
 	| "folder"
 	| "folders"
@@ -196,6 +196,11 @@ export type RemoveVideoFromCategoryDto = {
 	categoryId: string;
 };
 
+export type ReorderCategoryPostsDto = {
+	categoryId: string;
+	postIds: string[];
+};
+
 export type PlayerPreferencesDto = {
 	dumpSort: DumpSort;
 	dumpView: DumpView;
@@ -268,6 +273,7 @@ export type PlayerApi = {
 		getBySlug(slug: string): Promise<CategoryDto | null>;
 		addVideo(input: AddVideoToCategoriesDto): Promise<void>;
 		removeVideo(input: RemoveVideoFromCategoryDto): Promise<void>;
+		reorderPosts(input: ReorderCategoryPostsDto): Promise<void>;
 	};
 	player: {
 		saveProgress(input: SaveProgressDto): Promise<void>;

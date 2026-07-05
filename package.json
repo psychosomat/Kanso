@@ -1,6 +1,6 @@
 {
   "name": "kanso",
-  "version": "0.1.6",
+  "version": "0.1.7",
   "description": "Kanso - Modern Media Player",
   "author": "psychosomat(Dmitrii Dark) <hello@ddark.dev>",
   "private": true,
@@ -11,7 +11,7 @@
   },
   "scripts": {
     "postinstall": "electron-builder install-app-deps && node node_modules/electron/install.js",
-    "format": "biome format . --write",
+    "fmt": "biome format . --write",
     "lint": "biome lint ./src ./electron",
     "check": "biome check . --write",
     "test": "vitest run",

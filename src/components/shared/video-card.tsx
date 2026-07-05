@@ -49,6 +49,7 @@ type Props = {
 	) => void;
 	onRemove?: (videoId: string) => Promise<void>;
 	caption?: string | null;
+	draggable?: boolean;
 };
 
 export function VideoCard({
@@ -57,6 +58,7 @@ export function VideoCard({
 	onAction,
 	onRemove,
 	caption,
+	draggable = true,
 }: Props) {
 	const cardRef = useRef<HTMLAnchorElement>(null);
 	const location = useLocation();
@@ -105,8 +107,8 @@ export function VideoCard({
 						onClickCapture={onOpenPlayer}
 						onClick={onOpenPlayer}
 						onMouseDown={handleMouseDown}
-						onDragStart={handleDragStart}
-						draggable
+						onDragStart={draggable ? handleDragStart : undefined}
+						draggable={draggable}
 						className="group relative block overflow-hidden rounded-lg border border-(--border) bg-(--panel) transition-[border-color,box-shadow] duration-300 hover:border-(--accent)/30 hover:shadow-lg cursor-grab active:cursor-grabbing"
 					>
 						<div className="relative aspect-video overflow-hidden bg-(--panel-strong)">
@@ -116,6 +118,7 @@ export function VideoCard({
 									alt={video.fileName}
 									loading="lazy"
 									decoding="async"
+									draggable={false}
 									className="h-full w-full object-cover"
 								/>
 							) : (

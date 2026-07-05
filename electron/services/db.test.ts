@@ -172,4 +172,96 @@ describe("DatabaseService", () => {
 		expect(page.items).toHaveLength(6);
 		expect(page.items.every((video) => video.categoryCount === 0)).toBe(true);
 	});
+
+	it("appends new posts to the end and respects manual reorder", async () => {
+		const category = db.createCategory({ name: "Manual" });
+		const videoA = db.upsertVideo({
+			sourcePath: "C:\\library\\a.mp4",
+			fileName: "a.mp4",
+			folderPath: "C:\\library",
+			fileSize: 1,
+			modifiedAt: "2026-04-01T00:00:00.000Z",
+			durationSec: 1,
+			width: 1,
+			height: 1,
+			fps: 1,
+			codecVideo: null,
+			codecAudio: null,
+			bitrate: null,
+			posterPath: null,
+		});
+		const videoB = db.upsertVideo({
+			sourcePath: "C:\\library\\b.mp4",
+			fileName: "b.mp4",
+			folderPath: "C:\\library",
+			fileSize: 1,
+			modifiedAt: "2026-04-02T00:00:00.000Z",
+			durationSec: 1,
+			width: 1,
+			height: 1,
+			fps: 1,
+			codecVideo: null,
+			codecAudio: null,
+			bitrate: null,
+			posterPath: null,
+		});
+		const videoC = db.upsertVideo({
+			sourcePath: "C:\\library\\c.mp4",
+			fileName: "c.mp4",
+			folderPath: "C:\\library",
+			fileSize: 1,
+			modifiedAt: "2026-04-03T00:00:00.000Z",
+			durationSec: 1,
+			width: 1,
+			height: 1,
+			fps: 1,
+			codecVideo: null,
+			codecAudio: null,
+			bitrate: null,
+			posterPath: null,
+		});
+
+		db.addVideoToCategories({
+			videoId: videoA,
+			categories: [{ categoryId: category.id }],
+		});
+		db.addVideoToCategories({
+			videoId: videoB,
+			categories: [{ categoryId: category.id }],
+		});
+		db.addVideoToCategories({
+			videoId: videoC,
+			categories: [{ categoryId: category.id }],
+		});
+
+		const initial = db.getCategoryFeed({
+			categoryId: category.id,
+			page: 1,
+			pageSize: 100,
+			sort: "manual",
+		});
+		const ids = initial.items.map((p) => p.id);
+		expect(initial.items.map((p) => p.video.id)).toEqual([
+			videoA,
+			videoB,
+			videoC,
+		]);
+
+		// Reverse the order manually.
+		db.reorderCategoryPosts({
+			categoryId: category.id,
+			postIds: ids.slice().reverse(),
+		});
+		const reversed = db.getCategoryFeed({
+			categoryId: category.id,
+			page: 1,
+			pageSize: 100,
+			sort: "manual",
+		});
+		expect(reversed.items.map((p) => p.video.id)).toEqual([
+			videoC,
+			videoB,
+			videoA,
+		]);
+	});
 });

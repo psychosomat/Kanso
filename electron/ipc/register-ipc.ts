@@ -12,6 +12,7 @@ import type {
 	CreateCategoryDto,
 	MarkPlayedDto,
 	RemoveVideoFromCategoryDto,
+	ReorderCategoryPostsDto,
 	SavePlayerPreferencesDto,
 	SaveProgressDto,
 	UpdateCategoryDto,
@@ -200,6 +201,10 @@ export function registerIpc({
 		(_event, input: RemoveVideoFromCategoryDto) =>
 			db.removeVideoFromCategory(input.videoId, input.categoryId),
 	);
+	ipcMain.handle(
+		"categories:reorder-posts",
+		(_event, input: ReorderCategoryPostsDto) => db.reorderCategoryPosts(input),
+	);
 
 	ipcMain.handle("player:get-preferences", () => db.getPlayerPreferences());
 	ipcMain.handle(
@@ -245,6 +250,7 @@ export function registerIpc({
 			"categories:get-feed",
 			"categories:add-video",
 			"categories:remove-video",
+			"categories:reorder-posts",
 			"player:get-preferences",
 			"player:save-preferences",
 			"player:save-progress",

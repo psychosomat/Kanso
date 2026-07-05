@@ -158,6 +158,7 @@ export class DatabaseService {
         category_id TEXT NOT NULL REFERENCES categories(id) ON DELETE CASCADE,
         video_id TEXT NOT NULL REFERENCES videos(id) ON DELETE CASCADE,
         caption TEXT,
+        position REAL NOT NULL DEFAULT 0,
         created_at TEXT NOT NULL,
         UNIQUE(category_id, video_id)
       );
@@ -223,6 +224,34 @@ export class DatabaseService {
 		this.ensureColumn("ui_preferences", "titlebar_mode", "TEXT");
 		this.ensureColumn("categories", "parent_id", "TEXT");
 		this.ensureColumn("categories", "icon", "TEXT NOT NULL DEFAULT 'folder'");
+		this.ensureColumn("category_posts", "position", "REAL NOT NULL DEFAULT 0");
+		this.db.exec(
+			"CREATE INDEX IF NOT EXISTS idx_category_posts_position ON category_posts(category_id, position)",
+		);
+		this.backfillCategoryPostPositions();
+	}
+
+	private backfillCategoryPostPositions() {
+		const unpositioned = this.db
+			.prepare(
+				"SELECT COUNT(*) as count FROM category_posts WHERE position = 0",
+			)
+			.get() as { count: number };
+		if (unpositioned.count === 0) {
+			return;
+		}
+		this.db.exec(`
+			WITH ordered AS (
+				SELECT id, ROW_NUMBER() OVER (
+					PARTITION BY category_id ORDER BY rowid
+				) AS rn
+				FROM category_posts
+			)
+			UPDATE category_posts
+			SET position = ordered.rn
+			FROM ordered
+			WHERE category_posts.id = ordered.id;
+		`);
 	}
 
 	private ensureColumn(
@@ -909,20 +938,61 @@ export class DatabaseService {
 
 	addVideoToCategories(input: AddVideoToCategoriesDto) {
 		const insert = this.db.prepare(
-			`INSERT INTO category_posts (id, category_id, video_id, caption, created_at)
-       VALUES (?, ?, ?, ?, ?)
+			`INSERT INTO category_posts (id, category_id, video_id, caption, position, created_at)
+       VALUES (?, ?, ?, ?, ?, ?)
        ON CONFLICT(category_id, video_id) DO UPDATE SET caption = excluded.caption`,
+		);
+		const maxPosition = this.db.prepare(
+			"SELECT COALESCE(MAX(position), 0) as max FROM category_posts WHERE category_id = ?",
 		);
 		const now = new Date().toISOString();
 		const transaction = this.db.transaction(() => {
+			let cursor = 0;
 			for (const item of input.categories) {
+				const existing = this.db
+					.prepare(
+						"SELECT position FROM category_posts WHERE category_id = ? AND video_id = ?",
+					)
+					.get(item.categoryId, input.videoId) as
+					| { position: number }
+					| undefined;
+				if (existing) {
+					insert.run(
+						randomUUID(),
+						item.categoryId,
+						input.videoId,
+						item.caption?.trim() || null,
+						existing.position,
+						now,
+					);
+					continue;
+				}
+				const max =
+					cursor > 0
+						? cursor
+						: (maxPosition.get(item.categoryId) as { max: number }).max;
+				const next = max + 1;
+				cursor = next;
 				insert.run(
 					randomUUID(),
 					item.categoryId,
 					input.videoId,
 					item.caption?.trim() || null,
+					next,
 					now,
 				);
+			}
+		});
+		transaction();
+	}
+
+	reorderCategoryPosts(input: { categoryId: string; postIds: string[] }) {
+		const update = this.db.prepare(
+			"UPDATE category_posts SET position = ? WHERE id = ? AND category_id = ?",
+		);
+		const transaction = this.db.transaction(() => {
+			for (let index = 0; index < input.postIds.length; index += 1) {
+				update.run(index + 1, input.postIds[index], input.categoryId);
 			}
 		});
 		transaction();
@@ -955,7 +1025,9 @@ export class DatabaseService {
 				? "v.file_name COLLATE NOCASE ASC, cp.rowid ASC"
 				: input.sort === "lastPlayed"
 					? "COALESCE(v.last_played_at, v.modified_at) DESC, cp.rowid ASC"
-					: "cp.created_at DESC, cp.rowid ASC";
+					: input.sort === "manual"
+						? "cp.position ASC, cp.rowid ASC"
+						: "cp.created_at DESC, cp.rowid ASC";
 
 		const rows = this.db
 			.prepare(

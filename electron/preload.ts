@@ -90,6 +90,8 @@ const playerApi: PlayerApi = {
 		addVideo: (input) => ipcRenderer.invoke("categories:add-video", input),
 		removeVideo: (input) =>
 			ipcRenderer.invoke("categories:remove-video", input),
+		reorderPosts: (input) =>
+			ipcRenderer.invoke("categories:reorder-posts", input),
 	},
 	player: {
 		saveProgress: (input) => ipcRenderer.invoke("player:save-progress", input),
