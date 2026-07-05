@@ -138,19 +138,29 @@
     ],
     "mac": {
       "category": "public.app-category.video",
-      "target": ["dmg", "zip"],
+      "target": [
+        "dmg",
+        "zip"
+      ],
       "artifactName": "${productName}-${version}-mac-${arch}.${ext}",
       "icon": "public/icon.png"
     },
     "win": {
-      "target": ["nsis"],
+      "target": [
+        "nsis"
+      ],
       "artifactName": "${productName}-${version}-win-${arch}.${ext}",
       "icon": "public/favicon.ico",
       "compression": "maximum"
     },
     "linux": {
       "category": "AudioVideo",
-      "target": ["deb", "pacman", "tar.gz", "AppImage"],
+      "target": [
+        "deb",
+        "pacman",
+        "tar.gz",
+        "AppImage"
+      ],
       "artifactName": "${productName}-${version}-linux-${arch}.${ext}",
       "icon": "public/icon.png",
       "fileAssociations": [
