@@ -183,7 +183,7 @@ export class DatabaseService {
         player_fit_mode TEXT NOT NULL,
         speed_preset_primary REAL NOT NULL DEFAULT 1,
         speed_preset_secondary REAL NOT NULL DEFAULT 2.2,
-        accent_color TEXT NOT NULL DEFAULT '#c8883a',
+        accent_color TEXT NOT NULL DEFAULT '#ff5a36',
         player_loop INTEGER NOT NULL DEFAULT 0,
         eq_enabled INTEGER NOT NULL DEFAULT 0,
         eq_bands TEXT NOT NULL DEFAULT '${defaultEqBands}',
@@ -204,8 +204,13 @@ export class DatabaseService {
 		this.ensureColumn(
 			"ui_preferences",
 			"accent_color",
-			"TEXT NOT NULL DEFAULT '#c8883a'",
+			"TEXT NOT NULL DEFAULT '#ff5a36'",
 		);
+		this.db.exec(`
+			UPDATE ui_preferences
+			SET accent_color = '#ff5a36'
+			WHERE lower(accent_color) IN ('#c8883a', '#d6be8c', '#2f9bff')
+		`);
 		this.ensureColumn(
 			"ui_preferences",
 			"player_loop",

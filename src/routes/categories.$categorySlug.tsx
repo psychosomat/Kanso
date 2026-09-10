@@ -201,6 +201,25 @@ function CategoryFeedPage() {
 					data?.category.description ??
 					"You can change category description whenever you want."
 				}
+				hero={
+					data?.items.length ? (
+						<div className="flex gap-3 px-5 opacity-40 blur-[2px] lg:px-7">
+							{data.items
+								.slice(0, 5)
+								.map((post) =>
+									post.video.posterUrl ? (
+										<img
+											key={post.id}
+											src={post.video.posterUrl}
+											alt=""
+											aria-hidden="true"
+											className="aspect-video w-64 shrink-0 rounded-lg object-cover"
+										/>
+									) : null,
+								)}
+						</div>
+					) : undefined
+				}
 				actions={
 					<>
 						<Badge variant="accent">{data?.total ?? 0} posts</Badge>
@@ -235,7 +254,7 @@ function CategoryFeedPage() {
 				{data?.items.length ? (
 					<div
 						className={cn(
-							"grid gap-4 xl:grid-cols-2 transition-opacity duration-150",
+							"grid grid-cols-2 gap-x-4 gap-y-6 md:grid-cols-3 transition-opacity duration-150",
 							reordering && "opacity-60",
 						)}
 					>

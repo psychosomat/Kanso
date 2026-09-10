@@ -107,9 +107,9 @@ export function VideoCard({
 						onMouseDown={handleMouseDown}
 						onDragStart={draggable ? handleDragStart : undefined}
 						draggable={draggable}
-						className="group relative block overflow-hidden rounded-lg border border-(--border) bg-(--panel) transition-[border-color,box-shadow] duration-300 hover:border-(--accent)/30 hover:shadow-lg cursor-grab active:cursor-grabbing"
+						className="group block cursor-grab active:cursor-grabbing"
 					>
-						<div className="relative aspect-video overflow-hidden bg-(--panel-strong)">
+						<div className="relative aspect-video overflow-hidden rounded-lg bg-black ring-1 ring-white/10 transition-[box-shadow,ring-color] duration-200 group-hover:shadow-[0_8px_32px_-8px_var(--accent-subtle)] group-hover:ring-(--accent)/60">
 							{video.posterUrl ? (
 								<img
 									src={video.posterUrl}
@@ -122,109 +122,100 @@ export function VideoCard({
 							) : (
 								<div className="flex h-full w-full items-center justify-center bg-(--panel-strong)">
 									<IconPlayerPlayFilled
-										size={32}
-										className="text-(--muted-foreground)"
+										size={28}
+										className="text-(--muted-foreground)/60"
 									/>
 								</div>
 							)}
 
-							<div className="absolute inset-0 bg-linear-to-t from-black/60 via-transparent to-transparent" />
-							<div className="absolute inset-0 bg-linear-to-t from-black/60 via-transparent to-transparent opacity-0 transition-opacity duration-300 group-hover:opacity-100" />
+							<div className="absolute inset-x-0 bottom-0 h-10 bg-linear-to-t from-black/60 to-transparent" />
 
-							<div className="absolute left-3 top-3 flex gap-2">
-								{!video.exists && <Badge variant="destructive">Missing</Badge>}
-								<Badge variant="accent">
-									{formatDuration(video.durationSec)}
-								</Badge>
+							{!video.exists && (
+								<div className="absolute left-2 top-2">
+									<Badge variant="destructive">Missing</Badge>
+								</div>
+							)}
+							<div className="tnum absolute bottom-1.5 right-1.5 rounded-md bg-black/75 px-1.5 py-0.5 text-[11px] font-medium text-white backdrop-blur-sm">
+								{formatDuration(video.durationSec)}
 							</div>
 
-							<div className="absolute inset-0 flex items-center justify-center opacity-0 transition-all duration-300 group-hover:opacity-100">
-								<div className="flex h-14 w-14 items-center justify-center rounded-full bg-(--accent)/90 text-white shadow-lg backdrop-blur-sm transition-transform duration-300 group-hover:scale-100 scale-90">
-									<IconPlayerPlayFilled size={24} />
+							<div className="absolute inset-0 flex items-center justify-center opacity-0 transition-opacity duration-150 group-hover:opacity-100">
+								<div className="flex h-11 w-11 items-center justify-center rounded-full bg-(--accent) text-white shadow-[0_0_24px_var(--accent-subtle)]">
+									<IconPlayerPlayFilled size={18} />
 								</div>
 							</div>
 						</div>
 
-						<div className="p-4">
-							<div className="flex items-start justify-between gap-3">
-								<div className="min-w-0 flex-1">
-									<h3 className="line-clamp-1 text-sm font-medium text-(--foreground) leading-relaxed">
-										{video.fileName}
-									</h3>
-									<p className="mt-1 text-xs text-(--muted-foreground)">
-										{formatResolution(video.width, video.height)}
-									</p>
-								</div>
-							</div>
-
-							{caption && (
-								<p className="mt-2 text-sm text-(--foreground)/80 line-clamp-2">
-									{caption}
-								</p>
-							)}
-
-							<p className="mt-2 line-clamp-1 text-xs text-(--muted-foreground)/70">
-								{video.folderPath}
-							</p>
-
-							<div className="mt-3 flex items-center justify-between">
-								<span className="text-xs text-(--muted-foreground)/60">
+						<div className="mt-1.5 flex items-start gap-1 px-0.5">
+							<div className="min-w-0 flex-1">
+								<h3 className="line-clamp-2 text-[13px] leading-snug text-(--foreground)">
+									{video.fileName}
+								</h3>
+								<p className="mt-0.5 line-clamp-1 text-xs text-(--muted-foreground)">
+									{formatResolution(video.width, video.height)}
+									{" · "}
 									{formatDateTime(video.modifiedAt)}
-								</span>
-
-								<DropdownMenu>
-									<DropdownMenuTrigger asChild>
-										<Button
-											variant="ghost"
-											size="icon-sm"
-											onClick={(e) => e.stopPropagation()}
-										>
-											<IconDots size={16} />
-										</Button>
-									</DropdownMenuTrigger>
-									<DropdownMenuContent align="end">
-										<DropdownMenuItem
-											onClick={(e) => {
-												e.stopPropagation();
-												onAssign(video.id);
-											}}
-										>
-											<IconFolder size={16} />
-											Categorize
-										</DropdownMenuItem>
-										<DropdownMenuItem
-											onClick={(e) => {
-												e.stopPropagation();
-												onAction(video.id, "reveal-file");
-											}}
-										>
-											<IconFolderSearch size={16} />
-											Reveal
-										</DropdownMenuItem>
-										<DropdownMenuItem
-											onClick={(e) => {
-												e.stopPropagation();
-												onAction(video.id, "copy-path");
-											}}
-										>
-											<IconCopy size={16} />
-											Copy path
-										</DropdownMenuItem>
-										{onRemove ? (
-											<DropdownMenuItem
-												onClick={(e) => {
-													e.stopPropagation();
-													setRemoveDialogOpen(true);
-												}}
-												className="text-(--destructive)"
-											>
-												<IconTrash size={16} />
-												Remove from library
-											</DropdownMenuItem>
-										) : null}
-									</DropdownMenuContent>
-								</DropdownMenu>
+								</p>
+								{caption && (
+									<p className="mt-0.5 line-clamp-2 text-xs text-(--muted-foreground)">
+										{caption}
+									</p>
+								)}
 							</div>
+
+							<DropdownMenu>
+								<DropdownMenuTrigger asChild>
+									<Button
+										variant="ghost"
+										size="icon-sm"
+										className="mt-0.5 shrink-0 opacity-0 group-hover:opacity-100 focus-visible:opacity-100"
+										onClick={(e) => e.stopPropagation()}
+									>
+										<IconDots size={16} />
+									</Button>
+								</DropdownMenuTrigger>
+								<DropdownMenuContent align="end">
+									<DropdownMenuItem
+										onClick={(e) => {
+											e.stopPropagation();
+											onAssign(video.id);
+										}}
+									>
+										<IconFolder size={16} />
+										Categorize
+									</DropdownMenuItem>
+									<DropdownMenuItem
+										onClick={(e) => {
+											e.stopPropagation();
+											onAction(video.id, "reveal-file");
+										}}
+									>
+										<IconFolderSearch size={16} />
+										Reveal
+									</DropdownMenuItem>
+									<DropdownMenuItem
+										onClick={(e) => {
+											e.stopPropagation();
+											onAction(video.id, "copy-path");
+										}}
+									>
+										<IconCopy size={16} />
+										Copy path
+									</DropdownMenuItem>
+									{onRemove ? (
+										<DropdownMenuItem
+											onClick={(e) => {
+												e.stopPropagation();
+												setRemoveDialogOpen(true);
+											}}
+											className="text-(--destructive)"
+										>
+											<IconTrash size={16} />
+											Remove from library
+										</DropdownMenuItem>
+									) : null}
+								</DropdownMenuContent>
+							</DropdownMenu>
 						</div>
 					</Link>
 				</ContextMenuTrigger>

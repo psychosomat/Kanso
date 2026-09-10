@@ -41,15 +41,17 @@ import IconTrash from "~icons/tabler/trash";
 
 const NOISE_STORAGE_KEY = "player:noiseOpacity";
 const ACCENT_STORAGE_KEY = "player:accentColor";
+const DEFAULT_ACCENT = "#ff5a36";
+const LEGACY_ACCENTS = new Set(["#c8883a", "#d6be8c", "#2f9bff"]);
 const GITHUB_URL = "https://github.com/psychosomat/Kanso";
 
 function getNoiseOpacity(): number {
 	if (typeof window === "undefined") {
-		return 0.035;
+		return 0.09;
 	}
 
 	const stored = window.localStorage.getItem(NOISE_STORAGE_KEY);
-	return stored !== null ? Number(stored) : 0.035;
+	return stored !== null ? Number(stored) : 0.09;
 }
 
 function applyNoiseOpacity(value: number) {
@@ -63,11 +65,15 @@ function applyNoiseOpacity(value: number) {
 
 function getAccentColor(): string {
 	if (typeof window === "undefined") {
-		return "#c8883a";
+		return DEFAULT_ACCENT;
 	}
 
 	const stored = window.localStorage.getItem(ACCENT_STORAGE_KEY);
-	return stored ?? "#c8883a";
+	if (stored === null || LEGACY_ACCENTS.has(stored.toLowerCase())) {
+		window.localStorage.setItem(ACCENT_STORAGE_KEY, DEFAULT_ACCENT);
+		return DEFAULT_ACCENT;
+	}
+	return stored;
 }
 
 function applyAccentColor(value: string) {
@@ -94,8 +100,8 @@ function SettingsPage() {
 		savePreferences,
 	} = useAppState();
 	const [busy, setBusy] = useState(false);
-	const [noiseOpacity, setNoiseOpacity] = useState<number>(0.035);
-	const [accentColor, setAccentColor] = useState<string>("#c8883a");
+	const [noiseOpacity, setNoiseOpacity] = useState<number>(0.09);
+	const [accentColor, setAccentColor] = useState<string>(DEFAULT_ACCENT);
 	const [eqEnabled, setEqEnabled] = useState(false);
 	const [eqGains, setEqGains] = useState<number[]>(normalizeEqGains());
 
@@ -730,8 +736,8 @@ function SettingsPage() {
 
 				<SettingsSection icon={<IconInfoCircle size={16} />} title="About">
 					<div className="flex items-center gap-3">
-						<div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-(--radius) bg-(--accent-subtle)">
-							<IconPlayerPlay size={20} className="text-(--accent-strong)" />
+						<div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-white/8 text-(--foreground) ring-1 ring-white/8">
+							<IconPlayerPlay size={18} />
 						</div>
 						<div>
 							<p className="font-display text-sm font-semibold text-(--foreground)">
@@ -776,25 +782,27 @@ function SettingsSection({
 	children: React.ReactNode;
 }) {
 	return (
-		<section className="rounded-xl border border-(--border) bg-(--panel) p-5">
-			<div className="mb-4 flex items-center gap-2">
-				<span className="text-(--accent)">{icon}</span>
-				<h2 className="font-display text-sm font-semibold tracking-wide text-(--foreground)">
+		<section>
+			<div className="mb-1.5 flex items-center gap-1.5 px-1">
+				<span className="text-(--muted-foreground)">{icon}</span>
+				<h2 className="text-[13px] font-semibold text-(--foreground)">
 					{title}
 				</h2>
 			</div>
-			{children}
+			<div className="rounded-lg bg-(--panel) px-4 py-4 ring-1 ring-white/8">
+				{children}
+			</div>
 		</section>
 	);
 }
 
 function StatTile({ label, value }: { label: string; value: string }) {
 	return (
-		<div className="rounded-(--radius) bg-(--panel-strong) px-3 py-2.5">
-			<p className="text-[10px] uppercase tracking-[0.18em] text-(--muted-foreground)">
+		<div className="rounded-md bg-white/4 px-3 py-2.5">
+			<p className="text-[11px] font-medium text-(--muted-foreground)">
 				{label}
 			</p>
-			<p className="mt-1 text-sm font-medium text-(--foreground)">{value}</p>
+			<p className="tnum mt-0.5 text-sm text-(--foreground)">{value}</p>
 		</div>
 	);
 }

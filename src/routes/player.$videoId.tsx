@@ -46,6 +46,7 @@ import type { EqBand } from "@/lib/equalizer";
 import { clampEqGain, EQ_BANDS, normalizeEqGains } from "@/lib/equalizer";
 import { getPlayerApi } from "@/lib/player-api";
 import { getPlayerReturnTarget } from "@/lib/player-return";
+import { averagePosterColor } from "@/lib/poster-glow";
 import {
 	formatBytes,
 	formatDateTime,
@@ -123,6 +124,8 @@ export function PlayerPage({
 		leftPercent: 0,
 		frameUrl: null,
 	});
+	const [ambient, setAmbient] = useState<string | null>(null);
+	const [paletteOpen, setPaletteOpen] = useState(false);
 
 	const videoRef = useRef<HTMLVideoElement | null>(null);
 	const previewVideoRef = useRef<HTMLVideoElement | null>(null);
@@ -414,6 +417,7 @@ export function PlayerPage({
 	);
 
 	usePlayerHotkeys({
+		enabled: !paletteOpen,
 		onTogglePlay: togglePlay,
 		onSeekBackward: () => seekBy(-SEEK_STEP),
 		onSeekForward: () => seekBy(SEEK_STEP),
@@ -598,6 +602,30 @@ export function PlayerPage({
 	}, [video?.streamUrl]);
 
 	useEffect(() => {
+		if (!video?.posterUrl) {
+			setAmbient(null);
+			return;
+		}
+		let cancelled = false;
+		void averagePosterColor(video.posterUrl).then((color) => {
+			if (!cancelled) setAmbient(color);
+		});
+		return () => {
+			cancelled = true;
+		};
+	}, [video?.posterUrl]);
+
+	useEffect(() => {
+		const onPalette = (event: Event) => {
+			setPaletteOpen(
+				(event as CustomEvent<{ open: boolean }>).detail.open ?? false,
+			);
+		};
+		window.addEventListener("kanso:palette", onPalette);
+		return () => window.removeEventListener("kanso:palette", onPalette);
+	}, []);
+
+	useEffect(() => {
 		const element = videoRef.current;
 		if (!element) return;
 		element.playbackRate = playbackRate;
@@ -740,10 +768,18 @@ export function PlayerPage({
 	const volumePercent = Math.round(
 		(prefs?.playerMuted ? 0 : (prefs?.playerVolume ?? 1)) * 100,
 	);
-	const speedPresets = [
-		prefs?.speedPresetPrimary ?? 1,
-		prefs?.speedPresetSecondary ?? 2.2,
-	];
+
+	const cycleSpeed = useCallback(() => {
+		const presets = [
+			prefs?.speedPresetPrimary ?? 1,
+			prefs?.speedPresetSecondary ?? 2.2,
+		];
+		const currentIndex = presets.findIndex(
+			(speed) => Math.abs(playbackRate - speed) < 0.01,
+		);
+		const next = presets[(currentIndex + 1) % presets.length];
+		if (next !== undefined) setRate(next);
+	}, [playbackRate, prefs, setRate]);
 
 	// Page entrance animation
 	useGSAP(
@@ -768,25 +804,26 @@ export function PlayerPage({
 		<div className="relative z-2 h-[calc(100vh-3rem)] bg-black">
 			<div
 				ref={playerContainerRef}
-				className="relative h-full w-full overflow-hidden bg-black"
+				className="ambient-stage relative h-full w-full overflow-hidden bg-black"
+				style={{ "--ambient": ambient ?? undefined } as React.CSSProperties}
 			>
 				<div
 					ref={topBarRef}
-					className="absolute inset-x-0 top-0 z-20 flex items-center justify-between bg-linear-to-b from-black/85 to-transparent px-4 pb-10 pt-4"
+					className="absolute inset-x-0 top-0 z-20 flex items-center justify-between bg-linear-to-b from-black/70 to-transparent px-4 pb-10 pt-3"
 				>
 					<Button
 						variant="ghost"
-						size="sm"
-						className="text-white hover:bg-white/14"
+						size="icon"
+						className="glass h-9 w-9 rounded-full text-white/85 ring-1 ring-white/10 hover:bg-white/15 hover:text-white"
 						onClick={handleBack}
+						aria-label="Back to library"
 					>
 						<IconArrowLeft size={16} />
-						Back
 					</Button>
 
-					<div className="flex items-center gap-2">
+					<div className="flex min-w-0 items-center gap-2">
 						{video ? (
-							<div className="max-w-[40vw] truncate text-sm text-white/85">
+							<div className="max-w-[44vw] truncate text-[13px] font-medium text-white/85 drop-shadow-[0_1px_8px_rgba(0,0,0,0.9)]">
 								{video.fileName}
 							</div>
 						) : null}
@@ -794,11 +831,11 @@ export function PlayerPage({
 							<SheetTrigger asChild>
 								<Button
 									variant="ghost"
-									size="sm"
-									className="text-white hover:bg-white/14"
+									size="icon"
+									className="glass h-9 w-9 rounded-full text-white/85 ring-1 ring-white/10 hover:bg-white/15 hover:text-white"
+									aria-label="Video details"
 								>
 									<IconLayoutSidebarRight size={16} />
-									Details
 								</Button>
 							</SheetTrigger>
 							<SheetContent className="h-full w-[24rem] border-0 p-0">
@@ -995,218 +1032,242 @@ export function PlayerPage({
 					) : null}
 
 					{!playing && video?.exists !== false ? (
-						<div className="pointer-events-none absolute inset-0 flex items-center justify-center bg-black/20">
-							<div className="flex h-20 w-20 items-center justify-center rounded-full border border-white/20 bg-black/55 text-white">
-								<IconPlayerPlayFilled size={40} />
-							</div>
+						<div className="pointer-events-none absolute inset-0 flex items-center justify-center">
+							<IconPlayerPlayFilled
+								size={64}
+								className="text-white opacity-90 drop-shadow-[0_2px_12px_rgba(0,0,0,0.8)]"
+							/>
 						</div>
 					) : null}
 				</button>
 
 				<div
 					ref={bottomBarRef}
-					className="absolute inset-x-0 bottom-0 z-20 select-none bg-linear-to-t from-black/95 via-black/60 to-transparent px-5 pb-5 pt-20"
+					className="absolute inset-x-0 bottom-0 z-20 bg-linear-to-t from-black/90 via-black/45 to-transparent px-4 pb-3 pt-14 select-none"
 				>
-					{/* Timeline */}
-					<div
-						ref={timelineTrackRef}
-						className="relative mb-1"
-						onPointerDown={startScrub}
-						onPointerMove={moveScrub}
-						onPointerUp={endScrub}
-						onPointerCancel={endScrub}
-					>
-						{timelinePreview.visible ? (
-							<div
-								className="pointer-events-none absolute bottom-full z-10 mb-3 -translate-x-1/2 overflow-hidden rounded-sm border border-white/15 shadow-2xl"
-								style={{ left: `${timelinePreview.leftPercent}%` }}
-							>
-								<div className="h-27 w-48 bg-black">
-									{timelinePreview.frameUrl ? (
-										<img
-											src={timelinePreview.frameUrl}
-											alt="Preview"
-											className="h-full w-full object-cover"
-										/>
-									) : video?.posterUrl ? (
-										<img
-											src={video.posterUrl}
-											alt="Preview"
-											className="h-full w-full object-cover"
-										/>
-									) : (
-										<div className="flex h-full items-center justify-center">
-											<span className="text-[11px] text-white/40">
-												Loading…
-											</span>
-										</div>
+					<div className="mx-auto w-full max-w-4xl rounded-2xl bg-black/55 px-4 pb-3 pt-3 shadow-2xl ring-1 ring-white/10 backdrop-blur-2xl">
+						<div className="mb-1.5 flex items-center gap-3">
+							{video?.posterUrl ? (
+								<img
+									src={video.posterUrl}
+									alt=""
+									aria-hidden="true"
+									className="h-10 w-[72px] shrink-0 rounded-md object-cover ring-1 ring-white/15"
+								/>
+							) : (
+								<div className="flex h-10 w-[72px] shrink-0 items-center justify-center rounded-md bg-white/8 text-white/50">
+									<IconPlayerPlayFilled size={14} />
+								</div>
+							)}
+							<div className="min-w-0 flex-1">
+								<p className="truncate text-[13px] font-semibold text-white">
+									{video?.fileName ?? "Loading…"}
+								</p>
+								<p className="tnum mt-0.5 truncate text-[11px] text-white/50">
+									{formatResolution(
+										video?.width ?? null,
+										video?.height ?? null,
 									)}
-								</div>
-								<div className="bg-black/90 px-2 py-1 text-center text-[11px] tabular-nums text-white/70">
-									{formatDuration(timelinePreview.time)}
-								</div>
+									{video?.codecVideo ? ` · ${video.codecVideo}` : ""}
+								</p>
 							</div>
-						) : null}
-
-						<input
-							type="range"
-							min={0}
-							max={duration || 0}
-							step={0.1}
-							value={isScrubbing ? timelinePreview.time : currentTime}
-							onChange={(event) => {
-								const next = Number(event.target.value);
-								setCurrentTime(next);
-								if (isScrubbing) {
-									setTimelinePreview((current) => ({ ...current, time: next }));
-									syncPreviewFrame(next);
-								} else {
-									seekTo(next);
-								}
-							}}
-							className="h-1 w-full cursor-pointer accent-white"
-						/>
-					</div>
-
-					{/* Timestamps */}
-					<div className="mb-4 flex items-center justify-between">
-						<span className="text-[11px] tabular-nums text-white/60">
-							{formatDuration(isScrubbing ? timelinePreview.time : currentTime)}
-						</span>
-						<span className="text-[11px] tabular-nums text-white/35">
-							{formatDuration(duration || 0)}
-						</span>
-					</div>
-
-					{/* Controls row */}
-					<div className="flex items-center gap-4">
-						{/* Playback group */}
-						<div className="flex items-center gap-1">
-							<button
-								type="button"
-								onClick={() => seekBy(-10)}
-								className="flex h-8 w-8 items-center justify-center rounded text-white/60 transition-colors hover:bg-white/10 hover:text-white"
-								aria-label="Back 10 seconds"
-							>
-								<IconPlayerSkipBack size={18} />
-							</button>
-							<button
-								type="button"
-								onClick={() => void togglePlay()}
-								className="mx-1 flex h-9 w-9 items-center justify-center rounded-full bg-white text-black transition-all hover:bg-white/90"
-								aria-label={playing ? "Pause" : "Play"}
-							>
-								{playing ? (
-									<IconPlayerPauseFilled size={18} />
-								) : (
-									<IconPlayerPlayFilled size={18} />
-								)}
-							</button>
-							<button
-								type="button"
-								onClick={() => seekBy(10)}
-								className="flex h-8 w-8 items-center justify-center rounded text-white/60 transition-colors hover:bg-white/10 hover:text-white"
-								aria-label="Forward 10 seconds"
-							>
-								<IconPlayerSkipForward size={18} />
-							</button>
-							<button
-								type="button"
-								onClick={() => void toggleLoop()}
-								className={
-									isLooping
-										? "flex h-8 w-8 items-center justify-center rounded bg-white/20 text-white transition-colors hover:bg-white/30"
-										: "flex h-8 w-8 items-center justify-center rounded text-white/60 transition-colors hover:bg-white/10 hover:text-white"
-								}
-								aria-label={isLooping ? "Disable loop" : "Enable loop"}
-							>
-								<IconRepeat size={18} />
-							</button>
+							<span className="tnum shrink-0 text-xs text-white/70">
+								{formatDuration(
+									isScrubbing ? timelinePreview.time : currentTime,
+								)}{" "}
+								<span className="text-white/35">
+									/ {formatDuration(duration || 0)}
+								</span>
+							</span>
 						</div>
+						{/* Timeline */}
+						<div
+							ref={timelineTrackRef}
+							className="relative"
+							onPointerDown={startScrub}
+							onPointerMove={moveScrub}
+							onPointerUp={endScrub}
+							onPointerCancel={endScrub}
+						>
+							{timelinePreview.visible ? (
+								<div
+									className="pointer-events-none absolute bottom-full z-10 mb-3 -translate-x-1/2 overflow-hidden rounded-md border border-white/15 shadow-2xl"
+									style={{ left: `${timelinePreview.leftPercent}%` }}
+								>
+									<div className="h-27 w-48 bg-black">
+										{timelinePreview.frameUrl ? (
+											<img
+												src={timelinePreview.frameUrl}
+												alt="Preview"
+												className="h-full w-full object-cover"
+											/>
+										) : video?.posterUrl ? (
+											<img
+												src={video.posterUrl}
+												alt="Preview"
+												className="h-full w-full object-cover"
+											/>
+										) : (
+											<div className="flex h-full items-center justify-center">
+												<span className="font-data text-[11px] text-white/40">
+													Loading…
+												</span>
+											</div>
+										)}
+									</div>
+									<div className="font-data bg-black/90 px-2 py-1 text-center text-[11px] tabular-nums text-white/70">
+										{formatDuration(timelinePreview.time)}
+									</div>
+								</div>
+							) : null}
 
-						{/* Volume group */}
-						<div className="flex items-center gap-2">
-							<button
-								type="button"
-								onClick={() => void toggleMute()}
-								className="flex h-8 w-8 items-center justify-center rounded text-white/60 transition-colors hover:bg-white/10 hover:text-white"
-								aria-label="Toggle mute"
-							>
-								{prefs?.playerMuted ? (
-									<IconVolumeOff size={16} />
-								) : (
-									<IconVolume size={16} />
-								)}
-							</button>
 							<input
 								type="range"
 								min={0}
-								max={100}
-								step={1}
-								value={volumePercent}
-								onChange={(event) =>
-									void updateVolume(Number(event.target.value) / 100)
-								}
-								className="w-24 cursor-pointer accent-white"
-							/>
-							<span className="w-8 text-right text-[11px] tabular-nums text-white/40">
-								{volumePercent}%
-							</span>
-						</div>
-
-						<div className="flex-1" />
-
-						{/* Speed group */}
-						<div className="flex items-center gap-1.5">
-							<button
-								ref={gaugeButtonRef}
-								type="button"
-								className="flex h-8 w-8 items-center justify-center rounded text-white/60 transition-colors hover:bg-white/10 hover:text-white"
-								aria-label="Scroll to adjust speed"
-							>
-								<IconGauge size={16} />
-							</button>
-							<span className="w-10 text-right text-[11px] tabular-nums text-white/60">
-								{playbackRate.toFixed(1)}×
-							</span>
-							{speedPresets.map((speed) => (
-								<button
-									key={speed}
-									type="button"
-									onClick={() => setRate(speed)}
-									className={
-										Math.abs(playbackRate - speed) < 0.01
-											? "flex h-7 items-center rounded bg-white px-2 text-[11px] tabular-nums text-black"
-											: "flex h-7 items-center rounded px-2 text-[11px] tabular-nums text-white/50 transition-colors hover:bg-white/10 hover:text-white"
+								max={duration || 0}
+								step={0.1}
+								value={isScrubbing ? timelinePreview.time : currentTime}
+								onChange={(event) => {
+									const next = Number(event.target.value);
+									setCurrentTime(next);
+									if (isScrubbing) {
+										setTimelinePreview((current) => ({
+											...current,
+											time: next,
+										}));
+										syncPreviewFrame(next);
+									} else {
+										seekTo(next);
 									}
-								>
-									{speed}×
-								</button>
-							))}
+								}}
+								className="lamp-range block w-full"
+								style={
+									{
+										"--lamp-fill": `${duration ? ((isScrubbing ? timelinePreview.time : currentTime) / duration) * 100 : 0}%`,
+									} as React.CSSProperties
+								}
+							/>
 						</div>
 
-						<div className="h-4 w-px bg-white/15" />
-
-						{/* Actions */}
-						<div className="flex items-center gap-1">
-							{isLibraryVideo(video) ? (
+						{/* Transport */}
+						<div className="mt-1 flex items-center gap-1">
+							{/* Playback group */}
+							<div className="flex items-center gap-0.5">
 								<button
 									type="button"
-									onClick={() => setAssignOpen(true)}
-									className="flex h-8 items-center gap-1.5 rounded px-2.5 text-[12px] text-white/60 transition-colors hover:bg-white/10 hover:text-white"
+									onClick={() => seekBy(-10)}
+									className="flex h-8 w-8 items-center justify-center rounded-md text-white/65 transition-colors hover:bg-white/10 hover:text-white"
+									aria-label="Back 10 seconds"
 								>
-									<IconFolder size={14} />
-									Categories
+									<IconPlayerSkipBack size={17} />
 								</button>
-							) : null}
-							<button
-								type="button"
-								onClick={() => void toggleFullscreen()}
-								className="flex h-8 w-8 items-center justify-center rounded text-white/60 transition-colors hover:bg-white/10 hover:text-white"
-								aria-label="Fullscreen"
-							>
-								<IconMaximize size={16} />
-							</button>
+								<button
+									type="button"
+									onClick={() => void togglePlay()}
+									className="mx-1 flex h-10 w-10 items-center justify-center rounded-full bg-(--accent) text-white shadow-[0_0_20px_var(--accent-subtle)] transition-colors hover:bg-(--accent-hover)"
+									aria-label={playing ? "Pause" : "Play"}
+								>
+									{playing ? (
+										<IconPlayerPauseFilled size={18} />
+									) : (
+										<IconPlayerPlayFilled size={18} />
+									)}
+								</button>
+								<button
+									type="button"
+									onClick={() => seekBy(10)}
+									className="flex h-8 w-8 items-center justify-center rounded-md text-white/65 transition-colors hover:bg-white/10 hover:text-white"
+									aria-label="Forward 10 seconds"
+								>
+									<IconPlayerSkipForward size={17} />
+								</button>
+								<button
+									type="button"
+									onClick={() => void toggleLoop()}
+									className={
+										isLooping
+											? "flex h-8 w-8 items-center justify-center rounded-md bg-(--accent)/25 text-(--accent-strong) transition-colors"
+											: "flex h-8 w-8 items-center justify-center rounded-md text-white/65 transition-colors hover:bg-white/10 hover:text-white"
+									}
+									aria-label={isLooping ? "Disable loop" : "Enable loop"}
+								>
+									<IconRepeat size={16} />
+								</button>
+							</div>
+
+							{/* Volume group */}
+							<div className="hidden items-center gap-2 sm:flex">
+								<button
+									type="button"
+									onClick={() => void toggleMute()}
+									className="flex h-8 w-8 items-center justify-center rounded-md text-white/65 transition-colors hover:bg-white/10 hover:text-white"
+									aria-label="Toggle mute"
+								>
+									{prefs?.playerMuted ? (
+										<IconVolumeOff size={15} />
+									) : (
+										<IconVolume size={15} />
+									)}
+								</button>
+								<input
+									type="range"
+									min={0}
+									max={100}
+									step={1}
+									value={volumePercent}
+									onChange={(event) =>
+										void updateVolume(Number(event.target.value) / 100)
+									}
+									className="volume-range w-20"
+								/>
+							</div>
+
+							<div className="flex-1" />
+
+							{/* Speed */}
+							<div className="flex items-center">
+								<button
+									ref={gaugeButtonRef}
+									type="button"
+									onClick={() => cycleSpeed()}
+									className="hidden h-8 w-8 items-center justify-center rounded-md text-white/65 transition-colors hover:bg-white/10 hover:text-white sm:flex"
+									aria-label="Cycle speed presets. Scroll to fine-tune"
+								>
+									<IconGauge size={15} />
+								</button>
+								<button
+									type="button"
+									onClick={() => cycleSpeed()}
+									className="tnum h-8 rounded-md px-1.5 text-xs text-white/70 transition-colors hover:bg-white/10 hover:text-white"
+									aria-label="Cycle speed presets"
+								>
+									{playbackRate.toFixed(1)}×
+								</button>
+							</div>
+
+							<div className="h-4 w-px bg-white/12" />
+
+							{/* Actions */}
+							<div className="flex items-center gap-0.5">
+								{isLibraryVideo(video) ? (
+									<button
+										type="button"
+										onClick={() => setAssignOpen(true)}
+										className="hidden h-8 items-center gap-1.5 rounded-md px-2 text-xs text-white/65 transition-colors hover:bg-white/10 hover:text-white md:flex"
+									>
+										<IconFolder size={14} />
+										Categories
+									</button>
+								) : null}
+								<button
+									type="button"
+									onClick={() => void toggleFullscreen()}
+									className="flex h-8 w-8 items-center justify-center rounded-md text-white/65 transition-colors hover:bg-white/10 hover:text-white"
+									aria-label="Fullscreen"
+								>
+									<IconMaximize size={15} />
+								</button>
+							</div>
 						</div>
 					</div>
 				</div>

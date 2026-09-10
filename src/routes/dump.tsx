@@ -247,8 +247,8 @@ function DumpPage() {
 						ref={gridRef}
 						className={
 							view === "comfortable"
-								? "grid gap-4 md:grid-cols-2 xl:grid-cols-3"
-								: "grid gap-3 lg:grid-cols-2"
+								? "grid grid-cols-2 gap-x-4 gap-y-6 md:grid-cols-3 xl:grid-cols-4"
+								: "grid gap-1 lg:grid-cols-2"
 						}
 					>
 						{data.items.map((video, index) => (
@@ -265,15 +265,12 @@ function DumpPage() {
 						))}
 					</div>
 				) : !data || loading ? (
-					<div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
-						{["s1", "s2", "s3"].map((key) => (
-							<div
-								key={key}
-								className="rounded-lg border border-(--border) p-4 bg-(--panel)"
-							>
-								<Skeleton className="aspect-video w-full rounded-(--radius)" />
-								<Skeleton className="mt-3 h-4 w-3/4 rounded" />
-								<Skeleton className="mt-2 h-4 w-1/2 rounded" />
+					<div className="grid grid-cols-2 gap-x-4 gap-y-6 md:grid-cols-3 xl:grid-cols-4">
+						{["s1", "s2", "s3", "s4"].map((key) => (
+							<div key={key}>
+								<Skeleton className="aspect-video w-full rounded-md" />
+								<Skeleton className="mt-2 h-4 w-3/4 rounded" />
+								<Skeleton className="mt-1.5 h-3 w-1/2 rounded" />
 							</div>
 						))}
 					</div>

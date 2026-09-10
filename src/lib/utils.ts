@@ -29,6 +29,20 @@ export function cn(...inputs: ClassValue[]) {
 	return twMerge(clsx(inputs));
 }
 
+export function isMacPlatform(): boolean {
+	if (typeof window !== "undefined" && window.playerApi?.app.isElectron) {
+		return window.playerApi.app.getPlatform() === "darwin";
+	}
+	if (typeof navigator !== "undefined" && navigator.platform) {
+		return navigator.platform.startsWith("Mac");
+	}
+	return false;
+}
+
+export function paletteShortcutLabel(): string {
+	return isMacPlatform() ? "⌘P" : "Ctrl P";
+}
+
 export function clamp(value: number, min: number, max: number) {
 	return Math.min(Math.max(value, min), max);
 }

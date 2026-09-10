@@ -20,7 +20,7 @@ export const DEFAULT_PLAYER_PREFERENCES = {
 	playerLoop: false,
 	speedPresetPrimary: 1,
 	speedPresetSecondary: 2.2,
-	accentColor: "#c8883a",
+	accentColor: "#ff5a36",
 	playerEqEnabled: false,
 	playerEqGains: DEFAULT_EQ_GAINS,
 } as const;

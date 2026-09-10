@@ -33,7 +33,14 @@ export function usePlayerHotkeys({
 		if (!enabled) return;
 
 		const onKeyDown = (event: KeyboardEvent) => {
-			if (event.repeat || isEditableTarget(event.target)) return;
+			if (
+				event.repeat ||
+				event.ctrlKey ||
+				event.metaKey ||
+				event.altKey ||
+				isEditableTarget(event.target)
+			)
+				return;
 
 			switch (event.code) {
 				case "Space":

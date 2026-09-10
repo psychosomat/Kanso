@@ -9,7 +9,7 @@ import {
 import { APP_NAME } from "@/lib/constants";
 import type { CategoryDto } from "@/lib/contracts";
 import { getPlayerApi } from "@/lib/player-api";
-import { cn, resolveTitlebarMode } from "@/lib/utils";
+import { cn, paletteShortcutLabel, resolveTitlebarMode } from "@/lib/utils";
 import { getDraggedVideoId, hasDraggedVideo } from "@/lib/video-drag";
 import IconChevronDown from "~icons/tabler/chevron-down";
 import IconChevronRight from "~icons/tabler/chevron-right";
@@ -20,9 +20,11 @@ import IconLayoutSidebarLeftCollapse from "~icons/tabler/layout-sidebar-left-col
 import IconLayoutSidebarLeftExpand from "~icons/tabler/layout-sidebar-left-expand";
 import IconMenu2 from "~icons/tabler/menu-2";
 import IconPencil from "~icons/tabler/pencil";
-import IconPlayerSkipBackFilled from "~icons/tabler/player-skip-back-filled";
+import IconPlayerPlayFilled from "~icons/tabler/player-play-filled";
+import IconSearch from "~icons/tabler/search";
 import IconSettings from "~icons/tabler/settings";
 import { CategoryFormDialog } from "../categories/category-form-dialog";
+import { CommandPalette } from "../shared/command-palette";
 import { Button } from "../ui/button";
 import {
 	ContextMenu,
@@ -81,22 +83,29 @@ function NavItem({
 			title={collapsed ? label : undefined}
 			onMouseDown={handleMouseDown}
 			className={cn(
-				"group relative flex items-center gap-3 rounded-(--radius) px-3 py-2 text-sm transition-colors duration-150",
+				"group relative flex h-7 items-center gap-2.5 rounded-md px-2.5 text-[13px] transition-colors duration-100",
 				active
-					? "bg-(--accent-subtle) text-(--accent-strong)"
-					: "text-(--muted-foreground) hover:bg-(--panel-strong) hover:text-(--foreground)",
-				collapsed && "justify-center px-2",
+					? "bg-(--accent) font-medium text-white"
+					: "text-(--foreground)/80 hover:bg-white/5",
+				collapsed && "justify-center px-0",
 			)}
 		>
-			{active && (
-				<span className="absolute left-0 top-1/2 h-4 w-0.5 -translate-y-1/2 rounded-full bg-(--accent)" />
-			)}
-			<span className={cn("shrink-0", active && "text-(--accent)")}>
+			<span
+				className={cn(
+					"shrink-0",
+					active ? "text-white" : "text-(--muted-foreground)",
+				)}
+			>
 				{icon}
 			</span>
 			{!collapsed && <span className="flex-1 truncate">{label}</span>}
 			{!collapsed && count !== undefined && (
-				<span className="text-xs tabular-nums text-(--muted-foreground)">
+				<span
+					className={cn(
+						"tnum text-xs",
+						active ? "text-white/75" : "text-(--muted-foreground)",
+					)}
+				>
 					{count}
 				</span>
 			)}
@@ -104,7 +113,13 @@ function NavItem({
 	);
 }
 
-function SidebarContent({ collapsed = false }: { collapsed?: boolean }) {
+function SidebarContent({
+	collapsed = false,
+	onOpenPalette,
+}: {
+	collapsed?: boolean;
+	onOpenPalette: () => void;
+}) {
 	const { categories, library, scanStatus, refreshAll, refreshCategories } =
 		useAppState();
 	const location = useLocation();
@@ -200,27 +215,31 @@ function SidebarContent({ collapsed = false }: { collapsed?: boolean }) {
 
 	return (
 		<div className="flex h-full flex-col">
-			{/* Brand */}
-			<div
-				className={cn(
-					"mb-5 flex items-center gap-2.5 px-2 pt-1",
-					collapsed && "justify-center px-0",
-				)}
-			>
-				<div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-(--radius) bg-(--accent) text-white shadow-sm">
-					<IconPlayerSkipBackFilled size={16} />
-				</div>
-				{!collapsed && (
-					<span className="font-display truncate text-sm font-semibold tracking-wide text-(--foreground)">
-						{APP_NAME}
-					</span>
-				)}
-			</div>
-
 			{/* Navigation */}
-			<nav className="space-y-0.5">
+			<nav className="space-y-px">
+				<button
+					type="button"
+					onClick={onOpenPalette}
+					title={collapsed ? "Search" : undefined}
+					className={cn(
+						"flex h-7 w-full items-center gap-2.5 rounded-md px-2.5 text-[13px] text-(--muted-foreground) transition-colors duration-100 hover:bg-white/5 hover:text-(--foreground)",
+						collapsed && "justify-center px-0",
+					)}
+				>
+					<span className="shrink-0">
+						<IconSearch size={16} />
+					</span>
+					{!collapsed && (
+						<>
+							<span className="flex-1 text-left">Search</span>
+							<kbd className="font-data rounded border border-white/10 bg-white/5 px-1 text-[10px] text-(--muted-foreground)/70">
+								{paletteShortcutLabel()}
+							</kbd>
+						</>
+					)}
+				</button>
 				{!collapsed && (
-					<p className="mb-1.5 px-3 text-[10px] font-semibold uppercase tracking-[0.15em] text-(--muted-foreground)/60">
+					<p className="mb-1 px-2.5 pt-2 text-[11px] font-semibold text-(--muted-foreground)">
 						Library
 					</p>
 				)}
@@ -241,30 +260,35 @@ function SidebarContent({ collapsed = false }: { collapsed?: boolean }) {
 							onClick={() => !collapsed && toggleBoards()}
 							title={collapsed ? "Boards" : undefined}
 							className={cn(
-								"group relative flex w-full items-center gap-3 rounded-(--radius) px-3 py-2 text-sm transition-colors duration-150",
+								"group relative flex h-7 w-full items-center gap-2.5 rounded-md px-2.5 text-[13px] transition-colors duration-100",
 								location.pathname.startsWith("/categories/")
-									? "bg-(--accent-subtle) text-(--accent-strong)"
-									: "text-(--muted-foreground) hover:bg-(--panel-strong) hover:text-(--foreground)",
-								collapsed && "justify-center px-2",
+									? "bg-(--accent) font-medium text-white"
+									: "text-(--foreground)/80 hover:bg-white/5",
+								collapsed && "justify-center px-0",
 							)}
 						>
-							{location.pathname.startsWith("/categories/") && (
-								<span className="absolute left-0 top-1/2 h-4 w-0.5 -translate-y-1/2 rounded-full bg-(--accent)" />
-							)}
 							<span
 								className={cn(
 									"shrink-0",
-									location.pathname.startsWith("/categories/") &&
-										"text-(--accent)",
+									location.pathname.startsWith("/categories/")
+										? "text-white"
+										: "text-(--muted-foreground)",
 								)}
 							>
-								<IconLayoutGrid size={18} />
+								<IconLayoutGrid size={16} />
 							</span>
 							{!collapsed && (
 								<>
 									<span className="flex-1 text-left">Boards</span>
 									{categories.length > 0 && (
-										<span className="text-xs tabular-nums text-(--muted-foreground)">
+										<span
+											className={cn(
+												"tnum text-xs",
+												location.pathname.startsWith("/categories/")
+													? "text-white/75"
+													: "text-(--muted-foreground)",
+											)}
+										>
 											{categories.length}
 										</span>
 									)}
@@ -294,7 +318,7 @@ function SidebarContent({ collapsed = false }: { collapsed?: boolean }) {
 
 				{/* Board list */}
 				{boardsExpanded && !collapsed && (
-					<div className="mt-0.5 space-y-0.5 pl-8">
+					<div className="mt-px space-y-px pl-5">
 						{categoryTree.map((category) => (
 							<CategoryTreeItem
 								key={category.id}
@@ -368,7 +392,7 @@ function SidebarContent({ collapsed = false }: { collapsed?: boolean }) {
 										: "bg-(--success)",
 								)}
 							/>
-							<span className="truncate text-[11px] text-(--muted-foreground)">
+							<span className="truncate text-xs text-(--muted-foreground)">
 								{scanStatus?.status === "scanning"
 									? `Scanning ${scanStatus.scannedFiles}/${scanStatus.totalFiles}`
 									: library?.sourcePaths?.length
@@ -496,12 +520,12 @@ function CategoryTreeItem({
 					{/* biome-ignore lint/a11y/noStaticElementInteractions: drop target for video drag-and-drop */}
 					<div
 						className={cn(
-							"flex items-center justify-between rounded-sm px-3 py-1.5 text-sm transition-colors duration-150",
+							"flex h-7 items-center justify-between rounded-md px-2.5 text-[13px] transition-colors duration-100",
 							dragOver || dropping
-								? "bg-(--accent-subtle) text-(--accent-strong) ring-1 ring-(--accent)/40"
+								? "bg-(--accent)/85 text-white ring-1 ring-(--accent)"
 								: pathname === `/categories/${category.slug}`
-									? "bg-(--accent-subtle) text-(--accent-strong) font-medium"
-									: "text-(--muted-foreground) hover:bg-(--panel-strong) hover:text-(--foreground)",
+									? "bg-(--accent) font-medium text-white"
+									: "text-(--foreground)/80 hover:bg-white/5",
 						)}
 						style={{ marginLeft: `${category.depth * 14}px` }}
 						onDragOver={handleDragOver}
@@ -514,11 +538,11 @@ function CategoryTreeItem({
 							onMouseDown={handleMouseDown}
 							className="flex min-w-0 flex-1 items-center gap-2"
 						>
-							<CategoryIcon name={category.icon} size={15} />
+							<CategoryIcon name={category.icon} size={14} />
 							<span className="truncate">{category.name}</span>
 						</Link>
 						<div className="ml-2 flex shrink-0 items-center gap-1">
-							<span className="text-xs tabular-nums opacity-60">
+							<span className="tnum text-xs opacity-70">
 								{category.postCount}
 							</span>
 							{hasChildren && (
@@ -652,6 +676,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
 	const location = useLocation();
 	const { preferences } = useAppState();
 	const [mobileOpen, setMobileOpen] = useState(false);
+	const [paletteOpen, setPaletteOpen] = useState(false);
 	const [collapsed, setCollapsed] = useState(
 		() => sessionStorage.getItem(SIDEBAR_COLLAPSED_KEY) === "1",
 	);
@@ -659,7 +684,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
 	const [sidebarHovered, setSidebarHovered] = useState(false);
 	const [sidebarWidth, setSidebarWidth] = useState(() => {
 		const stored = localStorage.getItem(SIDEBAR_WIDTH_KEY);
-		return stored ? parseInt(stored, 10) : 256;
+		return stored ? parseInt(stored, 10) : 232;
 	});
 	const [isResizing, setIsResizing] = useState(false);
 
@@ -699,6 +724,25 @@ export function AppShell({ children }: { children: React.ReactNode }) {
 			document.removeEventListener("mouseup", handleMouseUp);
 		};
 	}, [isResizing, sidebarWidth]);
+
+	useEffect(() => {
+		const onKeyDown = (e: KeyboardEvent) => {
+			if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === "p") {
+				const target = e.target;
+				if (
+					target instanceof HTMLElement &&
+					(target.isContentEditable ||
+						["INPUT", "TEXTAREA", "SELECT"].includes(target.tagName))
+				) {
+					return;
+				}
+				e.preventDefault();
+				setPaletteOpen((open) => !open);
+			}
+		};
+		window.addEventListener("keydown", onKeyDown);
+		return () => window.removeEventListener("keydown", onKeyDown);
+	}, []);
 
 	useEffect(() => {
 		initNoise();
@@ -783,7 +827,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
 						sidebarHidden && !sidebarHovered
 							? "w-0 overflow-hidden border-none"
 							: collapsed
-								? "w-16"
+								? "w-[52px]"
 								: "",
 					)}
 					style={
@@ -794,8 +838,11 @@ export function AppShell({ children }: { children: React.ReactNode }) {
 					onMouseEnter={() => sidebarHidden && setSidebarHovered(true)}
 					onMouseLeave={() => sidebarHidden && setSidebarHovered(false)}
 				>
-					<div className="flex min-h-0 flex-1 flex-col overflow-hidden p-3">
-						<SidebarContent collapsed={collapsed} />
+					<div className="flex min-h-0 flex-1 flex-col overflow-hidden p-2">
+						<SidebarContent
+							collapsed={collapsed}
+							onOpenPalette={() => setPaletteOpen(true)}
+						/>
 					</div>
 
 					{/* Resize handle */}
@@ -838,10 +885,10 @@ export function AppShell({ children }: { children: React.ReactNode }) {
 					{/* Mobile topbar */}
 					<div className="flex items-center justify-between border-b border-(--border) bg-(--panel-elevated) px-4 py-2 lg:hidden">
 						<div className="flex items-center gap-2">
-							<div className="flex h-7 w-7 items-center justify-center rounded-sm bg-(--accent) text-white">
-								<IconPlayerSkipBackFilled size={14} />
+							<div className="flex h-7 w-7 items-center justify-center rounded-md bg-white/10 text-(--foreground)">
+								<IconPlayerPlayFilled size={13} />
 							</div>
-							<span className="font-display text-sm font-semibold text-(--foreground)">
+							<span className="text-[13px] font-semibold text-(--foreground)">
 								{APP_NAME}
 							</span>
 						</div>
@@ -855,7 +902,12 @@ export function AppShell({ children }: { children: React.ReactNode }) {
 								<SheetHeader className="mb-4">
 									<SheetTitle className="sr-only">Navigation</SheetTitle>
 								</SheetHeader>
-								<SidebarContent />
+								<SidebarContent
+									onOpenPalette={() => {
+										setMobileOpen(false);
+										setPaletteOpen(true);
+									}}
+								/>
 							</SheetContent>
 						</Sheet>
 					</div>
@@ -868,6 +920,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
 					</main>
 				</div>
 			</div>
+			<CommandPalette open={paletteOpen} onOpenChange={setPaletteOpen} />
 		</div>
 	);
 }
