@@ -33,13 +33,13 @@ export function DialogContent({
 			<DialogPrimitive.Content
 				className={cn(
 					"island-strong fixed left-1/2 top-1/2 z-50 grid w-[min(92vw,36rem)] -translate-x-1/2 -translate-y-1/2 gap-4 rounded-(--radius-xl) p-6",
-					"data-[state=open]:animate-scale-in data-[state=closed]:animate-fade-out transition-all duration-200",
+					"data-[state=open]:animate-scale-in data-[state=closed]:animate-fade-out transition-[transform,opacity] duration-200",
 					className,
 				)}
 				{...props}
 			>
 				{children}
-				<DialogPrimitive.Close className="absolute right-4 top-4 rounded-full p-1.5 text-(--muted-foreground) transition-all duration-150 hover:bg-white/8 hover:text-(--foreground) active:scale-95">
+				<DialogPrimitive.Close className="absolute right-4 top-4 rounded-full p-1.5 text-(--muted-foreground) transition-[background-color,color,transform] duration-150 hover:bg-white/8 hover:text-(--foreground) active:scale-95">
 					<IconX size={16} />
 				</DialogPrimitive.Close>
 			</DialogPrimitive.Content>
@@ -93,6 +93,12 @@ export function DialogDescription({
 	);
 }
 
+const SHEET_SIDE_CLASSES = {
+	left: "left-0 data-[state=open]:animate-slide-in-left data-[state=closed]:animate-slide-out-left",
+	right:
+		"right-0 data-[state=open]:animate-slide-in-right data-[state=closed]:animate-slide-out-right",
+} as const;
+
 export function SheetContent({
 	className,
 	children,
@@ -101,11 +107,7 @@ export function SheetContent({
 }: React.ComponentProps<typeof DialogPrimitive.Content> & {
 	side?: "left" | "right";
 }) {
-	const sideClasses = {
-		left: "left-0 data-[state=open]:animate-slide-in-left data-[state=closed]:animate-slide-out-left",
-		right:
-			"right-0 data-[state=open]:animate-slide-in-right data-[state=closed]:animate-slide-out-right",
-	};
+	const sideClasses = SHEET_SIDE_CLASSES;
 
 	return (
 		<DialogPortal>
@@ -114,13 +116,13 @@ export function SheetContent({
 				className={cn(
 					"island-strong fixed top-0 z-50 h-full w-[min(92vw,24rem)] gap-4 p-6",
 					sideClasses[side],
-					"transition-all duration-200",
+					"transition-[transform,opacity] duration-200",
 					className,
 				)}
 				{...props}
 			>
 				{children}
-				<DialogPrimitive.Close className="absolute right-4 top-4 rounded-full p-1.5 text-(--muted-foreground) transition-all duration-150 hover:bg-white/8 hover:text-(--foreground) active:scale-95">
+				<DialogPrimitive.Close className="absolute right-4 top-4 rounded-full p-1.5 text-(--muted-foreground) transition-[background-color,color,transform] duration-150 hover:bg-white/8 hover:text-(--foreground) active:scale-95">
 					<IconX size={16} />
 				</DialogPrimitive.Close>
 			</DialogPrimitive.Content>

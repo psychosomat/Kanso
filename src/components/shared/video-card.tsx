@@ -1,15 +1,6 @@
 import { Link, useLocation } from "@tanstack/react-router";
-import { useCallback, useRef, useState } from "react";
-import {
-	AlertDialog,
-	AlertDialogAction,
-	AlertDialogCancel,
-	AlertDialogContent,
-	AlertDialogDescription,
-	AlertDialogFooter,
-	AlertDialogHeader,
-	AlertDialogTitle,
-} from "@/components/ui/alert-dialog-impl";
+import { useCallback, useState } from "react";
+import { RemoveVideoDialog } from "@/components/shared/remove-video-dialog";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import {
@@ -29,7 +20,12 @@ import {
 	getMainScrollElement,
 	savePlayerReturnTarget,
 } from "@/lib/player-return";
-import { formatDateTime, formatDuration, formatResolution } from "@/lib/utils";
+import {
+	formatDateTime,
+	formatDuration,
+	formatResolution,
+	preventMiddleClickAutoscroll,
+} from "@/lib/utils";
 import { setDraggedVideoId } from "@/lib/video-drag";
 import IconCopy from "~icons/tabler/copy";
 import IconDots from "~icons/tabler/dots";
@@ -50,6 +46,131 @@ type Props = {
 	draggable?: boolean;
 };
 
+export function getRemoveDialogDescription(exists: boolean): string {
+	return exists
+		? "This only removes the indexed entry and category posts. The original file stays on disk."
+		: "This removes the missing entry and any category posts that still reference it.";
+}
+
+export type VideoCardMenuSurface = "dropdown" | "context";
+
+export type VideoCardMenuItemId =
+	| "categorize"
+	| "open-folder"
+	| "reveal-file"
+	| "copy-path"
+	| "remove";
+
+export type VideoCardMenuItem = {
+	id: VideoCardMenuItemId;
+	label: string;
+	destructive?: boolean;
+};
+
+export function buildVideoCardMenuItems(
+	surface: VideoCardMenuSurface,
+	options: { canRemove: boolean },
+): VideoCardMenuItem[] {
+	const items: VideoCardMenuItem[] = [
+		{ id: "categorize", label: "Categorize" },
+	];
+	if (surface === "context") {
+		items.push({ id: "open-folder", label: "Open folder" });
+	}
+	items.push({
+		id: "reveal-file",
+		label: surface === "dropdown" ? "Reveal" : "Reveal file",
+	});
+	items.push({ id: "copy-path", label: "Copy path" });
+	if (options.canRemove) {
+		items.push({
+			id: "remove",
+			label: "Remove from library",
+			destructive: true,
+		});
+	}
+	return items;
+}
+
+function VideoThumbnail({ video }: { video: VideoCardDto }) {
+	return (
+		<div className="relative aspect-video overflow-hidden rounded-(--radius-lg) bg-black ring-1 ring-white/8 transition-[box-shadow,ring-color,transform] duration-300 ease-out group-hover:shadow-[0_24px_60px_-24px_var(--accent-subtle)] group-hover:ring-(--accent)/45">
+			{video.posterUrl ? (
+				<img
+					src={video.posterUrl}
+					alt={video.fileName}
+					loading="lazy"
+					decoding="async"
+					draggable={false}
+					className="h-full w-full object-cover transition-transform duration-500 ease-out group-hover:scale-[1.03]"
+				/>
+			) : (
+				<div className="flex h-full w-full items-center justify-center bg-white/5">
+					<IconPlayerPlayFilled
+						size={28}
+						className="text-(--muted-foreground)/50"
+					/>
+				</div>
+			)}
+
+			{!video.exists && (
+				<div className="absolute left-2 top-2">
+					<Badge variant="destructive">Missing</Badge>
+				</div>
+			)}
+
+			<div className="pointer-events-none absolute inset-0 bg-linear-to-t from-black/70 via-black/0 to-transparent opacity-0 transition-opacity duration-300 group-hover:opacity-100" />
+
+			<div className="absolute inset-0 flex items-center justify-center opacity-0 transition-opacity duration-300 group-hover:opacity-100">
+				<div className="flex h-12 w-12 items-center justify-center rounded-full bg-(--accent) text-white shadow-[0_12px_36px_-8px_var(--accent)] transition-transform duration-300 group-hover:scale-100 scale-90">
+					<IconPlayerPlayFilled size={18} />
+				</div>
+			</div>
+
+			<div className="tnum font-data pointer-events-none absolute bottom-2 right-2 rounded-full bg-black/60 px-2 py-0.5 text-[10px] font-medium text-white/90 opacity-0 backdrop-blur-md transition-opacity duration-300 group-hover:opacity-100">
+				{formatDuration(video.durationSec)}
+			</div>
+		</div>
+	);
+}
+
+function VideoMeta({
+	video,
+	caption,
+}: {
+	video: VideoCardDto;
+	caption?: string | null;
+}) {
+	return (
+		<div className="min-w-0 flex-1">
+			<h3 className="line-clamp-2 text-[13px] font-medium leading-snug text-(--foreground)/90 transition-colors group-hover:text-(--foreground)">
+				{video.fileName}
+			</h3>
+			<p className="font-data mt-1 line-clamp-1 text-[10px] uppercase tracking-[0.08em] text-(--muted-foreground)/80">
+				{formatResolution(video.width, video.height)}
+				{" · "}
+				{formatDateTime(video.modifiedAt)}
+			</p>
+			{caption && (
+				<p className="mt-1 line-clamp-2 text-xs text-(--muted-foreground)">
+					{caption}
+				</p>
+			)}
+		</div>
+	);
+}
+
+const VIDEO_CARD_MENU_ICONS: Record<
+	VideoCardMenuItemId,
+	(props: { size: number }) => React.ReactNode
+> = {
+	categorize: (props) => <IconFolder {...props} />,
+	"open-folder": (props) => <IconFolderSearch {...props} />,
+	"reveal-file": (props) => <IconFolderSearch {...props} />,
+	"copy-path": (props) => <IconCopy {...props} />,
+	remove: (props) => <IconTrash {...props} />,
+};
+
 export function VideoCard({
 	video,
 	onAssign,
@@ -58,7 +179,6 @@ export function VideoCard({
 	caption,
 	draggable = true,
 }: Props) {
-	const cardRef = useRef<HTMLAnchorElement>(null);
 	const location = useLocation();
 	const [removeDialogOpen, setRemoveDialogOpen] = useState(false);
 	const [removing, setRemoving] = useState(false);
@@ -71,9 +191,7 @@ export function VideoCard({
 	}, [location.pathname]);
 
 	const handleMouseDown = useCallback((e: React.MouseEvent) => {
-		if (e.button === 1) {
-			e.preventDefault();
-		}
+		preventMiddleClickAutoscroll(e);
 	}, []);
 
 	const handleDragStart = useCallback(
@@ -82,6 +200,26 @@ export function VideoCard({
 		},
 		[video.id],
 	);
+
+	const dispatchMenuAction = useCallback(
+		(id: VideoCardMenuItemId) => {
+			if (id === "categorize") {
+				onAssign(video.id);
+			} else if (id === "remove") {
+				setRemoveDialogOpen(true);
+			} else {
+				onAction(video.id, id);
+			}
+		},
+		[onAction, onAssign, video.id],
+	);
+
+	const dropdownItems = buildVideoCardMenuItems("dropdown", {
+		canRemove: onRemove !== undefined,
+	});
+	const contextMenuItems = buildVideoCardMenuItems("context", {
+		canRemove: onRemove !== undefined,
+	});
 
 	async function handleRemove() {
 		if (!onRemove) return;
@@ -99,7 +237,6 @@ export function VideoCard({
 			<ContextMenu>
 				<ContextMenuTrigger asChild>
 					<Link
-						ref={cardRef}
 						to="/player/$videoId"
 						params={{ videoId: video.id }}
 						onClickCapture={onOpenPlayer}
@@ -109,60 +246,10 @@ export function VideoCard({
 						draggable={draggable}
 						className="group block cursor-grab active:cursor-grabbing"
 					>
-						<div className="relative aspect-video overflow-hidden rounded-(--radius-lg) bg-black ring-1 ring-white/8 transition-[box-shadow,ring-color,transform] duration-300 ease-out group-hover:shadow-[0_24px_60px_-24px_var(--accent-subtle)] group-hover:ring-(--accent)/45">
-							{video.posterUrl ? (
-								<img
-									src={video.posterUrl}
-									alt={video.fileName}
-									loading="lazy"
-									decoding="async"
-									draggable={false}
-									className="h-full w-full object-cover transition-transform duration-500 ease-out group-hover:scale-[1.03]"
-								/>
-							) : (
-								<div className="flex h-full w-full items-center justify-center bg-white/5">
-									<IconPlayerPlayFilled
-										size={28}
-										className="text-(--muted-foreground)/50"
-									/>
-								</div>
-							)}
-
-							{!video.exists && (
-								<div className="absolute left-2 top-2">
-									<Badge variant="destructive">Missing</Badge>
-								</div>
-							)}
-
-							<div className="pointer-events-none absolute inset-0 bg-linear-to-t from-black/70 via-black/0 to-transparent opacity-0 transition-opacity duration-300 group-hover:opacity-100" />
-
-							<div className="absolute inset-0 flex items-center justify-center opacity-0 transition-all duration-300 group-hover:opacity-100">
-								<div className="flex h-12 w-12 items-center justify-center rounded-full bg-(--accent) text-white shadow-[0_12px_36px_-8px_var(--accent)] transition-transform duration-300 group-hover:scale-100 scale-90">
-									<IconPlayerPlayFilled size={18} />
-								</div>
-							</div>
-
-							<div className="tnum font-data pointer-events-none absolute bottom-2 right-2 rounded-full bg-black/60 px-2 py-0.5 text-[10px] font-medium text-white/90 opacity-0 backdrop-blur-md transition-opacity duration-300 group-hover:opacity-100">
-								{formatDuration(video.durationSec)}
-							</div>
-						</div>
+						<VideoThumbnail video={video} />
 
 						<div className="mt-2 flex items-start gap-2 px-0.5">
-							<div className="min-w-0 flex-1">
-								<h3 className="line-clamp-2 text-[13px] font-medium leading-snug text-(--foreground)/90 transition-colors group-hover:text-(--foreground)">
-									{video.fileName}
-								</h3>
-								<p className="font-data mt-1 line-clamp-1 text-[10px] uppercase tracking-[0.08em] text-(--muted-foreground)/80">
-									{formatResolution(video.width, video.height)}
-									{" · "}
-									{formatDateTime(video.modifiedAt)}
-								</p>
-								{caption && (
-									<p className="mt-1 line-clamp-2 text-xs text-(--muted-foreground)">
-										{caption}
-									</p>
-								)}
-							</div>
+							<VideoMeta video={video} caption={caption} />
 
 							<DropdownMenu>
 								<DropdownMenuTrigger asChild>
@@ -176,102 +263,55 @@ export function VideoCard({
 									</Button>
 								</DropdownMenuTrigger>
 								<DropdownMenuContent align="end">
-									<DropdownMenuItem
-										onClick={(e) => {
-											e.stopPropagation();
-											onAssign(video.id);
-										}}
-									>
-										<IconFolder size={16} />
-										Categorize
-									</DropdownMenuItem>
-									<DropdownMenuItem
-										onClick={(e) => {
-											e.stopPropagation();
-											onAction(video.id, "reveal-file");
-										}}
-									>
-										<IconFolderSearch size={16} />
-										Reveal
-									</DropdownMenuItem>
-									<DropdownMenuItem
-										onClick={(e) => {
-											e.stopPropagation();
-											onAction(video.id, "copy-path");
-										}}
-									>
-										<IconCopy size={16} />
-										Copy path
-									</DropdownMenuItem>
-									{onRemove ? (
-										<DropdownMenuItem
-											onClick={(e) => {
-												e.stopPropagation();
-												setRemoveDialogOpen(true);
-											}}
-											className="text-(--destructive)"
-										>
-											<IconTrash size={16} />
-											Remove from library
-										</DropdownMenuItem>
-									) : null}
+									{dropdownItems.map((item) => {
+										const MenuIcon = VIDEO_CARD_MENU_ICONS[item.id];
+										return (
+											<DropdownMenuItem
+												key={item.id}
+												onClick={(e) => {
+													e.stopPropagation();
+													dispatchMenuAction(item.id);
+												}}
+												className={
+													item.destructive ? "text-(--destructive)" : undefined
+												}
+											>
+												<MenuIcon size={16} />
+												{item.label}
+											</DropdownMenuItem>
+										);
+									})}
 								</DropdownMenuContent>
 							</DropdownMenu>
 						</div>
 					</Link>
 				</ContextMenuTrigger>
 				<ContextMenuContent>
-					<ContextMenuItem onSelect={() => onAssign(video.id)}>
-						<IconFolder size={16} />
-						Categorize
-					</ContextMenuItem>
-					<ContextMenuItem onSelect={() => onAction(video.id, "open-folder")}>
-						<IconFolderSearch size={16} />
-						Open folder
-					</ContextMenuItem>
-					<ContextMenuItem onSelect={() => onAction(video.id, "reveal-file")}>
-						<IconFolderSearch size={16} />
-						Reveal file
-					</ContextMenuItem>
-					<ContextMenuItem onSelect={() => onAction(video.id, "copy-path")}>
-						<IconCopy size={16} />
-						Copy path
-					</ContextMenuItem>
-					{onRemove ? (
-						<ContextMenuItem
-							onSelect={() => setRemoveDialogOpen(true)}
-							className="text-(--destructive)"
-						>
-							<IconTrash size={16} />
-							Remove from library
-						</ContextMenuItem>
-					) : null}
+					{contextMenuItems.map((item) => {
+						const MenuIcon = VIDEO_CARD_MENU_ICONS[item.id];
+						return (
+							<ContextMenuItem
+								key={item.id}
+								onSelect={() => dispatchMenuAction(item.id)}
+								className={
+									item.destructive ? "text-(--destructive)" : undefined
+								}
+							>
+								<MenuIcon size={16} />
+								{item.label}
+							</ContextMenuItem>
+						);
+					})}
 				</ContextMenuContent>
 			</ContextMenu>
 
-			<AlertDialog open={removeDialogOpen} onOpenChange={setRemoveDialogOpen}>
-				<AlertDialogContent>
-					<AlertDialogHeader>
-						<AlertDialogTitle>
-							Remove this video from the library?
-						</AlertDialogTitle>
-						<AlertDialogDescription>
-							{video.exists
-								? "This only removes the indexed entry and category posts. The original file stays on disk."
-								: "This removes the missing entry and any category posts that still reference it."}
-						</AlertDialogDescription>
-					</AlertDialogHeader>
-					<AlertDialogFooter>
-						<AlertDialogCancel disabled={removing}>Cancel</AlertDialogCancel>
-						<AlertDialogAction
-							onClick={() => void handleRemove()}
-							disabled={removing}
-						>
-							{removing ? "Removing…" : "Remove"}
-						</AlertDialogAction>
-					</AlertDialogFooter>
-				</AlertDialogContent>
-			</AlertDialog>
+			<RemoveVideoDialog
+				open={removeDialogOpen}
+				onOpenChange={setRemoveDialogOpen}
+				removing={removing}
+				onConfirm={() => void handleRemove()}
+				description={getRemoveDialogDescription(video.exists)}
+			/>
 		</>
 	);
 }

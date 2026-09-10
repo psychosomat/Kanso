@@ -19,7 +19,7 @@ on:
     types: [published]
 
 permissions:
-  contents: write
+  contents: read
 
 concurrency:
   group: release-${{ github.event.release.tag_name }}
@@ -27,7 +27,6 @@ concurrency:
 
 env:
   BUN_VERSION: 'latest'
-  GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
 jobs:
   resolve:
@@ -302,6 +301,10 @@ jobs:
       - build-macos
     runs-on: ubuntu-latest
     timeout-minutes: 10
+    permissions:
+      contents: write
+    env:
+      GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
     steps:
       - name: Download all artifacts
         uses: actions/download-artifact@v4

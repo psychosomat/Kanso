@@ -4,7 +4,12 @@ import { CategoryIcon } from "@/lib/category-icons";
 import { buildCategoryTree, type CategoryTreeNode } from "@/lib/category-tree";
 import type { CategoryDto } from "@/lib/contracts";
 import { getPlayerApi } from "@/lib/player-api";
-import { cn, paletteShortcutLabel, resolveTitlebarMode } from "@/lib/utils";
+import {
+	cn,
+	paletteShortcutLabel,
+	preventMiddleClickAutoscroll,
+	resolveTitlebarMode,
+} from "@/lib/utils";
 import { getDraggedVideoId, hasDraggedVideo } from "@/lib/video-drag";
 import IconChevronDown from "~icons/tabler/chevron-down";
 import IconChevronLeft from "~icons/tabler/chevron-left";
@@ -48,6 +53,53 @@ function initNoise() {
 	}
 }
 
+export function loadSidebarPinned(): boolean {
+	return localStorage.getItem(SIDEBAR_PINNED_KEY) === "1";
+}
+
+export function storeSidebarPinned(next: boolean) {
+	localStorage.setItem(SIDEBAR_PINNED_KEY, next ? "1" : "0");
+}
+
+export function isPlayerPath(pathname: string): boolean {
+	return pathname.startsWith("/player/");
+}
+
+export function resolveSidebarLayout({
+	inPlayer,
+	pinned,
+}: {
+	inPlayer: boolean;
+	pinned: boolean;
+}) {
+	return {
+		showOverlaySidebar: !inPlayer && !pinned,
+		showPinnedSidebar: !inPlayer && pinned,
+	};
+}
+
+export function isTypingTarget(target: EventTarget | null): boolean {
+	return (
+		target instanceof HTMLElement &&
+		(target.isContentEditable ||
+			["INPUT", "TEXTAREA", "SELECT"].includes(target.tagName))
+	);
+}
+
+export type AppShellShortcut = "palette" | "pin";
+
+export function getAppShellShortcut(
+	e: { metaKey: boolean; ctrlKey: boolean; key: string },
+	typing: boolean,
+): AppShellShortcut | null {
+	if (typing) return null;
+	if (!(e.metaKey || e.ctrlKey)) return null;
+	const key = e.key.toLowerCase();
+	if (key === "p") return "palette";
+	if (key === "s") return "pin";
+	return null;
+}
+
 function ActiveBar({ active }: { active: boolean }) {
 	return (
 		<span
@@ -73,16 +125,10 @@ function NavItem({
 	active: boolean;
 	count?: number;
 }) {
-	const handleMouseDown = (e: React.MouseEvent) => {
-		if (e.button === 1) {
-			e.preventDefault();
-		}
-	};
-
 	return (
 		<Link
 			to={to}
-			onMouseDown={handleMouseDown}
+			onMouseDown={preventMiddleClickAutoscroll}
 			className={cn(
 				"group relative flex h-8 items-center gap-2.5 rounded-(--radius) px-2.5 text-[13px] transition-colors duration-150",
 				active
@@ -136,19 +182,14 @@ function SidebarContent({ onOpenPalette }: { onOpenPalette: () => void }) {
 	}
 
 	function toggleCategoryCollapsed(categoryId: string) {
-		setCollapsedCategoryIds((prev) => {
-			const next = new Set(prev);
-			if (next.has(categoryId)) {
-				next.delete(categoryId);
-			} else {
-				next.add(categoryId);
-			}
-			sessionStorage.setItem(
-				COLLAPSED_CATEGORIES_KEY,
-				JSON.stringify([...next]),
-			);
-			return next;
-		});
+		const next = new Set(collapsedCategoryIds);
+		if (next.has(categoryId)) {
+			next.delete(categoryId);
+		} else {
+			next.add(categoryId);
+		}
+		sessionStorage.setItem(COLLAPSED_CATEGORIES_KEY, JSON.stringify([...next]));
+		setCollapsedCategoryIds(next);
 	}
 
 	function isCategoryCollapsed(categoryId: string) {
@@ -349,7 +390,7 @@ function SidebarContent({ onOpenPalette }: { onOpenPalette: () => void }) {
 					<div className="px-2.5 pb-2">
 						<div className="h-0.5 w-full overflow-hidden rounded-full bg-white/8">
 							<div
-								className="h-full rounded-full bg-(--accent) transition-all duration-300 ease-out"
+								className="h-full rounded-full bg-(--accent) transition-[width] duration-300 ease-out"
 								style={{
 									width: `${scanStatus.totalFiles > 0 ? (scanStatus.scannedFiles / scanStatus.totalFiles) * 100 : 0}%`,
 								}}
@@ -405,12 +446,6 @@ function CategoryTreeItem({
 }) {
 	const [dragOver, setDragOver] = useState(false);
 	const [dropping, setDropping] = useState(false);
-
-	const handleMouseDown = (e: React.MouseEvent) => {
-		if (e.button === 1) {
-			e.preventDefault();
-		}
-	};
 
 	function handleDragOver(e: React.DragEvent<HTMLDivElement>) {
 		if (!hasDraggedVideo(e.dataTransfer)) {
@@ -479,7 +514,7 @@ function CategoryTreeItem({
 						<Link
 							to="/categories/$categorySlug"
 							params={{ categorySlug: category.slug }}
-							onMouseDown={handleMouseDown}
+							onMouseDown={preventMiddleClickAutoscroll}
 							className="flex min-w-0 flex-1 items-center gap-2"
 						>
 							<CategoryIcon name={category.icon} size={14} />
@@ -492,6 +527,10 @@ function CategoryTreeItem({
 							{hasChildren && (
 								<button
 									type="button"
+									aria-label={
+										collapsed ? "Expand category" : "Collapse category"
+									}
+									title={collapsed ? "Expand" : "Collapse"}
 									onClick={(e) => {
 										e.stopPropagation();
 										onToggleCollapsed(category.id);
@@ -590,43 +629,32 @@ export function AppShell({ children }: { children: React.ReactNode }) {
 	const { preferences } = useAppState();
 	const [mobileOpen, setMobileOpen] = useState(false);
 	const [paletteOpen, setPaletteOpen] = useState(false);
-	const [pinned, setPinned] = useState(
-		() => localStorage.getItem(SIDEBAR_PINNED_KEY) === "1",
-	);
+	const [pinned, setPinned] = useState(loadSidebarPinned);
 	const [hovered, setHovered] = useState(false);
 
-	const inPlayer = location.pathname.startsWith("/player/");
-	const sidebarVisible = !inPlayer && (pinned || hovered);
+	const inPlayer = isPlayerPath(location.pathname);
+	const { showOverlaySidebar, showPinnedSidebar } = resolveSidebarLayout({
+		inPlayer,
+		pinned,
+	});
 
 	const togglePinned = useCallback(() => {
-		setPinned((prev) => {
-			const next = !prev;
-			localStorage.setItem(SIDEBAR_PINNED_KEY, next ? "1" : "0");
-			if (!next) setHovered(false);
-			return next;
-		});
-	}, []);
+		const next = !pinned;
+		setPinned(next);
+		storeSidebarPinned(next);
+		if (!next) setHovered(false);
+	}, [pinned]);
 
 	useEffect(() => {
 		const onKeyDown = (e: KeyboardEvent) => {
-			const target = e.target;
-			const typing =
-				target instanceof HTMLElement &&
-				(target.isContentEditable ||
-					["INPUT", "TEXTAREA", "SELECT"].includes(target.tagName));
-
-			if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === "p") {
-				if (typing) return;
-				e.preventDefault();
+			const action = getAppShellShortcut(e, isTypingTarget(e.target));
+			if (!action) return;
+			e.preventDefault();
+			if (action === "palette") {
 				setPaletteOpen((open) => !open);
 				return;
 			}
-
-			if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === "s") {
-				if (typing) return;
-				e.preventDefault();
-				togglePinned();
-			}
+			togglePinned();
 		};
 		window.addEventListener("keydown", onKeyDown);
 		return () => window.removeEventListener("keydown", onKeyDown);
@@ -657,7 +685,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
 			/>
 
 			{/* Overlay sidebar: reveals on hover, floats above the content. */}
-			{!inPlayer && !pinned && (
+			{showOverlaySidebar && (
 				<>
 					<div
 						className="group fixed inset-y-0 left-0 z-30 hidden w-3 lg:block"
@@ -666,7 +694,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
 						role="presentation"
 						aria-hidden="true"
 					>
-						<span className="absolute left-0 top-1/2 h-16 w-[3px] -translate-y-1/2 rounded-r-full bg-(--accent) opacity-30 transition-all duration-200 group-hover:h-24 group-hover:w-1 group-hover:opacity-80" />
+						<span className="absolute left-0 top-1/2 h-16 w-[3px] -translate-y-1/2 rounded-r-full bg-(--accent) opacity-30 transition-[height,width,opacity] duration-200 group-hover:h-24 group-hover:w-1 group-hover:opacity-80" />
 					</div>
 					<aside
 						inert={!hovered}
@@ -689,7 +717,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
 			)}
 
 			{/* Pinned sidebar: part of the layout, content reflows around it. */}
-			{sidebarVisible && pinned && (
+			{showPinnedSidebar && (
 				<aside className="relative hidden h-full w-[264px] shrink-0 flex-col border-r border-(--border) bg-(--panel) backdrop-blur-2xl lg:flex">
 					<SidebarPanel
 						pinned

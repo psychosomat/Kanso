@@ -42,6 +42,13 @@ function feedSortStorageKey(slug: string) {
 	return `kanso:feed-sort:${slug}`;
 }
 
+async function runVideoAction(
+	videoId: string,
+	action: "open-folder" | "reveal-file" | "copy-path",
+) {
+	await getPlayerApi().library.runVideoAction(videoId, action);
+}
+
 function readStoredSort(slug: string): CategoryFeedSort {
 	try {
 		const value = localStorage.getItem(feedSortStorageKey(slug));
@@ -120,13 +127,6 @@ function CategoryFeedPage() {
 			categories: payload,
 		});
 		await refreshAll();
-	}
-
-	async function runAction(
-		videoId: string,
-		action: "open-folder" | "reveal-file" | "copy-path",
-	) {
-		await getPlayerApi().library.runVideoAction(videoId, action);
 	}
 
 	async function removeVideo(videoId: string) {
@@ -272,7 +272,7 @@ function CategoryFeedPage() {
 										draggable={sort !== "manual"}
 										onAssign={(videoId) => void openAssign(videoId)}
 										onAction={(videoId, action) =>
-											void runAction(videoId, action)
+											void runVideoAction(videoId, action)
 										}
 										onRemove={(videoId) => removeVideo(videoId)}
 									/>

@@ -37,6 +37,13 @@ export const Route = createFileRoute("/dump")({
 	component: DumpPage,
 });
 
+async function runVideoAction(
+	videoId: string,
+	action: "open-folder" | "reveal-file" | "copy-path",
+) {
+	await getPlayerApi().library.runVideoAction(videoId, action);
+}
+
 function DumpPage() {
 	const { library, categories, refreshAll } = useAppState();
 	const [data, setData] = useState<PaginatedVideosDto | null>(null);
@@ -145,13 +152,6 @@ function DumpPage() {
 		setSelectedVideo(updated);
 	}
 
-	async function runAction(
-		videoId: string,
-		action: "open-folder" | "reveal-file" | "copy-path",
-	) {
-		await getPlayerApi().library.runVideoAction(videoId, action);
-	}
-
 	async function removeVideo(videoId: string) {
 		await getPlayerApi().library.removeVideo(videoId);
 		setAssignOpen(false);
@@ -257,7 +257,7 @@ function DumpPage() {
 									video={video}
 									onAssign={(videoId) => void openAssign(videoId)}
 									onAction={(videoId, action) =>
-										void runAction(videoId, action)
+										void runVideoAction(videoId, action)
 									}
 									onRemove={(videoId) => removeVideo(videoId)}
 								/>

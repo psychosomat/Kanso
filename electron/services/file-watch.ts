@@ -34,9 +34,9 @@ export class FileWatchService {
 			return;
 		}
 
-		for (const watcher of this.watchers.values()) {
-			await watcher.close();
-		}
+		await Promise.all(
+			[...this.watchers.values()].map((watcher) => watcher.close()),
+		);
 		this.watchers.clear();
 	}
 }

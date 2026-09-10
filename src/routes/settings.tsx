@@ -18,13 +18,24 @@ import { useScrollRestore } from "@/hooks/use-scroll-restore";
 import { APP_NAME } from "@/lib/constants";
 import type { TitlebarMode } from "@/lib/contracts";
 import {
-	clampEqGain,
-	EQ_BANDS,
-	EQ_GAIN_MAX,
-	EQ_GAIN_MIN,
-	normalizeEqGains,
-} from "@/lib/equalizer";
+	bandX,
+	buildEqAreaPath,
+	buildEqPath,
+	EQ_GRAPH_HEIGHT,
+	EQ_GRAPH_MARGIN,
+	EQ_GRAPH_WIDTH,
+	gainToY as eqGainToY,
+	yToGain as eqYToGain,
+} from "@/lib/eq-graph";
+import { clampEqGain, EQ_BANDS, normalizeEqGains } from "@/lib/equalizer";
 import { getPlayerApi } from "@/lib/player-api";
+import {
+	applyAccentColor,
+	applyNoiseOpacity,
+	DEFAULT_ACCENT,
+	getAccentColor,
+	getNoiseOpacity,
+} from "@/lib/settings-appearance";
 import { formatDateTime } from "@/lib/utils";
 import IconBrandGithub from "~icons/tabler/brand-github";
 import IconDatabase from "~icons/tabler/database";
@@ -39,51 +50,7 @@ import IconPlayerPlay from "~icons/tabler/player-play";
 import IconRefresh from "~icons/tabler/refresh";
 import IconTrash from "~icons/tabler/trash";
 
-const NOISE_STORAGE_KEY = "player:noiseOpacity";
-const ACCENT_STORAGE_KEY = "player:accentColor";
-const DEFAULT_ACCENT = "#f76f53";
-const LEGACY_ACCENTS = new Set(["#c8883a", "#d6be8c", "#2f9bff", "#ff5a36"]);
 const GITHUB_URL = "https://github.com/psychosomat/Kanso";
-
-function getNoiseOpacity(): number {
-	if (typeof window === "undefined") {
-		return 0.09;
-	}
-
-	const stored = window.localStorage.getItem(NOISE_STORAGE_KEY);
-	return stored !== null ? Number(stored) : 0.09;
-}
-
-function applyNoiseOpacity(value: number) {
-	if (typeof window === "undefined") {
-		return;
-	}
-
-	document.documentElement.style.setProperty("--noise-opacity", String(value));
-	window.localStorage.setItem(NOISE_STORAGE_KEY, String(value));
-}
-
-function getAccentColor(): string {
-	if (typeof window === "undefined") {
-		return DEFAULT_ACCENT;
-	}
-
-	const stored = window.localStorage.getItem(ACCENT_STORAGE_KEY);
-	if (stored === null || LEGACY_ACCENTS.has(stored.toLowerCase())) {
-		window.localStorage.setItem(ACCENT_STORAGE_KEY, DEFAULT_ACCENT);
-		return DEFAULT_ACCENT;
-	}
-	return stored;
-}
-
-function applyAccentColor(value: string) {
-	if (typeof window === "undefined") {
-		return;
-	}
-
-	document.documentElement.style.setProperty("--accent", value);
-	window.localStorage.setItem(ACCENT_STORAGE_KEY, value);
-}
 
 export const Route = createFileRoute("/settings")({
 	component: SettingsPage,
@@ -103,7 +70,7 @@ function SettingsPage() {
 	const [noiseOpacity, setNoiseOpacity] = useState<number>(0.09);
 	const [accentColor, setAccentColor] = useState<string>(DEFAULT_ACCENT);
 	const [eqEnabled, setEqEnabled] = useState(false);
-	const [eqGains, setEqGains] = useState<number[]>(normalizeEqGains());
+	const [eqGains, setEqGains] = useState<number[]>(() => normalizeEqGains());
 
 	useEffect(() => {
 		setNoiseOpacity(getNoiseOpacity());
@@ -157,85 +124,66 @@ function SettingsPage() {
 		setEqEnabled(false);
 	}, [savePreferences]);
 
-	const eqGraphWidth = 720;
-	const eqGraphHeight = 260;
-	const eqMargin = 28;
+	const eqGraphWidth = EQ_GRAPH_WIDTH;
+	const eqGraphHeight = EQ_GRAPH_HEIGHT;
+	const eqMargin = EQ_GRAPH_MARGIN;
 	const bandPoints = useMemo(
 		() =>
-			EQ_BANDS.map((band, index) => {
-				const x =
-					eqMargin +
-					(index / Math.max(1, EQ_BANDS.length - 1)) *
-						(eqGraphWidth - eqMargin * 2);
-				return { ...band, x };
-			}),
+			EQ_BANDS.map((band, index) => ({
+				...band,
+				x: bandX(index, EQ_BANDS.length, eqGraphWidth, eqMargin),
+			})),
 		[],
 	);
 
-	const gainToY = useCallback((value: number) => {
-		const clamped = clampEqGain(value);
-		const ratio = (EQ_GAIN_MAX - clamped) / (EQ_GAIN_MAX - EQ_GAIN_MIN);
-		return eqMargin + ratio * (eqGraphHeight - eqMargin * 2);
-	}, []);
+	const gainToY = useCallback(
+		(value: number) => eqGainToY(value, eqGraphHeight, eqMargin),
+		[],
+	);
 
-	const yToGain = useCallback((y: number) => {
-		const ratio = Math.max(
-			0,
-			Math.min(1, (y - eqMargin) / (eqGraphHeight - eqMargin * 2)),
-		);
-		const gain = EQ_GAIN_MAX - ratio * (EQ_GAIN_MAX - EQ_GAIN_MIN);
-		return clampEqGain(gain);
-	}, []);
+	const yToGain = useCallback(
+		(y: number) => eqYToGain(y, eqGraphHeight, eqMargin),
+		[],
+	);
 
 	const eqPath = useMemo(() => {
 		const points = bandPoints.map((band, index) => ({
 			x: band.x,
 			y: gainToY(eqGains[index] ?? 0),
 		}));
-		if (!points.length) return "";
-		let d = `M ${points[0]?.x ?? 0} ${points[0]?.y ?? 0}`;
-		for (let i = 1; i < points.length; i += 1) {
-			const prev = points[i - 1];
-			const current = points[i];
-			const midX = (prev.x + current.x) / 2;
-			const midY = (prev.y + current.y) / 2;
-			d += ` Q ${prev.x} ${prev.y} ${midX} ${midY}`;
-		}
-		d += ` T ${points.at(-1)?.x ?? 0} ${points.at(-1)?.y ?? 0}`;
-		return d;
+		return buildEqPath(points);
 	}, [bandPoints, eqGains, gainToY]);
 
-	const eqAreaPath = useMemo(() => {
-		if (!eqPath) return "";
-		const bottomY = eqGraphHeight - eqMargin;
-		const lastX = bandPoints.at(-1)?.x ?? eqMargin;
-		return `${eqPath} L ${lastX} ${bottomY} L ${bandPoints[0]?.x ?? eqMargin} ${bottomY} Z`;
-	}, [bandPoints, eqPath]);
+	const eqAreaPath = useMemo(
+		() => buildEqAreaPath(eqPath, bandPoints, EQ_GRAPH_HEIGHT, EQ_GRAPH_MARGIN),
+		[bandPoints, eqPath],
+	);
 
-	const [dragIndex, setDragIndex] = useState<number | null>(null);
+	const dragIndexRef = useRef<number | null>(null);
 	const svgRef = useRef<SVGSVGElement>(null);
 
 	const handleGraphPointerMove = useCallback(
 		(event: React.PointerEvent<SVGSVGElement>) => {
+			const dragIndex = dragIndexRef.current;
 			if (dragIndex === null || !eqEnabled || !svgRef.current) return;
 			const rect = svgRef.current.getBoundingClientRect();
 			const relativeY = event.clientY - rect.top;
 			const nextGain = yToGain(relativeY);
 			handleEqBandChange(dragIndex, nextGain);
 		},
-		[dragIndex, eqEnabled, handleEqBandChange, yToGain],
+		[eqEnabled, handleEqBandChange, yToGain],
 	);
 
 	const handleHandleDown = useCallback(
 		(index: number) => {
 			if (!eqEnabled) return;
-			setDragIndex(index);
+			dragIndexRef.current = index;
 		},
 		[eqEnabled],
 	);
 
 	const stopDrag = useCallback((_event: React.PointerEvent<SVGSVGElement>) => {
-		setDragIndex(null);
+		dragIndexRef.current = null;
 	}, []);
 
 	function handleTitlebarModeChange(value: string) {
@@ -426,7 +374,7 @@ function SettingsPage() {
 								</div>
 								<div className="mt-1.5 h-0.5 w-full overflow-hidden rounded-full bg-(--panel-strong)">
 									<div
-										className="h-full rounded-full bg-(--accent) transition-all duration-300"
+										className="h-full rounded-full bg-(--accent) transition-[width] duration-300"
 										style={{ width: `${scanProgress}%` }}
 									/>
 								</div>
@@ -466,6 +414,7 @@ function SettingsPage() {
 								<div className="flex items-center gap-2">
 									<input
 										type="color"
+										aria-label="Accent color"
 										value={accentColor}
 										onChange={(e) => handleAccentChange(e.target.value)}
 										className="h-8 w-14 cursor-pointer rounded border border-(--border) bg-transparent"
@@ -523,6 +472,7 @@ function SettingsPage() {
 							</div>
 							<input
 								type="range"
+								aria-label="Noise texture intensity"
 								min={0}
 								max={0.25}
 								step={0.005}
@@ -651,7 +601,7 @@ function SettingsPage() {
 									<path
 										d={eqAreaPath}
 										fill="url(#eqGradient)"
-										className="transition-all duration-100 ease-out"
+										className="transition-opacity duration-100 ease-out"
 									/>
 								)}
 
@@ -661,7 +611,7 @@ function SettingsPage() {
 										fill="none"
 										stroke="var(--accent)"
 										strokeWidth={2.5}
-										className="transition-all duration-100 ease-out"
+										className="transition-opacity duration-100 ease-out"
 									/>
 								)}
 
@@ -711,7 +661,7 @@ function SettingsPage() {
 												fill={eqEnabled ? "var(--accent)" : "var(--border)"}
 												className={
 													eqEnabled
-														? "pointer-events-none transition-all duration-150"
+														? "pointer-events-none transition-colors duration-150"
 														: "pointer-events-none"
 												}
 											/>

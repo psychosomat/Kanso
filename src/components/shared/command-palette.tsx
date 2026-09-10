@@ -131,13 +131,10 @@ export function CommandPalette({
 		return [...boards, ...videoEntries, ...actions];
 	}, [categories, videos, query]);
 
-	const entriesKey = entries.map((e) => `${e.kind}:${e.id}`).join("|");
-	const prevEntriesKey = useRef(entriesKey);
-
-	if (prevEntriesKey.current !== entriesKey) {
-		prevEntriesKey.current = entriesKey;
+	// biome-ignore lint/correctness/useExhaustiveDependencies: reset selection whenever the result list identity changes
+	useEffect(() => {
 		setActiveIndex(0);
-	}
+	}, [entries]);
 
 	const runEntry = useCallback(
 		(entry: Entry) => {
@@ -163,6 +160,16 @@ export function CommandPalette({
 		[onOpenChange, router],
 	);
 
+	const entriesRef = useRef(entries);
+	const activeIndexRef = useRef(activeIndex);
+	const runEntryRef = useRef(runEntry);
+
+	useEffect(() => {
+		entriesRef.current = entries;
+		activeIndexRef.current = activeIndex;
+		runEntryRef.current = runEntry;
+	});
+
 	useEffect(() => {
 		if (!open) return;
 		const onKeyDown = (e: KeyboardEvent) => {
@@ -170,18 +177,18 @@ export function CommandPalette({
 				onOpenChange(false);
 			} else if (e.key === "ArrowDown") {
 				e.preventDefault();
-				setActiveIndex((i) => Math.min(i + 1, entries.length - 1));
+				setActiveIndex((i) => Math.min(i + 1, entriesRef.current.length - 1));
 			} else if (e.key === "ArrowUp") {
 				e.preventDefault();
 				setActiveIndex((i) => Math.max(i - 1, 0));
 			} else if (e.key === "Enter") {
-				const entry = entries[activeIndex];
-				if (entry) runEntry(entry);
+				const entry = entriesRef.current[activeIndexRef.current];
+				if (entry) runEntryRef.current(entry);
 			}
 		};
 		window.addEventListener("keydown", onKeyDown);
 		return () => window.removeEventListener("keydown", onKeyDown);
-	}, [open, entries, activeIndex, runEntry, onOpenChange]);
+	}, [open, onOpenChange]);
 
 	useEffect(() => {
 		listRef.current
@@ -217,6 +224,7 @@ export function CommandPalette({
 							value={query}
 							onChange={(e) => setQuery(e.target.value)}
 							placeholder="Jump to a board, video, or action…"
+							aria-label="Jump to a board, video, or action"
 							className="h-8 w-full bg-transparent text-[15px] text-(--foreground) outline-none placeholder:text-(--muted-foreground)/60"
 						/>
 						<kbd className="font-data shrink-0 rounded-md border border-white/10 bg-white/5 px-1.5 py-0.5 text-[10px] whitespace-nowrap text-(--muted-foreground)">

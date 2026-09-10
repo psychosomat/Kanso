@@ -15,8 +15,16 @@ import {
 } from "electron";
 import { SUPPORTED_VIDEO_EXTENSIONS } from "../src/lib/constants";
 import { registerIpc } from "./ipc/register-ipc";
+import {
+	getMimeType,
+	parseRangeHeader,
+	shouldServeStaticAsset,
+} from "./lib/http-utils";
 import { DatabaseService } from "./services/db";
-import { LibraryIndexerService } from "./services/library-indexer";
+import {
+	LibraryIndexerService,
+	selectWatchPaths,
+} from "./services/library-indexer";
 import { PosterCacheService } from "./services/poster-cache";
 import { TransmuxerService } from "./services/transmuxer";
 
@@ -163,6 +171,130 @@ function collectOpenPathsFromArgv(argv: string[]) {
 		.filter((value): value is string => value !== null);
 }
 
+function resolveProdRequestPath(
+	request: http.IncomingMessage,
+	clientRoot: string,
+) {
+	const requestUrl = new URL(
+		request.url ?? "/",
+		`http://${request.headers.host ?? "127.0.0.1"}`,
+	);
+	const relativePath = decodeURIComponent(requestUrl.pathname).replace(
+		/^\/+/,
+		"",
+	);
+	return { relativePath, staticPath: path.join(clientRoot, relativePath) };
+}
+
+function pipeAssetResponse(
+	response: http.ServerResponse,
+	assetResponse: Response,
+	method: string | undefined,
+) {
+	response.statusCode = assetResponse.status;
+	response.statusMessage = assetResponse.statusText;
+	assetResponse.headers.forEach((value, key) => {
+		response.setHeader(key, value);
+	});
+
+	if (method === "HEAD" || !assetResponse.body) {
+		response.end();
+		return;
+	}
+
+	Readable.fromWeb(toNodeReadableStream(assetResponse.body)).pipe(response);
+}
+
+function serveStaticAssetIfPresent(
+	request: http.IncomingMessage,
+	response: http.ServerResponse,
+	relativePath: string,
+	staticPath: string,
+	clientRoot: string,
+) {
+	if (
+		!shouldServeStaticAsset(
+			request.method,
+			relativePath,
+			staticPath,
+			clientRoot,
+			existsSync(staticPath),
+		)
+	) {
+		return false;
+	}
+
+	const staticResponse = createStaticAssetResponse(staticPath);
+	if (!staticResponse) {
+		return false;
+	}
+
+	pipeAssetResponse(response, staticResponse, request.method);
+	return true;
+}
+
+function serveIndexFallback(
+	request: http.IncomingMessage,
+	response: http.ServerResponse,
+	clientRoot: string,
+) {
+	if (request.method !== "GET") {
+		return false;
+	}
+
+	const indexPath = path.join(clientRoot, "index.html");
+	if (!existsSync(indexPath)) {
+		return false;
+	}
+
+	const indexResponse = createStaticAssetResponse(indexPath);
+	if (!indexResponse) {
+		return false;
+	}
+
+	pipeAssetResponse(response, indexResponse, request.method);
+	return true;
+}
+
+async function handleProdRequest(
+	request: http.IncomingMessage,
+	response: http.ServerResponse,
+	clientRoot: string,
+) {
+	try {
+		const { relativePath, staticPath } = resolveProdRequestPath(
+			request,
+			clientRoot,
+		);
+
+		if (
+			serveStaticAssetIfPresent(
+				request,
+				response,
+				relativePath,
+				staticPath,
+				clientRoot,
+			)
+		) {
+			return;
+		}
+
+		// For SPA, serve index.html for all non-file requests
+		if (serveIndexFallback(request, response, clientRoot)) {
+			return;
+		}
+
+		response.statusCode = 404;
+		response.end("Not Found");
+	} catch (error) {
+		console.error("Error serving static file:", error);
+		response.statusCode = 500;
+		response.end(
+			error instanceof Error ? error.message : "Failed to render app.",
+		);
+	}
+}
+
 async function getProdServerUrl() {
 	if (prodServerUrl) {
 		return prodServerUrl;
@@ -173,78 +305,7 @@ async function getProdServerUrl() {
 	console.log("[PROD SERVER] Dist exists:", existsSync(clientRoot));
 
 	prodServer = http.createServer(async (request, response) => {
-		try {
-			const requestUrl = new URL(
-				request.url ?? "/",
-				`http://${request.headers.host ?? "127.0.0.1"}`,
-			);
-			const relativePath = decodeURIComponent(requestUrl.pathname).replace(
-				/^\/+/,
-				"",
-			);
-			const staticPath = path.join(clientRoot, relativePath);
-
-			// Serve static files if they exist
-			if (
-				(request.method === "GET" || request.method === "HEAD") &&
-				relativePath &&
-				staticPath.startsWith(clientRoot) &&
-				existsSync(staticPath)
-			) {
-				const staticResponse = createStaticAssetResponse(staticPath);
-				if (staticResponse) {
-					response.statusCode = staticResponse.status;
-					response.statusMessage = staticResponse.statusText;
-					staticResponse.headers.forEach((value, key) => {
-						response.setHeader(key, value);
-					});
-
-					if (request.method === "HEAD" || !staticResponse.body) {
-						response.end();
-						return;
-					}
-
-					Readable.fromWeb(toNodeReadableStream(staticResponse.body)).pipe(
-						response,
-					);
-					return;
-				}
-			}
-
-			// For SPA, serve index.html for all non-file requests
-			if (request.method === "GET") {
-				const indexPath = path.join(clientRoot, "index.html");
-				if (existsSync(indexPath)) {
-					const indexResponse = createStaticAssetResponse(indexPath);
-					if (indexResponse) {
-						response.statusCode = indexResponse.status;
-						response.statusMessage = indexResponse.statusText;
-						indexResponse.headers.forEach((value, key) => {
-							response.setHeader(key, value);
-						});
-
-						if (!indexResponse.body) {
-							response.end();
-							return;
-						}
-
-						Readable.fromWeb(toNodeReadableStream(indexResponse.body)).pipe(
-							response,
-						);
-						return;
-					}
-				}
-			}
-
-			response.statusCode = 404;
-			response.end("Not Found");
-		} catch (error) {
-			console.error("Error serving static file:", error);
-			response.statusCode = 500;
-			response.end(
-				error instanceof Error ? error.message : "Failed to render app.",
-			);
-		}
+		await handleProdRequest(request, response, clientRoot);
 	});
 
 	await new Promise<void>((resolve, reject) => {
@@ -262,6 +323,31 @@ async function getProdServerUrl() {
 
 	prodServerUrl = `http://127.0.0.1:${(address as AddressInfo).port}`;
 	return prodServerUrl;
+}
+
+function applyProductionIcon(window: BrowserWindow) {
+	if (process.env.VITE_DEV_SERVER_URL) {
+		return;
+	}
+
+	const iconPath = path.join(app.getAppPath(), "dist", "favicon.ico");
+	try {
+		window.setIcon(nativeImage.createFromPath(iconPath));
+	} catch (error) {
+		console.warn("[WINDOW] Failed to set window icon:", error);
+	}
+}
+
+async function loadRendererContent(window: BrowserWindow) {
+	if (process.env.VITE_DEV_SERVER_URL) {
+		await loadDevUrlWithRetry(window, process.env.VITE_DEV_SERVER_URL);
+		window.webContents.openDevTools({ mode: "detach" });
+		return;
+	}
+
+	const prodUrl = await getProdServerUrl();
+	console.log("[WINDOW] Loading production URL:", prodUrl);
+	await window.loadURL(prodUrl);
 }
 
 async function createMainWindow() {
@@ -290,26 +376,14 @@ async function createMainWindow() {
 		},
 	});
 
-	if (!process.env.VITE_DEV_SERVER_URL) {
-		const iconPath = path.join(app.getAppPath(), "dist", "favicon.ico");
-		try {
-			mainWindow.setIcon(nativeImage.createFromPath(iconPath));
-		} catch {}
-	}
+	applyProductionIcon(mainWindow);
 
 	mainWindow.webContents.setWindowOpenHandler(({ url }) => {
 		void shell.openExternal(url);
 		return { action: "deny" };
 	});
 
-	if (process.env.VITE_DEV_SERVER_URL) {
-		await loadDevUrlWithRetry(mainWindow, process.env.VITE_DEV_SERVER_URL);
-		mainWindow.webContents.openDevTools({ mode: "detach" });
-	} else {
-		const prodUrl = await getProdServerUrl();
-		console.log("[WINDOW] Loading production URL:", prodUrl);
-		await mainWindow.loadURL(prodUrl);
-	}
+	await loadRendererContent(mainWindow);
 
 	flushPendingOpenPaths();
 }
@@ -326,69 +400,6 @@ async function loadDevUrlWithRetry(window: BrowserWindow, url: string) {
 		}
 	}
 	throw lastError;
-}
-
-function getMimeType(targetPath: string) {
-	const extension = path.extname(targetPath).toLowerCase();
-	switch (extension) {
-		case ".html":
-			return "text/html; charset=utf-8";
-		case ".js":
-		case ".mjs":
-		case ".cjs":
-			return "text/javascript; charset=utf-8";
-		case ".css":
-			return "text/css; charset=utf-8";
-		case ".json":
-			return "application/json; charset=utf-8";
-		case ".svg":
-			return "image/svg+xml";
-		case ".ico":
-			return "image/x-icon";
-		case ".mp4":
-			return "video/mp4";
-		case ".webm":
-			return "video/webm";
-		case ".mov":
-			return "video/quicktime";
-		case ".mkv":
-			return "video/x-matroska";
-		case ".avi":
-			return "video/x-msvideo";
-		case ".m4v":
-			return "video/x-m4v";
-		case ".ts":
-			return "video/mp2t";
-		case ".jpg":
-		case ".jpeg":
-			return "image/jpeg";
-		case ".png":
-			return "image/png";
-		default:
-			return "application/octet-stream";
-	}
-}
-
-function parseRangeHeader(rangeHeader: string | null, fileSize: number) {
-	if (!rangeHeader?.startsWith("bytes=")) {
-		return null;
-	}
-
-	const [startText, endText] = rangeHeader.replace("bytes=", "").split("-");
-	const start = Number.parseInt(startText, 10);
-	const end = endText ? Number.parseInt(endText, 10) : fileSize - 1;
-
-	if (
-		Number.isNaN(start) ||
-		Number.isNaN(end) ||
-		start < 0 ||
-		end >= fileSize ||
-		start > end
-	) {
-		return null;
-	}
-
-	return { start, end };
 }
 
 function corsHeaders() {
@@ -487,47 +498,39 @@ protocol.registerSchemesAsPrivileged([
 	},
 ]);
 
-async function bootstrap() {
-	console.log("[BOOTSTRAP] Starting Kanso bootstrap...");
-	console.log("[BOOTSTRAP] Platform:", process.platform);
-	console.log("[BOOTSTRAP] App path:", app.getAppPath());
+function queueArgvOpenPaths(argv: string[]) {
+	for (const filePath of collectOpenPathsFromArgv(argv)) {
+		pendingOpenPaths.push(filePath);
+	}
+}
 
-	if (!gotSingleInstanceLock) {
-		console.log("[BOOTSTRAP] Single instance lock not acquired, quitting");
+function focusOrCreateMainWindow() {
+	if (BrowserWindow.getAllWindows().length === 0) {
+		void createMainWindow();
 		return;
 	}
 
-	for (const filePath of collectOpenPathsFromArgv(process.argv.slice(1))) {
-		pendingOpenPaths.push(filePath);
-	}
+	focusMainWindow();
+}
 
+function registerFileOpenHandlers() {
 	app.on("second-instance", (_event, argv) => {
 		for (const filePath of collectOpenPathsFromArgv(argv.slice(1))) {
 			queueOpenPath(filePath);
 		}
 
-		if (BrowserWindow.getAllWindows().length === 0) {
-			void createMainWindow();
-			return;
-		}
-
-		focusMainWindow();
+		focusOrCreateMainWindow();
 	});
 
 	app.on("open-file", (event, targetPath) => {
 		event.preventDefault();
 		queueOpenPath(targetPath);
 
-		if (BrowserWindow.getAllWindows().length === 0) {
-			void createMainWindow();
-			return;
-		}
-
-		focusMainWindow();
+		focusOrCreateMainWindow();
 	});
+}
 
-	await app.whenReady();
-
+function registerVideoProtocolHandler() {
 	protocol.handle("video", async (request) => {
 		const url = new URL(request.url);
 		const filePath = decodeURIComponent(url.pathname.replace(/^\/+/, ""));
@@ -559,32 +562,57 @@ async function bootstrap() {
 			return new Response(message, { status: 500 });
 		}
 	});
+}
 
-	const createWindowPromise = createMainWindow();
-	initializeBackend();
-	await createWindowPromise;
+async function configureLibraryWatches() {
 	if (!db || !indexer) {
 		throw new Error("Backend services failed to initialize.");
 	}
 
-	sendAppReady();
-	flushPendingOpenPaths();
-
 	const settings = db.getLibrarySettings();
-	if (settings.watchEnabled) {
-		const pathsToWatch = settings.sourcePaths
-			.filter((sourcePath) => sourcePath.watchEnabled)
-			.map((sourcePath) => sourcePath.path);
-		if (pathsToWatch.length > 0) {
-			await indexer.configureWatches(pathsToWatch);
-		}
+	if (!settings.watchEnabled) {
+		return;
 	}
 
+	const pathsToWatch = selectWatchPaths(settings.sourcePaths);
+	if (pathsToWatch.length > 0) {
+		await indexer.configureWatches(pathsToWatch);
+	}
+}
+
+function registerActivateHandler() {
 	app.on("activate", () => {
 		if (BrowserWindow.getAllWindows().length === 0) {
 			void createMainWindow();
 		}
 	});
+}
+
+async function bootstrap() {
+	console.log("[BOOTSTRAP] Starting Kanso bootstrap...");
+	console.log("[BOOTSTRAP] Platform:", process.platform);
+	console.log("[BOOTSTRAP] App path:", app.getAppPath());
+
+	if (!gotSingleInstanceLock) {
+		console.log("[BOOTSTRAP] Single instance lock not acquired, quitting");
+		return;
+	}
+
+	queueArgvOpenPaths(process.argv.slice(1));
+	registerFileOpenHandlers();
+
+	await app.whenReady();
+	registerVideoProtocolHandler();
+
+	const createWindowPromise = createMainWindow();
+	initializeBackend();
+	await createWindowPromise;
+
+	sendAppReady();
+	flushPendingOpenPaths();
+
+	await configureLibraryWatches();
+	registerActivateHandler();
 }
 
 app.on("window-all-closed", () => {

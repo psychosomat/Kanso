@@ -16,18 +16,31 @@ function isSupportedVideo(filePath: string) {
 	);
 }
 
-async function listFilesRecursive(rootPath: string): Promise<string[]> {
-	const results: string[] = [];
-	const entries = await fs.readdir(rootPath, { withFileTypes: true });
-	for (const entry of entries) {
-		const entryPath = path.join(rootPath, entry.name);
-		if (entry.isDirectory()) {
-			results.push(...(await listFilesRecursive(entryPath)));
-		} else if (entry.isFile() && isSupportedVideo(entryPath)) {
-			results.push(entryPath);
-		}
+export function selectWatchPaths(
+	sourcePaths: Array<{ watchEnabled: boolean; path: string }>,
+): string[] {
+	const out: string[] = [];
+	for (const sp of sourcePaths) {
+		if (sp.watchEnabled) out.push(sp.path);
 	}
-	return results;
+	return out;
+}
+
+async function listFilesRecursive(rootPath: string): Promise<string[]> {
+	const entries = await fs.readdir(rootPath, { withFileTypes: true });
+	const nested = await Promise.all(
+		entries.map(async (entry) => {
+			const entryPath = path.join(rootPath, entry.name);
+			if (entry.isDirectory()) {
+				return listFilesRecursive(entryPath);
+			}
+			if (entry.isFile() && isSupportedVideo(entryPath)) {
+				return [entryPath];
+			}
+			return [];
+		}),
+	);
+	return nested.flat();
 }
 
 export class LibraryIndexerService {
@@ -63,13 +76,15 @@ export class LibraryIndexerService {
 
 	async configureWatches(sourcePaths: string[]) {
 		await this.watchService.stop();
-		for (const sourcePath of sourcePaths) {
-			await this.watchService.start(sourcePath, {
-				onAdd: (filePath) => void this.enqueueUpsert(filePath),
-				onChange: (filePath) => void this.enqueueUpsert(filePath),
-				onUnlink: (filePath) => void this.enqueueMissing(filePath),
-			});
-		}
+		await Promise.all(
+			sourcePaths.map((sourcePath) =>
+				this.watchService.start(sourcePath, {
+					onAdd: (filePath) => void this.enqueueUpsert(filePath),
+					onChange: (filePath) => void this.enqueueUpsert(filePath),
+					onUnlink: (filePath) => void this.enqueueMissing(filePath),
+				}),
+			),
+		);
 	}
 
 	async stopWatch() {
@@ -80,11 +95,10 @@ export class LibraryIndexerService {
 		if (sourcePaths.length === 0) return;
 		this.db.updateScanState({ scanStatus: "scanning", scanError: null });
 		try {
-			const allFiles: string[] = [];
-			for (const sourcePath of sourcePaths) {
-				const files = await listFilesRecursive(sourcePath);
-				allFiles.push(...files);
-			}
+			const grouped = await Promise.all(
+				sourcePaths.map((sourcePath) => listFilesRecursive(sourcePath)),
+			);
+			const allFiles: string[] = grouped.flat();
 			const seen = new Set<string>();
 			this.lastPublishTime = 0;
 			this.publish({

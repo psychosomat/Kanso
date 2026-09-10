@@ -18,8 +18,44 @@ function getWindowApi() {
 	return window.playerApi.window;
 }
 
-const REVEAL_ZONE = 56;
-const RELEASE_ZONE = 132;
+export const TITLEBAR_REVEAL_ZONE = 56;
+export const TITLEBAR_RELEASE_ZONE = 132;
+
+export function shouldRevealTitlebar(clientY: number): boolean {
+	return clientY <= TITLEBAR_REVEAL_ZONE;
+}
+
+export function shouldHideTitlebar(clientY: number): boolean {
+	return clientY > TITLEBAR_RELEASE_ZONE;
+}
+
+export function getTitlebarShellClass(nonBlocking?: boolean): string {
+	return cn(
+		"window-drag fixed inset-x-0 top-0 z-40 flex h-11 items-center justify-end px-3",
+		nonBlocking && "pointer-events-none",
+	);
+}
+
+export function getTitlebarRevealClass(revealed: boolean): string {
+	return cn(
+		"transition-all duration-300 ease-[cubic-bezier(0.16,1,0.3,1)]",
+		revealed
+			? "pointer-events-auto translate-y-0 opacity-100"
+			: "pointer-events-none -translate-y-2 opacity-0",
+	);
+}
+
+export function closeWindow(): void {
+	void getWindowApi()?.close();
+}
+
+export function minimizeWindow(): void {
+	void getWindowApi()?.minimize();
+}
+
+export function toggleMaximizeWindow(): void {
+	void getWindowApi()?.toggleMaximize();
+}
 
 function useEdgeReveal() {
 	const [revealed, setRevealed] = useState(false);
@@ -33,9 +69,9 @@ function useEdgeReveal() {
 		};
 
 		const onMove = (event: MouseEvent) => {
-			if (event.clientY <= REVEAL_ZONE) {
+			if (shouldRevealTitlebar(event.clientY)) {
 				set(true);
-			} else if (event.clientY > RELEASE_ZONE) {
+			} else if (shouldHideTitlebar(event.clientY)) {
 				set(false);
 			}
 		};
@@ -75,6 +111,83 @@ function WindowButton({
 	);
 }
 
+function TitlebarShell({
+	reveal,
+	nonBlocking,
+	align,
+	children,
+}: {
+	reveal: () => void;
+	nonBlocking?: boolean;
+	align: "start" | "end";
+	children: React.ReactNode;
+}) {
+	return (
+		// biome-ignore lint/a11y/noStaticElementInteractions: reveals the HUD on hover/focus
+		<header
+			className={cn(
+				getTitlebarShellClass(nonBlocking),
+				align === "start" && "justify-start",
+			)}
+			onMouseEnter={reveal}
+			onFocus={reveal}
+		>
+			{children}
+		</header>
+	);
+}
+
+function MacOSTrafficLights({ revealed }: { revealed: boolean }) {
+	return (
+		<div
+			className={cn(
+				"window-no-drag flex items-center gap-2",
+				getTitlebarRevealClass(revealed),
+			)}
+		>
+			<button
+				type="button"
+				className="h-3 w-3 rounded-full bg-[#ff5f57] transition-opacity hover:opacity-85"
+				onClick={closeWindow}
+				aria-label="Close window"
+			/>
+			<button
+				type="button"
+				className="h-3 w-3 rounded-full bg-[#febc2e] transition-opacity hover:opacity-85"
+				onClick={minimizeWindow}
+				aria-label="Minimize window"
+			/>
+			<button
+				type="button"
+				className="h-3 w-3 rounded-full bg-[#28c840] transition-opacity hover:opacity-85"
+				onClick={toggleMaximizeWindow}
+				aria-label="Toggle maximize"
+			/>
+		</div>
+	);
+}
+
+function WindowsCaptionButtons({ revealed }: { revealed: boolean }) {
+	return (
+		<div
+			className={cn(
+				"window-no-drag flex items-center gap-0.5",
+				getTitlebarRevealClass(revealed),
+			)}
+		>
+			<WindowButton label="Minimize window" onClick={minimizeWindow}>
+				<IconMinus size={14} />
+			</WindowButton>
+			<WindowButton label="Toggle maximize" onClick={toggleMaximizeWindow}>
+				<IconSquare size={11} />
+			</WindowButton>
+			<WindowButton label="Close window" danger onClick={closeWindow}>
+				<IconX size={14} />
+			</WindowButton>
+		</div>
+	);
+}
+
 export function WindowTitlebar({ mode, nonBlocking }: WindowTitlebarProps) {
 	const { revealed, reveal } = useEdgeReveal();
 
@@ -82,77 +195,17 @@ export function WindowTitlebar({ mode, nonBlocking }: WindowTitlebarProps) {
 		return null;
 	}
 
-	const shellClass = cn(
-		"window-drag fixed inset-x-0 top-0 z-40 flex h-11 items-center justify-end px-3",
-		nonBlocking && "pointer-events-none",
-	);
-	const revealClass = cn(
-		"transition-all duration-300 ease-[cubic-bezier(0.16,1,0.3,1)]",
-		revealed
-			? "pointer-events-auto translate-y-0 opacity-100"
-			: "pointer-events-none -translate-y-2 opacity-0",
-	);
-
 	if (mode === "macos") {
 		return (
-			// biome-ignore lint/a11y/noStaticElementInteractions: reveals the HUD on hover/focus
-			<header
-				className={cn(shellClass, "justify-start")}
-				onMouseEnter={reveal}
-				onFocus={reveal}
-			>
-				<div
-					className={cn("window-no-drag flex items-center gap-2", revealClass)}
-				>
-					<button
-						type="button"
-						className="h-3 w-3 rounded-full bg-[#ff5f57] transition-opacity hover:opacity-85"
-						onClick={() => void getWindowApi()?.close()}
-						aria-label="Close window"
-					/>
-					<button
-						type="button"
-						className="h-3 w-3 rounded-full bg-[#febc2e] transition-opacity hover:opacity-85"
-						onClick={() => void getWindowApi()?.minimize()}
-						aria-label="Minimize window"
-					/>
-					<button
-						type="button"
-						className="h-3 w-3 rounded-full bg-[#28c840] transition-opacity hover:opacity-85"
-						onClick={() => void getWindowApi()?.toggleMaximize()}
-						aria-label="Toggle maximize"
-					/>
-				</div>
-			</header>
+			<TitlebarShell reveal={reveal} nonBlocking={nonBlocking} align="start">
+				<MacOSTrafficLights revealed={revealed} />
+			</TitlebarShell>
 		);
 	}
 
 	return (
-		// biome-ignore lint/a11y/noStaticElementInteractions: reveals the HUD on hover/focus
-		<header className={shellClass} onMouseEnter={reveal} onFocus={reveal}>
-			<div
-				className={cn("window-no-drag flex items-center gap-0.5", revealClass)}
-			>
-				<WindowButton
-					label="Minimize window"
-					onClick={() => void getWindowApi()?.minimize()}
-				>
-					<IconMinus size={14} />
-				</WindowButton>
-				<WindowButton
-					label="Toggle maximize"
-					onClick={() => void getWindowApi()?.toggleMaximize()}
-				>
-					<IconSquare size={11} />
-				</WindowButton>
-				<WindowButton
-					label="Close window"
-					danger
-					onClick={() => void getWindowApi()?.close()}
-				>
-					<IconX size={14} />
-				</WindowButton>
-			</div>
-		</header>
+		<TitlebarShell reveal={reveal} nonBlocking={nonBlocking} align="end">
+			<WindowsCaptionButtons revealed={revealed} />
+		</TitlebarShell>
 	);
 }

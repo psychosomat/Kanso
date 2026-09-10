@@ -55,12 +55,14 @@ export function slugify(value: string) {
 		.replace(/^-+|-+$/g, "");
 }
 
+const dateTimeFormatter = new Intl.DateTimeFormat("en-US", {
+	dateStyle: "medium",
+	timeStyle: "short",
+});
+
 export function formatDateTime(value: string | null) {
 	if (!value) return "Never";
-	return new Intl.DateTimeFormat("en-US", {
-		dateStyle: "medium",
-		timeStyle: "short",
-	}).format(new Date(value));
+	return dateTimeFormatter.format(new Date(value));
 }
 
 export function formatDuration(seconds: number | null) {
@@ -96,4 +98,13 @@ export function shouldResume(resumeSec: number, durationSec: number | null) {
 	if (!durationSec || Number.isNaN(durationSec) || durationSec <= 0)
 		return false;
 	return durationSec - resumeSec > 15;
+}
+
+export function preventMiddleClickAutoscroll(e: {
+	button: number;
+	preventDefault: () => void;
+}) {
+	if (e.button === 1) {
+		e.preventDefault();
+	}
 }

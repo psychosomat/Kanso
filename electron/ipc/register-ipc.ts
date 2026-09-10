@@ -20,7 +20,10 @@ import type {
 } from "../../src/lib/contracts";
 import { DatabaseService } from "../services/db";
 import { getExternalVideoDetails } from "../services/external-video";
-import { LibraryIndexerService } from "../services/library-indexer";
+import {
+	LibraryIndexerService,
+	selectWatchPaths,
+} from "../services/library-indexer";
 import { PosterCacheService } from "../services/poster-cache";
 
 type Services = {
@@ -75,9 +78,7 @@ export function registerIpc({
 		const pathsToScan = settings.sourcePaths.map((sp) => sp.path);
 		await indexer.fullScanAll(pathsToScan);
 		if (settings.watchEnabled) {
-			const pathsToWatch = settings.sourcePaths
-				.filter((sp) => sp.watchEnabled)
-				.map((sp) => sp.path);
+			const pathsToWatch = selectWatchPaths(settings.sourcePaths);
 			await indexer.configureWatches(pathsToWatch);
 		}
 		return settings;
@@ -102,9 +103,7 @@ export function registerIpc({
 
 		const settings = db.getLibrarySettings();
 		if (settings.watchEnabled) {
-			const pathsToWatch = settings.sourcePaths
-				.filter((sp) => sp.watchEnabled)
-				.map((sp) => sp.path);
+			const pathsToWatch = selectWatchPaths(settings.sourcePaths);
 			await indexer.configureWatches(pathsToWatch);
 		}
 		return settings;
@@ -116,9 +115,7 @@ export function registerIpc({
 			db.removeLibrarySourcePath(folderId);
 			const settings = db.getLibrarySettings();
 			if (settings.watchEnabled && settings.sourcePaths.length > 0) {
-				const pathsToWatch = settings.sourcePaths
-					.filter((sp) => sp.watchEnabled)
-					.map((sp) => sp.path);
+				const pathsToWatch = selectWatchPaths(settings.sourcePaths);
 				void indexer.configureWatches(pathsToWatch);
 			}
 			return settings;
@@ -129,9 +126,7 @@ export function registerIpc({
 		db.toggleLibrarySourcePathWatch(folderId);
 		const settings = db.getLibrarySettings();
 		if (settings.watchEnabled && settings.sourcePaths.length > 0) {
-			const pathsToWatch = settings.sourcePaths
-				.filter((sp) => sp.watchEnabled)
-				.map((sp) => sp.path);
+			const pathsToWatch = selectWatchPaths(settings.sourcePaths);
 			void indexer.configureWatches(pathsToWatch);
 		}
 		return settings;
@@ -152,9 +147,7 @@ export function registerIpc({
 		const pathsToScan = settings.sourcePaths.map((sp) => sp.path);
 		await indexer.fullScanAll(pathsToScan);
 		if (settings.watchEnabled) {
-			const pathsToWatch = settings.sourcePaths
-				.filter((sp) => sp.watchEnabled)
-				.map((sp) => sp.path);
+			const pathsToWatch = selectWatchPaths(settings.sourcePaths);
 			await indexer.configureWatches(pathsToWatch);
 		}
 	});

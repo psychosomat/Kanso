@@ -11,16 +11,7 @@ import {
 } from "react";
 import { AssignVideoDialog } from "@/components/categories/assign-video-dialog";
 import { useAppState } from "@/components/layout/app-state";
-import {
-	AlertDialog,
-	AlertDialogAction,
-	AlertDialogCancel,
-	AlertDialogContent,
-	AlertDialogDescription,
-	AlertDialogFooter,
-	AlertDialogHeader,
-	AlertDialogTitle,
-} from "@/components/ui/alert-dialog-impl";
+import { RemoveVideoDialog } from "@/components/shared/remove-video-dialog";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import {
@@ -42,17 +33,28 @@ import { usePlayerHotkeys } from "@/hooks/use-player-hotkeys";
 import { usePlayerUiVisibility } from "@/hooks/use-player-ui-visibility";
 import { CategoryIcon } from "@/lib/category-icons";
 import type { PlayableVideoDto, PlayerPreferencesDto } from "@/lib/contracts";
-import type { EqBand } from "@/lib/equalizer";
-import { clampEqGain, EQ_BANDS, normalizeEqGains } from "@/lib/equalizer";
 import { getPlayerApi } from "@/lib/player-api";
+import {
+	applyEqGains,
+	connectEqGraph,
+	ensureEqNodes,
+} from "@/lib/player-eq-graph";
+import {
+	clampSeekTarget,
+	clampVolume,
+	isLibraryVideo,
+	nextSpeedPreset,
+	normalizePlaybackRate,
+	resolveCurrentVolume,
+} from "@/lib/player-playback";
 import { getPlayerReturnTarget } from "@/lib/player-return";
 import { averagePosterColor } from "@/lib/poster-glow";
 import {
+	cn,
 	formatBytes,
 	formatDateTime,
 	formatDuration,
 	formatResolution,
-	cn,
 	resolveTitlebarMode,
 	shouldResume,
 } from "@/lib/utils";
@@ -84,12 +86,6 @@ type TimelinePreviewState = {
 	leftPercent: number;
 	frameUrl: string | null;
 };
-
-function isLibraryVideo(
-	video: PlayableVideoDto | null,
-): video is Extract<PlayableVideoDto, { origin: "library" }> {
-	return video?.origin === "library";
-}
 
 function LibraryPlayerRoute() {
 	const { videoId } = Route.useParams();
@@ -171,37 +167,9 @@ export function PlayerPage({
 			}
 			sourceNodeRef.current = sourceNode;
 
-			if (eqNodesRef.current.length === 0) {
-				eqNodesRef.current = EQ_BANDS.map((band: EqBand) => {
-					const node = ctx.createBiquadFilter();
-					node.type = band.type;
-					node.frequency.value = band.frequency;
-					if (band.q) {
-						node.Q.value = band.q;
-					}
-					return node;
-				});
-			}
-
-			const normalized = normalizeEqGains(gains);
-			eqNodesRef.current.forEach((node, index) => {
-				node.gain.value = enabled ? clampEqGain(normalized[index]) : 0;
-			});
-
-			sourceNode.disconnect();
-			eqNodesRef.current.forEach((node) => {
-				node.disconnect();
-			});
-			if (enabled) {
-				let previous: AudioNode = sourceNode;
-				for (const node of eqNodesRef.current) {
-					previous.connect(node);
-					previous = node;
-				}
-				previous.connect(ctx.destination);
-			} else {
-				sourceNode.connect(ctx.destination);
-			}
+			eqNodesRef.current = ensureEqNodes(ctx, eqNodesRef.current);
+			applyEqGains(eqNodesRef.current, enabled, gains);
+			connectEqGraph(sourceNode, eqNodesRef.current, ctx.destination, enabled);
 		},
 		[],
 	);
@@ -247,7 +215,7 @@ export function PlayerPage({
 	}, [scanStatus, video]);
 
 	const setRate = useCallback((value: number) => {
-		const normalized = Number(Math.max(0.2, Math.min(4, value)).toFixed(1));
+		const normalized = normalizePlaybackRate(value);
 		setPlaybackRate(normalized);
 		if (videoRef.current) {
 			videoRef.current.playbackRate = normalized;
@@ -329,10 +297,7 @@ export function PlayerPage({
 		(next: number) => {
 			const element = videoRef.current;
 			if (!element) return;
-			const clamped = Math.max(
-				0,
-				Math.min(element.duration || duration || 0, next),
-			);
+			const clamped = clampSeekTarget(next, element.duration || duration || 0);
 			element.currentTime = clamped;
 			setCurrentTime(clamped);
 		},
@@ -377,7 +342,7 @@ export function PlayerPage({
 		async (nextValue: number) => {
 			const element = videoRef.current;
 			if (!element || !prefs) return;
-			const clamped = Math.max(0, Math.min(1, nextValue));
+			const clamped = clampVolume(nextValue);
 			element.volume = clamped;
 			element.muted = clamped === 0;
 			setPrefs({
@@ -396,13 +361,12 @@ export function PlayerPage({
 	const adjustVolumeBy = useCallback(
 		(delta: number) => {
 			const element = videoRef.current;
-			const currentVolume = element
-				? element.muted
-					? 0
-					: element.volume
-				: prefs?.playerMuted
-					? 0
-					: (prefs?.playerVolume ?? 1);
+			const currentVolume = resolveCurrentVolume({
+				elementVolume: element ? element.volume : null,
+				elementMuted: element ? element.muted : false,
+				prefMuted: prefs?.playerMuted ?? false,
+				prefVolume: prefs?.playerVolume ?? 1,
+			});
 
 			void updateVolume(currentVolume + delta);
 		},
@@ -705,7 +669,9 @@ export function PlayerPage({
 
 		container.addEventListener("mousemove", handleInteraction);
 		container.addEventListener("mousedown", handleInteraction);
-		container.addEventListener("touchstart", handleInteraction);
+		container.addEventListener("touchstart", handleInteraction, {
+			passive: true,
+		});
 
 		return () => {
 			container.removeEventListener("mousemove", handleInteraction);
@@ -730,6 +696,15 @@ export function PlayerPage({
 		if (prefs.playerFitMode === "native") return "object-none";
 		return "object-contain";
 	}, [prefs]);
+
+	const assignedCategories = useMemo(() => {
+		if (!isLibraryVideo(video)) return [];
+		const out: typeof video.categories = [];
+		for (const category of video.categories) {
+			if (category.assigned) out.push(category);
+		}
+		return out;
+	}, [video]);
 
 	const titlebarMode = resolveTitlebarMode(prefs?.titlebarMode ?? "auto");
 
@@ -783,15 +758,12 @@ export function PlayerPage({
 	);
 
 	const cycleSpeed = useCallback(() => {
-		const presets = [
-			prefs?.speedPresetPrimary ?? 1,
-			prefs?.speedPresetSecondary ?? 2.2,
-		];
-		const currentIndex = presets.findIndex(
-			(speed) => Math.abs(playbackRate - speed) < 0.01,
+		const next = nextSpeedPreset(
+			playbackRate,
+			prefs?.speedPresetPrimary,
+			prefs?.speedPresetSecondary,
 		);
-		const next = presets[(currentIndex + 1) % presets.length];
-		if (next !== undefined) setRate(next);
+		setRate(next);
 	}, [playbackRate, prefs, setRate]);
 
 	// Page entrance animation
@@ -909,17 +881,13 @@ export function PlayerPage({
 												</Button>
 											</div>
 											<div className="flex flex-wrap gap-2">
-												{video.categories.filter(
-													(category) => category.assigned,
-												).length ? (
-													video.categories
-														.filter((category) => category.assigned)
-														.map((category) => (
-															<Badge key={category.id} variant="accent">
-																<CategoryIcon name={category.icon} size={12} />
-																{category.name}
-															</Badge>
-														))
+												{assignedCategories.length ? (
+													assignedCategories.map((category) => (
+														<Badge key={category.id} variant="accent">
+															<CategoryIcon name={category.icon} size={12} />
+															{category.name}
+														</Badge>
+													))
 												) : (
 													<p className="text-sm text-(--muted-foreground)">
 														Not assigned yet.
@@ -1139,6 +1107,7 @@ export function PlayerPage({
 
 							<input
 								type="range"
+								aria-label="Seek position"
 								min={0}
 								max={duration || 0}
 								step={0.1}
@@ -1227,6 +1196,7 @@ export function PlayerPage({
 								</button>
 								<input
 									type="range"
+									aria-label="Volume"
 									min={0}
 									max={100}
 									step={1}
@@ -1301,33 +1271,13 @@ export function PlayerPage({
 							await refreshAll();
 						}}
 					/>
-					<AlertDialog
+					<RemoveVideoDialog
 						open={removeDialogOpen}
 						onOpenChange={setRemoveDialogOpen}
-					>
-						<AlertDialogContent>
-							<AlertDialogHeader>
-								<AlertDialogTitle>
-									Remove this video from the library?
-								</AlertDialogTitle>
-								<AlertDialogDescription>
-									This removes the indexed entry and any category posts that
-									still reference it. The original file stays on disk.
-								</AlertDialogDescription>
-							</AlertDialogHeader>
-							<AlertDialogFooter>
-								<AlertDialogCancel disabled={removing}>
-									Cancel
-								</AlertDialogCancel>
-								<AlertDialogAction
-									onClick={() => void removeLibraryVideo()}
-									disabled={removing}
-								>
-									{removing ? "Removing…" : "Remove"}
-								</AlertDialogAction>
-							</AlertDialogFooter>
-						</AlertDialogContent>
-					</AlertDialog>
+						removing={removing}
+						onConfirm={() => void removeLibraryVideo()}
+						description="This removes the indexed entry and any category posts that still reference it. The original file stays on disk."
+					/>
 				</>
 			) : null}
 		</div>

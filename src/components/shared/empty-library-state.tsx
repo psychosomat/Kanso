@@ -2,6 +2,14 @@ import { APP_NAME } from "@/lib/constants";
 import IconFolderOpen from "~icons/tabler/folder-open";
 import { Button } from "../ui/button";
 
+export function getEmptyLibraryCtaLabel(pending?: boolean): string {
+	return pending ? "Opening..." : "Choose folder";
+}
+
+export function shouldShowElectronWarning(electronReady?: boolean): boolean {
+	return !electronReady;
+}
+
 export function EmptyLibraryState({
 	onChooseFolder,
 	pending,
@@ -30,7 +38,7 @@ export function EmptyLibraryState({
 					where they are — nothing is copied or moved.
 				</p>
 
-				{!electronReady && (
+				{shouldShowElectronWarning(electronReady) && (
 					<div className="relative mt-6 rounded-(--radius) border border-(--destructive)/25 bg-(--destructive-subtle) px-4 py-3 text-sm text-(--destructive)">
 						Electron bridge is not available. Waiting to load...
 					</div>
@@ -43,7 +51,7 @@ export function EmptyLibraryState({
 					disabled={pending}
 				>
 					<IconFolderOpen size={16} />
-					{pending ? "Opening..." : "Choose folder"}
+					{getEmptyLibraryCtaLabel(pending)}
 				</Button>
 			</div>
 		</div>
