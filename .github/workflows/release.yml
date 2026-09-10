@@ -1,18 +1,28 @@
 name: Release
 
+# Единственный источник версии — git-тег релиза (vX.Y.Z).
+# Релиз запускается со страницы GitHub: Releases → Draft new release → Create tag → Publish.
+# package.json в репозитории хранит заглушку 0.0.0 и никогда не коммитится ботом:
+# версия подставляется в рабочую копию раннера на этапе сборки и никуда не пушится.
+# Никаких коммитов вида "chore: bump version" и "chore(aur)" больше нет —
+# workflow только читает репозиторий и загружает артефакты в релиз.
+#
+# Производительность:
+# - Веб-сборка (vite + tsup) платформо-независима и выполняется ОДИН раз
+#   в build-web; упаковочные джобы забирают готовые dist/ через артефакт.
+# - macOS собирается целиком на одном macos-14: electron-builder делает
+#   оба арха (--arm64 --x64), QuickLook-плагин в Release и так universal.
+#   Отдельный macos-15-intel убран — Intel-раннеры дают многочасовые очереди.
+
 on:
-  workflow_dispatch:
-    inputs:
-      version:
-        description: 'Version to release, e.g. 0.1.7 (leave empty to auto-bump patch)'
-        required: false
-        type: string
+  release:
+    types: [published]
 
 permissions:
   contents: write
 
 concurrency:
-  group: release
+  group: release-${{ github.event.release.tag_name }}
   cancel-in-progress: false
 
 env:
@@ -20,12 +30,40 @@ env:
   GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
 jobs:
-  lint-test:
-    name: Lint & Test
+  resolve:
+    name: Resolve version from tag
     runs-on: ubuntu-latest
+    timeout-minutes: 5
+    outputs:
+      tag: ${{ steps.version.outputs.tag }}
+      version: ${{ steps.version.outputs.version }}
     steps:
-      - name: Checkout
+      - name: Validate tag
+        id: version
+        run: |
+          TAG="${{ github.event.release.tag_name }}"
+          VERSION="${TAG#v}"
+
+          if ! [[ "$VERSION" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+            echo "::error::Release tag must be vX.Y.Z (got: $TAG)."
+            exit 1
+          fi
+
+          echo "tag=${TAG}" >> "$GITHUB_OUTPUT"
+          echo "version=${VERSION}" >> "$GITHUB_OUTPUT"
+          echo "Releasing $TAG (version $VERSION)"
+
+  build-web:
+    name: Build web assets (once)
+    needs: resolve
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - name: Checkout release tag (read-only)
         uses: actions/checkout@v4
+        with:
+          ref: ${{ needs.resolve.outputs.tag }}
+          fetch-depth: 1
 
       - name: Setup Bun
         uses: oven-sh/setup-bun@v2
@@ -42,80 +80,36 @@ jobs:
       - name: Install dependencies
         run: bun install --frozen-lockfile
 
-      - name: Lint
-        run: bun run lint
+      - name: Set version from tag (workspace only, never committed)
+        run: npm version "${{ needs.resolve.outputs.version }}" --no-git-tag-version --allow-same-version
 
-      - name: Rebuild better-sqlite3 for Node.js
-        run: npm rebuild better-sqlite3
+      - name: Build application
+        run: bun run build
 
-      - name: Test
-        run: npx vitest run
-
-  prepare:
-    name: Bump version & tag
-    needs: lint-test
-    runs-on: ubuntu-latest
-    outputs:
-      tag: ${{ steps.version.outputs.tag }}
-      version: ${{ steps.version.outputs.version }}
-    steps:
-      - name: Checkout
-        uses: actions/checkout@v4
+      - name: Upload web artifacts
+        uses: actions/upload-artifact@v4
         with:
-          fetch-depth: 0
-
-      - name: Determine target version
-        id: version
-        run: |
-          LATEST_TAG=$(git describe --tags --abbrev=0 2>/dev/null || echo "v0.0.0")
-          echo "Latest tag: $LATEST_TAG"
-
-          INPUT_VERSION="${{ github.event.inputs.version }}"
-          if [ -n "$INPUT_VERSION" ]; then
-            TARGET_VERSION="${INPUT_VERSION#v}"
-          else
-            CLEAN_TAG="${LATEST_TAG#v}"
-            if [[ "$CLEAN_TAG" =~ ^([0-9]+)\.([0-9]+)\.([0-9]+)$ ]]; then
-              TARGET_VERSION="${BASH_REMATCH[1]}.${BASH_REMATCH[2]}.$((${BASH_REMATCH[3]} + 1))"
-            else
-              TARGET_VERSION="1.0.0"
-            fi
-          fi
-
-          TAG="v${TARGET_VERSION}"
-
-          if git ls-remote --tags origin "refs/tags/${TAG}" | grep -q "${TAG}$"; then
-            echo "::error::Tag ${TAG} already exists on the remote."
-            exit 1
-          fi
-
-          echo "version=${TARGET_VERSION}" >> "$GITHUB_OUTPUT"
-          echo "tag=${TAG}" >> "$GITHUB_OUTPUT"
-
-      - name: Bump package.json version
-        run: npm version "${{ steps.version.outputs.version }}" --no-git-tag-version --allow-same-version
-
-      - name: Commit version bump & tag
-        run: |
-          git config user.name "Kanso Release Bot"
-          git config user.email "github-actions@kanso.local"
-          git add package.json
-          if ! git diff --cached --quiet; then
-            git commit -m "chore: bump version to ${{ steps.version.outputs.version }}"
-            git push origin HEAD:${{ github.ref_name }}
-          fi
-          git tag "${{ steps.version.outputs.tag }}"
-          git push origin "${{ steps.version.outputs.tag }}"
+          name: web-dist
+          path: |
+            dist/
+            dist-electron/
+            package.json
+          if-no-files-found: error
+          retention-days: 1
 
   build-linux:
     name: Build Linux
-    needs: prepare
+    needs:
+      - resolve
+      - build-web
     runs-on: ubuntu-latest
+    timeout-minutes: 30
     steps:
-      - name: Checkout
+      - name: Checkout release tag (read-only)
         uses: actions/checkout@v4
         with:
-          ref: ${{ needs.prepare.outputs.tag }}
+          ref: ${{ needs.resolve.outputs.tag }}
+          fetch-depth: 1
 
       - name: Install system dependencies
         run: |
@@ -145,8 +139,11 @@ jobs:
       - name: Install dependencies
         run: bun install --frozen-lockfile
 
-      - name: Build application
-        run: bun run build
+      - name: Download web artifacts
+        uses: actions/download-artifact@v4
+        with:
+          name: web-dist
+          path: .
 
       - name: Build Linux packages
         run: bunx electron-builder --linux deb pacman tar.gz AppImage
@@ -167,13 +164,17 @@ jobs:
 
   build-windows:
     name: Build Windows
-    needs: prepare
+    needs:
+      - resolve
+      - build-web
     runs-on: windows-latest
+    timeout-minutes: 30
     steps:
-      - name: Checkout
+      - name: Checkout release tag (read-only)
         uses: actions/checkout@v4
         with:
-          ref: ${{ needs.prepare.outputs.tag }}
+          ref: ${{ needs.resolve.outputs.tag }}
+          fetch-depth: 1
 
       - name: Setup Bun
         uses: oven-sh/setup-bun@v2
@@ -209,8 +210,11 @@ jobs:
       - name: Install dependencies
         run: bun install --frozen-lockfile
 
-      - name: Build application
-        run: bun run build
+      - name: Download web artifacts
+        uses: actions/download-artifact@v4
+        with:
+          name: web-dist
+          path: .
 
       - name: Build Windows thumbnail provider
         run: bun run build:thumbnail:win
@@ -225,17 +229,21 @@ jobs:
           path: release/*
           if-no-files-found: error
 
-  build-macos-arm64:
-    name: Build macOS (arm64)
-    needs: prepare
+  build-macos:
+    name: Build macOS (arm64 + x64)
+    needs:
+      - resolve
+      - build-web
     runs-on: macos-14
+    timeout-minutes: 30
     env:
       CSC_IDENTITY_AUTO_DISCOVERY: false
     steps:
-      - name: Checkout
+      - name: Checkout release tag (read-only)
         uses: actions/checkout@v4
         with:
-          ref: ${{ needs.prepare.outputs.tag }}
+          ref: ${{ needs.resolve.outputs.tag }}
+          fetch-depth: 1
 
       - name: Setup Bun
         uses: oven-sh/setup-bun@v2
@@ -246,8 +254,8 @@ jobs:
         uses: actions/cache@v4
         with:
           path: ~/.bun/install/cache
-          key: macos-arm64-bun-${{ hashFiles('bun.lock') }}
-          restore-keys: macos-arm64-bun-
+          key: macos-bun-${{ hashFiles('bun.lock') }}
+          restore-keys: macos-bun-
 
       - name: Restore Electron cache
         uses: actions/cache@v4
@@ -255,103 +263,46 @@ jobs:
           path: |
             ~/Library/Caches/electron
             ~/Library/Caches/electron-builder
-          key: macos-arm64-electron-${{ hashFiles('bun.lock') }}
+          key: macos-electron-${{ hashFiles('bun.lock') }}
 
       - name: Restore Xcode DerivedData
         uses: actions/cache@v4
         with:
           path: build-resources/macos-quicklook/build/DerivedData
-          key: macos-arm64-xcode-derived-data-${{ hashFiles('build-resources/macos-quicklook/**/*.swift', 'build-resources/macos-quicklook/**/*.pbxproj') }}
+          key: macos-xcode-derived-data-${{ hashFiles('build-resources/macos-quicklook/**/*.swift', 'build-resources/macos-quicklook/**/*.pbxproj') }}
 
       - name: Install dependencies
         run: bun install --frozen-lockfile
 
-      - name: Build application
-        run: bun run build
+      - name: Download web artifacts
+        uses: actions/download-artifact@v4
+        with:
+          name: web-dist
+          path: .
 
       - name: Build macOS thumbnail provider
         run: bun run build:thumbnail:mac
 
-      - name: Build macOS packages (arm64)
-        run: bunx electron-builder --mac --arm64
+      - name: Build macOS packages (arm64 + x64)
+        run: bunx electron-builder --mac --arm64 --x64
 
       - name: Upload artifacts
         uses: actions/upload-artifact@v4
         with:
-          name: macos-arm64-artifacts
-          path: release/*
-          if-no-files-found: error
-
-  build-macos-x64:
-    name: Build macOS (x64)
-    needs: prepare
-    runs-on: macos-15-intel
-    env:
-      CSC_IDENTITY_AUTO_DISCOVERY: false
-    steps:
-      - name: Checkout
-        uses: actions/checkout@v4
-        with:
-          ref: ${{ needs.prepare.outputs.tag }}
-
-      - name: Setup Bun
-        uses: oven-sh/setup-bun@v2
-        with:
-          bun-version: ${{ env.BUN_VERSION }}
-
-      - name: Restore Bun cache
-        uses: actions/cache@v4
-        with:
-          path: ~/.bun/install/cache
-          key: macos-x64-bun-${{ hashFiles('bun.lock') }}
-          restore-keys: macos-x64-bun-
-
-      - name: Restore Electron cache
-        uses: actions/cache@v4
-        with:
-          path: |
-            ~/Library/Caches/electron
-            ~/Library/Caches/electron-builder
-          key: macos-x64-electron-${{ hashFiles('bun.lock') }}
-
-      - name: Restore Xcode DerivedData
-        uses: actions/cache@v4
-        with:
-          path: build-resources/macos-quicklook/build/DerivedData
-          key: macos-x64-xcode-derived-data-${{ hashFiles('build-resources/macos-quicklook/**/*.swift', 'build-resources/macos-quicklook/**/*.pbxproj') }}
-
-      - name: Install dependencies
-        run: bun install --frozen-lockfile
-
-      - name: Build application
-        run: bun run build
-
-      - name: Build macOS thumbnail provider
-        run: bun run build:thumbnail:mac
-
-      - name: Build macOS packages (x64)
-        run: bunx electron-builder --mac --x64
-
-      - name: Upload artifacts
-        uses: actions/upload-artifact@v4
-        with:
-          name: macos-x64-artifacts
+          name: macos-artifacts
           path: release/*
           if-no-files-found: error
 
   publish-release:
     name: Publish GitHub Release
     needs:
-      - prepare
+      - resolve
       - build-linux
       - build-windows
-      - build-macos-arm64
-      - build-macos-x64
+      - build-macos
     runs-on: ubuntu-latest
+    timeout-minutes: 10
     steps:
-      - name: Checkout
-        uses: actions/checkout@v4
-
       - name: Download all artifacts
         uses: actions/download-artifact@v4
         with:
@@ -362,36 +313,24 @@ jobs:
       - name: List release artifacts
         run: ls -la release/
 
-      - name: Publish GitHub Release
+      - name: Upload to the published release
         env:
-          TAG: ${{ needs.prepare.outputs.tag }}
+          TAG: ${{ needs.resolve.outputs.tag }}
         run: |
           mapfile -t files < <(find release -maxdepth 1 -type f)
-          if gh release view "$TAG" >/dev/null 2>&1; then
-            gh release upload "$TAG" "${files[@]}" --clobber
-          else
-            gh release create "$TAG" "${files[@]}" \
-              --title "Kanso $TAG" \
-              --generate-notes
-          fi
+          gh release upload "$TAG" "${files[@]}" --clobber
 
   publish-aur:
     name: Publish AUR package
     needs:
-      - prepare
+      - resolve
       - publish-release
     runs-on: ubuntu-latest
+    timeout-minutes: 10
     env:
       PACKAGE_NAME: kanso-bin
       AUR_REPO_URL: aur@aur.archlinux.org:kanso-bin.git
-      OUT_DIR: packaging/aur
-      RELEASE_TAG: ${{ needs.prepare.outputs.tag }}
     steps:
-      - name: Checkout
-        uses: actions/checkout@v4
-        with:
-          fetch-depth: 0
-
       - name: Download Linux tarball
         uses: actions/download-artifact@v4
         with:
@@ -414,17 +353,23 @@ jobs:
           mkdir -p ~/.ssh
           ssh-keyscan -t ed25519 aur.archlinux.org >> ~/.ssh/known_hosts
 
-      - name: Render AUR packaging files
+      # PKGBUILD/.SRCINFO генерируются во временной директории и пушатся
+      # напрямую в AUR. В main-репозиторий ничего не коммитится.
+      - name: Publish to AUR
         env:
-          VERSION: ${{ needs.prepare.outputs.version }}
+          VERSION: ${{ needs.resolve.outputs.version }}
+          TAG: ${{ needs.resolve.outputs.tag }}
           SOURCE_SHA: ${{ steps.sha.outputs.sha }}
         run: |
-          SOURCE_URL="https://github.com/${{ github.repository }}/releases/download/v${VERSION}/Kanso-${VERSION}-linux-x64.tar.gz"
-          LOGO_URL="https://raw.githubusercontent.com/${{ github.repository }}/v${VERSION}/public/logo512.png"
+          SOURCE_URL="https://github.com/${{ github.repository }}/releases/download/${TAG}/Kanso-${VERSION}-linux-x64.tar.gz"
+          LOGO_URL="https://raw.githubusercontent.com/${{ github.repository }}/${TAG}/public/logo512.png"
 
-          mkdir -p "$OUT_DIR"
+          WORKDIR=$(mktemp -d)
+          trap 'rm -rf "$WORKDIR"' EXIT
 
-          cat > "${OUT_DIR}/PKGBUILD" <<EOF
+          git clone "$AUR_REPO_URL" "$WORKDIR/kanso-bin"
+
+          cat > "$WORKDIR/kanso-bin/PKGBUILD" <<EOF
           pkgname=${PACKAGE_NAME}
           pkgver=${VERSION}
           pkgrel=1
@@ -472,7 +417,7 @@ jobs:
           }
           EOF
 
-          cat > "${OUT_DIR}/.SRCINFO" <<EOF
+          cat > "$WORKDIR/kanso-bin/.SRCINFO" <<EOF
           pkgbase = ${PACKAGE_NAME}
           	pkgdesc = Modern media player focused on convenience, beauty, and performance
           	pkgver = ${VERSION}
@@ -495,34 +440,13 @@ jobs:
           pkgname = ${PACKAGE_NAME}
           EOF
 
-      - name: Commit updated AUR packaging files to main
-        run: |
-          git config user.name "Kanso Release Bot"
-          git config user.email "github-actions@kanso.local"
-          git checkout main
-          git add "${OUT_DIR}/PKGBUILD" "${OUT_DIR}/.SRCINFO"
-          if git diff --cached --quiet; then
-            echo "No AUR packaging changes to commit."
-          else
-            git commit -m "chore(aur): update kanso-bin packaging for ${RELEASE_TAG}"
-            git push origin main
-          fi
-
-      - name: Publish to AUR
-        run: |
-          WORKDIR=$(mktemp -d)
-          trap 'rm -rf "$WORKDIR"' EXIT
-
-          git clone "$AUR_REPO_URL" "$WORKDIR/kanso-bin"
-          cp "${OUT_DIR}/PKGBUILD" "${OUT_DIR}/.SRCINFO" "$WORKDIR/kanso-bin/"
-
           cd "$WORKDIR/kanso-bin"
           git add PKGBUILD .SRCINFO
           if git diff --cached --quiet; then
-            echo "AUR package already up to date for ${RELEASE_TAG}."
+            echo "AUR package already up to date for ${TAG}."
             exit 0
           fi
 
           git -c user.email="github-actions@kanso.local" -c user.name="Kanso Release Bot" \
-            commit -m "Release ${RELEASE_TAG}"
+            commit -m "Release ${TAG}"
           git push
