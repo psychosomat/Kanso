@@ -145,7 +145,7 @@ jobs:
           path: .
 
       - name: Build Linux packages
-        run: bunx electron-builder --linux deb pacman tar.gz AppImage
+        run: bunx electron-builder --linux deb pacman tar.gz AppImage --publish never
 
       - name: Normalize AppImage extension
         run: |
@@ -219,7 +219,7 @@ jobs:
         run: bun run build:thumbnail:win
 
       - name: Build Windows installer
-        run: bunx electron-builder --win nsis
+        run: bunx electron-builder --win nsis --publish never
 
       - name: Upload artifacts
         uses: actions/upload-artifact@v4
@@ -283,7 +283,7 @@ jobs:
         run: bun run build:thumbnail:mac
 
       - name: Build macOS packages (arm64 + x64)
-        run: bunx electron-builder --mac --arm64 --x64
+        run: bunx electron-builder --mac --arm64 --x64 --publish never
 
       - name: Upload artifacts
         uses: actions/upload-artifact@v4
