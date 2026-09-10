@@ -197,19 +197,19 @@ export function CommandPalette({
 		<>
 			{/* biome-ignore lint/a11y/noStaticElementInteractions: overlay click closes the palette, Escape is handled globally */}
 			<div
-				className="animate-fade-in fixed inset-0 z-100 flex justify-center bg-black/60 p-4 backdrop-blur-sm"
+				className="animate-fade-in fixed inset-0 z-100 flex justify-center bg-black/40 p-4 backdrop-blur-md"
 				onClick={() => onOpenChange(false)}
 				role="presentation"
 			>
 				{/* biome-ignore lint/a11y/useKeyWithClickEvents: click-away layer, keyboard handled globally */}
 				<div
-					className="animate-slide-up mt-[14vh] h-fit w-full max-w-xl overflow-hidden rounded-2xl bg-(--panel-strong) shadow-[0_32px_80px_-16px_rgba(0,0,0,0.9)] ring-1 ring-white/10"
+					className="island-strong animate-slide-up mt-[14vh] h-fit w-full max-w-xl overflow-hidden rounded-(--radius-xl)"
 					onClick={(e) => e.stopPropagation()}
 					role="dialog"
 					aria-label="Quick navigation"
 				>
-					<div className="flex items-center gap-3 border-b border-white/8 px-4 py-3">
-						<span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-(--accent) text-white">
+					<div className="flex items-center gap-3 border-b border-(--border) px-4 py-3.5">
+						<span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-(--radius-sm) bg-(--accent) text-white">
 							<IconSearch size={15} />
 						</span>
 						<input
@@ -251,17 +251,17 @@ export function CommandPalette({
 											onClick={() => runEntry(entry)}
 											onMouseMove={() => setActiveIndex(i)}
 											className={cn(
-												"flex w-full items-center gap-3 rounded-xl px-2.5 py-2 text-left",
+												"flex w-full items-center gap-3 rounded-(--radius) px-2.5 py-2 text-left transition-colors",
 												active
-													? "bg-(--accent) text-white"
-													: "text-(--foreground)/85 hover:bg-white/5",
+													? "bg-white/8 text-(--foreground)"
+													: "text-(--foreground)/80 hover:bg-white/5",
 											)}
 										>
 											<span
 												className={cn(
-													"flex h-8 w-8 shrink-0 items-center justify-center rounded-lg",
+													"flex h-8 w-8 shrink-0 items-center justify-center rounded-(--radius-sm)",
 													active
-														? "bg-white/20 text-white"
+														? "bg-(--accent) text-white"
 														: "bg-white/6 text-(--muted-foreground)",
 												)}
 											>
@@ -318,7 +318,7 @@ export function CommandPalette({
 						)}
 					</div>
 
-					<div className="flex items-center gap-3 border-t border-white/8 px-4 py-2.5">
+					<div className="flex items-center gap-3 border-t border-(--border) px-4 py-2.5">
 						<Hint keys={["↑", "↓"]} label="navigate" />
 						<Hint keys={["↵"]} label="open" />
 						<Hint keys={["esc"]} label="close" />

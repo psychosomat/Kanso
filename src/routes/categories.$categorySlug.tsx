@@ -254,7 +254,7 @@ function CategoryFeedPage() {
 				{data?.items.length ? (
 					<div
 						className={cn(
-							"grid grid-cols-2 gap-x-4 gap-y-6 md:grid-cols-3 transition-opacity duration-150",
+							"grid grid-cols-2 gap-x-5 gap-y-7 transition-opacity duration-150 md:grid-cols-3 xl:grid-cols-4 2xl:grid-cols-5",
 							reordering && "opacity-60",
 						)}
 					>
@@ -284,7 +284,7 @@ function CategoryFeedPage() {
 						))}
 					</div>
 				) : (
-					<div className="rounded-xl border border-dashed border-(--border) p-8 text-sm text-(--muted-foreground)">
+					<div className="rounded-(--radius-lg) border border-dashed border-(--border) p-8 text-sm text-(--muted-foreground)">
 						This category has no posts yet. Add videos from the dump or player
 						page.
 					</div>

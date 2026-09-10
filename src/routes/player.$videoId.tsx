@@ -52,6 +52,8 @@ import {
 	formatDateTime,
 	formatDuration,
 	formatResolution,
+	cn,
+	resolveTitlebarMode,
 	shouldResume,
 } from "@/lib/utils";
 import IconArrowLeft from "~icons/tabler/arrow-left";
@@ -626,6 +628,11 @@ export function PlayerPage({
 	}, []);
 
 	useEffect(() => {
+		document.body.classList.add("is-player");
+		return () => document.body.classList.remove("is-player");
+	}, []);
+
+	useEffect(() => {
 		const element = videoRef.current;
 		if (!element) return;
 		element.playbackRate = playbackRate;
@@ -724,6 +731,8 @@ export function PlayerPage({
 		return "object-contain";
 	}, [prefs]);
 
+	const titlebarMode = resolveTitlebarMode(prefs?.titlebarMode ?? "auto");
+
 	async function setFitMode(value: PlayerPreferencesDto["playerFitMode"]) {
 		if (!prefs) return;
 		const next = { ...prefs, playerFitMode: value };
@@ -762,7 +771,11 @@ export function PlayerPage({
 			return;
 		}
 
-		router.history.back();
+		if (window.history.length > 1) {
+			router.history.back();
+			return;
+		}
+		void router.navigate({ to: "/dump" });
 	}, [router]);
 
 	const volumePercent = Math.round(
@@ -801,7 +814,7 @@ export function PlayerPage({
 	);
 
 	return (
-		<div className="relative z-2 h-[calc(100vh-3rem)] bg-black">
+		<div className="relative z-2 h-full bg-(--background-deep)">
 			<div
 				ref={playerContainerRef}
 				className="ambient-stage relative h-full w-full overflow-hidden bg-black"
@@ -809,12 +822,15 @@ export function PlayerPage({
 			>
 				<div
 					ref={topBarRef}
-					className="absolute inset-x-0 top-0 z-20 flex items-center justify-between bg-linear-to-b from-black/70 to-transparent px-4 pb-10 pt-3"
+					className={cn(
+						"window-drag absolute inset-x-0 top-0 z-20 flex items-center gap-2 bg-linear-to-b from-black/55 to-transparent px-4 pb-10 pt-3",
+						titlebarMode === "macos" ? "pl-20" : "pr-28",
+					)}
 				>
 					<Button
 						variant="ghost"
 						size="icon"
-						className="glass h-9 w-9 rounded-full text-white/85 ring-1 ring-white/10 hover:bg-white/15 hover:text-white"
+						className="glass window-no-drag h-9 w-9 rounded-full text-white/85 ring-1 ring-white/10 hover:bg-white/15 hover:text-white"
 						onClick={handleBack}
 						aria-label="Back to library"
 					>
@@ -832,7 +848,7 @@ export function PlayerPage({
 								<Button
 									variant="ghost"
 									size="icon"
-									className="glass h-9 w-9 rounded-full text-white/85 ring-1 ring-white/10 hover:bg-white/15 hover:text-white"
+									className="glass window-no-drag h-9 w-9 rounded-full text-white/85 ring-1 ring-white/10 hover:bg-white/15 hover:text-white"
 									aria-label="Video details"
 								>
 									<IconLayoutSidebarRight size={16} />
@@ -1043,9 +1059,9 @@ export function PlayerPage({
 
 				<div
 					ref={bottomBarRef}
-					className="absolute inset-x-0 bottom-0 z-20 bg-linear-to-t from-black/90 via-black/45 to-transparent px-4 pb-3 pt-14 select-none"
+					className="absolute inset-x-0 bottom-0 z-20 px-4 pb-4 select-none"
 				>
-					<div className="mx-auto w-full max-w-4xl rounded-2xl bg-black/55 px-4 pb-3 pt-3 shadow-2xl ring-1 ring-white/10 backdrop-blur-2xl">
+					<div className="island-strong mx-auto w-full max-w-3xl rounded-(--radius-xl) px-4 pb-3 pt-3">
 						<div className="mb-1.5 flex items-center gap-3">
 							{video?.posterUrl ? (
 								<img

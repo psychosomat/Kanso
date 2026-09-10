@@ -37,7 +37,7 @@ function Slider({
 			<SliderPrimitive.Track
 				data-slot="slider-track"
 				className={cn(
-					"bg-(--accent)/20 relative grow overflow-hidden rounded-full h-1.5 w-full",
+					"relative h-1.5 w-full grow overflow-hidden rounded-full bg-white/12",
 				)}
 			>
 				<SliderPrimitive.Range
@@ -50,7 +50,7 @@ function Slider({
 					data-slot="slider-thumb"
 					key={`slider-thumb-${val}`}
 					className={cn(
-						"border-(--accent) bg-(--accent) ring-(--accent)/50 block h-4 w-4 rounded-full border-2 shadow-sm transition-all focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/50 disabled:pointer-events-none disabled:opacity-50",
+						"block h-3.5 w-3.5 rounded-full border-2 border-(--accent) bg-(--accent) shadow-[0_0_14px_-2px_var(--accent)] transition-all focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-(--ring) disabled:pointer-events-none disabled:opacity-50",
 					)}
 				/>
 			))}

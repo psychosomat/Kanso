@@ -91,11 +91,12 @@ export function AssignVideoDialog({
 								{flatCategories.map((category) => (
 									<div
 										key={category.id}
-										className="rounded-xl border border-(--border) bg-(--panel) p-3"
+										className="rounded-(--radius-lg) border border-(--border) bg-white/4 p-3"
 									>
 										<label className="flex items-center gap-3">
 											<input
 												type="checkbox"
+												className="h-4 w-4 shrink-0 accent-(--accent)"
 												checked={Boolean(selected[category.id])}
 												onChange={(event) =>
 													setSelected((current) => ({

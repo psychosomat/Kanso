@@ -13,10 +13,10 @@ export function AlertDialogContent({
 }: React.ComponentProps<typeof AlertDialogPrimitive.Content>) {
 	return (
 		<AlertDialogPortal>
-			<AlertDialogPrimitive.Overlay className="fixed inset-0 z-50 bg-black/70 backdrop-blur-sm" />
+			<AlertDialogPrimitive.Overlay className="fixed inset-0 z-50 bg-black/55 backdrop-blur-md" />
 			<AlertDialogPrimitive.Content
 				className={cn(
-					"fixed left-1/2 top-1/2 z-50 w-[min(92vw,32rem)] -translate-x-1/2 -translate-y-1/2 rounded-xl border border-(--border-strong) bg-(--panel-elevated) p-6 shadow-2xl",
+					"island-strong fixed left-1/2 top-1/2 z-50 w-[min(92vw,32rem)] -translate-x-1/2 -translate-y-1/2 rounded-(--radius-xl) p-6",
 					className,
 				)}
 				{...props}

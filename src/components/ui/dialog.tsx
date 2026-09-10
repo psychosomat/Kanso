@@ -14,7 +14,7 @@ export function DialogOverlay({
 	return (
 		<DialogPrimitive.Overlay
 			className={cn(
-				"fixed inset-0 z-50 bg-black/70 backdrop-blur-sm data-[state=open]:animate-fade-in data-[state=closed]:animate-fade-out",
+				"fixed inset-0 z-50 bg-black/55 backdrop-blur-md data-[state=open]:animate-fade-in data-[state=closed]:animate-fade-out",
 				className,
 			)}
 			{...props}
@@ -32,14 +32,14 @@ export function DialogContent({
 			<DialogOverlay />
 			<DialogPrimitive.Content
 				className={cn(
-					"fixed left-1/2 top-1/2 z-50 grid w-[min(92vw,36rem)] -translate-x-1/2 -translate-y-1/2 gap-4 rounded-lg border border-(--border-strong) bg-(--panel-elevated) p-6 shadow-xl",
+					"island-strong fixed left-1/2 top-1/2 z-50 grid w-[min(92vw,36rem)] -translate-x-1/2 -translate-y-1/2 gap-4 rounded-(--radius-xl) p-6",
 					"data-[state=open]:animate-scale-in data-[state=closed]:animate-fade-out transition-all duration-200",
 					className,
 				)}
 				{...props}
 			>
 				{children}
-				<DialogPrimitive.Close className="absolute right-4 top-4 rounded-sm p-1.5 text-(--muted-foreground) transition-all duration-150 hover:bg-(--panel-strong) hover:text-(--foreground) hover:scale-105 active:scale-95">
+				<DialogPrimitive.Close className="absolute right-4 top-4 rounded-full p-1.5 text-(--muted-foreground) transition-all duration-150 hover:bg-white/8 hover:text-(--foreground) active:scale-95">
 					<IconX size={16} />
 				</DialogPrimitive.Close>
 			</DialogPrimitive.Content>
@@ -112,7 +112,7 @@ export function SheetContent({
 			<DialogOverlay />
 			<DialogPrimitive.Content
 				className={cn(
-					"fixed top-0 z-50 h-full w-[min(92vw,24rem)] gap-4 border border-(--border-strong) bg-(--panel-elevated) p-6 shadow-xl",
+					"island-strong fixed top-0 z-50 h-full w-[min(92vw,24rem)] gap-4 p-6",
 					sideClasses[side],
 					"transition-all duration-200",
 					className,
@@ -120,7 +120,7 @@ export function SheetContent({
 				{...props}
 			>
 				{children}
-				<DialogPrimitive.Close className="absolute right-4 top-4 rounded-sm p-1.5 text-(--muted-foreground) transition-all duration-150 hover:bg-(--panel-strong) hover:text-(--foreground) hover:scale-105 active:scale-95">
+				<DialogPrimitive.Close className="absolute right-4 top-4 rounded-full p-1.5 text-(--muted-foreground) transition-all duration-150 hover:bg-white/8 hover:text-(--foreground) active:scale-95">
 					<IconX size={16} />
 				</DialogPrimitive.Close>
 			</DialogPrimitive.Content>

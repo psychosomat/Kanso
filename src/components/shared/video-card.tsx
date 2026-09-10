@@ -109,7 +109,7 @@ export function VideoCard({
 						draggable={draggable}
 						className="group block cursor-grab active:cursor-grabbing"
 					>
-						<div className="relative aspect-video overflow-hidden rounded-lg bg-black ring-1 ring-white/10 transition-[box-shadow,ring-color] duration-200 group-hover:shadow-[0_8px_32px_-8px_var(--accent-subtle)] group-hover:ring-(--accent)/60">
+						<div className="relative aspect-video overflow-hidden rounded-(--radius-lg) bg-black ring-1 ring-white/8 transition-[box-shadow,ring-color,transform] duration-300 ease-out group-hover:shadow-[0_24px_60px_-24px_var(--accent-subtle)] group-hover:ring-(--accent)/45">
 							{video.posterUrl ? (
 								<img
 									src={video.posterUrl}
@@ -117,47 +117,48 @@ export function VideoCard({
 									loading="lazy"
 									decoding="async"
 									draggable={false}
-									className="h-full w-full object-cover"
+									className="h-full w-full object-cover transition-transform duration-500 ease-out group-hover:scale-[1.03]"
 								/>
 							) : (
-								<div className="flex h-full w-full items-center justify-center bg-(--panel-strong)">
+								<div className="flex h-full w-full items-center justify-center bg-white/5">
 									<IconPlayerPlayFilled
 										size={28}
-										className="text-(--muted-foreground)/60"
+										className="text-(--muted-foreground)/50"
 									/>
 								</div>
 							)}
-
-							<div className="absolute inset-x-0 bottom-0 h-10 bg-linear-to-t from-black/60 to-transparent" />
 
 							{!video.exists && (
 								<div className="absolute left-2 top-2">
 									<Badge variant="destructive">Missing</Badge>
 								</div>
 							)}
-							<div className="tnum absolute bottom-1.5 right-1.5 rounded-md bg-black/75 px-1.5 py-0.5 text-[11px] font-medium text-white backdrop-blur-sm">
-								{formatDuration(video.durationSec)}
-							</div>
 
-							<div className="absolute inset-0 flex items-center justify-center opacity-0 transition-opacity duration-150 group-hover:opacity-100">
-								<div className="flex h-11 w-11 items-center justify-center rounded-full bg-(--accent) text-white shadow-[0_0_24px_var(--accent-subtle)]">
+							<div className="pointer-events-none absolute inset-0 bg-linear-to-t from-black/70 via-black/0 to-transparent opacity-0 transition-opacity duration-300 group-hover:opacity-100" />
+
+							<div className="absolute inset-0 flex items-center justify-center opacity-0 transition-all duration-300 group-hover:opacity-100">
+								<div className="flex h-12 w-12 items-center justify-center rounded-full bg-(--accent) text-white shadow-[0_12px_36px_-8px_var(--accent)] transition-transform duration-300 group-hover:scale-100 scale-90">
 									<IconPlayerPlayFilled size={18} />
 								</div>
 							</div>
+
+							<div className="tnum font-data pointer-events-none absolute bottom-2 right-2 rounded-full bg-black/60 px-2 py-0.5 text-[10px] font-medium text-white/90 opacity-0 backdrop-blur-md transition-opacity duration-300 group-hover:opacity-100">
+								{formatDuration(video.durationSec)}
+							</div>
 						</div>
 
-						<div className="mt-1.5 flex items-start gap-1 px-0.5">
+						<div className="mt-2 flex items-start gap-2 px-0.5">
 							<div className="min-w-0 flex-1">
-								<h3 className="line-clamp-2 text-[13px] leading-snug text-(--foreground)">
+								<h3 className="line-clamp-2 text-[13px] font-medium leading-snug text-(--foreground)/90 transition-colors group-hover:text-(--foreground)">
 									{video.fileName}
 								</h3>
-								<p className="mt-0.5 line-clamp-1 text-xs text-(--muted-foreground)">
+								<p className="font-data mt-1 line-clamp-1 text-[10px] uppercase tracking-[0.08em] text-(--muted-foreground)/80">
 									{formatResolution(video.width, video.height)}
 									{" · "}
 									{formatDateTime(video.modifiedAt)}
 								</p>
 								{caption && (
-									<p className="mt-0.5 line-clamp-2 text-xs text-(--muted-foreground)">
+									<p className="mt-1 line-clamp-2 text-xs text-(--muted-foreground)">
 										{caption}
 									</p>
 								)}

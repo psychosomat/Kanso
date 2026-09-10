@@ -12,7 +12,7 @@ export function ContextMenuContent({
 		<ContextMenuPrimitive.Portal>
 			<ContextMenuPrimitive.Content
 				className={cn(
-					"z-50 min-w-40 rounded-lg border border-(--border) bg-(--panel-elevated) p-1 shadow-2xl",
+					"island-strong z-50 min-w-40 overflow-hidden rounded-(--radius-md) p-1 text-(--foreground)",
 					className,
 				)}
 				{...props}
@@ -28,7 +28,7 @@ export function ContextMenuItem({
 	return (
 		<ContextMenuPrimitive.Item
 			className={cn(
-				"flex cursor-default select-none items-center rounded-md px-2 py-2 text-sm text-(--foreground) outline-none data-highlighted:bg-(--panel)",
+				"flex cursor-default select-none items-center gap-2 rounded-(--radius-sm) px-2 py-2 text-[13px] text-(--foreground) outline-none data-highlighted:bg-white/8",
 				className,
 			)}
 			{...props}

@@ -41,8 +41,8 @@ import IconTrash from "~icons/tabler/trash";
 
 const NOISE_STORAGE_KEY = "player:noiseOpacity";
 const ACCENT_STORAGE_KEY = "player:accentColor";
-const DEFAULT_ACCENT = "#ff5a36";
-const LEGACY_ACCENTS = new Set(["#c8883a", "#d6be8c", "#2f9bff"]);
+const DEFAULT_ACCENT = "#f76f53";
+const LEGACY_ACCENTS = new Set(["#c8883a", "#d6be8c", "#2f9bff", "#ff5a36"]);
 const GITHUB_URL = "https://github.com/psychosomat/Kanso";
 
 function getNoiseOpacity(): number {
@@ -330,7 +330,7 @@ function SettingsPage() {
 									{library?.sourcePaths.map((folder) => (
 										<div
 											key={folder.id}
-											className="flex items-center justify-between gap-3 rounded-(--radius) border border-(--border) bg-(--panel-strong) p-3"
+											className="flex items-center justify-between gap-3 rounded-(--radius) border border-(--border) bg-white/4 p-3"
 										>
 											<div className="flex min-w-0 items-center gap-2">
 												<IconFolder
@@ -612,13 +612,12 @@ function SettingsPage() {
 							</div>
 						</div>
 
-						<div className="relative w-full overflow-hidden rounded-(--radius) border border-(--border) bg-(--panel)">
+						<div className="relative w-full overflow-hidden rounded-(--radius-lg) border border-(--border) bg-black/20">
 							<svg
 								ref={svgRef}
 								width="100%"
-								height="auto"
 								viewBox={`0 0 ${eqGraphWidth} ${eqGraphHeight}`}
-								className="block"
+								className="block h-auto w-full"
 								onPointerMove={handleGraphPointerMove}
 								onPointerUp={stopDrag}
 								onPointerLeave={stopDrag}
@@ -783,26 +782,24 @@ function SettingsSection({
 }) {
 	return (
 		<section>
-			<div className="mb-1.5 flex items-center gap-1.5 px-1">
-				<span className="text-(--muted-foreground)">{icon}</span>
-				<h2 className="text-[13px] font-semibold text-(--foreground)">
+			<div className="mb-2 flex items-center gap-2 px-1">
+				<span className="text-(--accent)">{icon}</span>
+				<h2 className="text-[13px] font-semibold tracking-[-0.01em] text-(--foreground)">
 					{title}
 				</h2>
 			</div>
-			<div className="rounded-lg bg-(--panel) px-4 py-4 ring-1 ring-white/8">
-				{children}
-			</div>
+			<div className="island rounded-(--radius-lg) px-5 py-5">{children}</div>
 		</section>
 	);
 }
 
 function StatTile({ label, value }: { label: string; value: string }) {
 	return (
-		<div className="rounded-md bg-white/4 px-3 py-2.5">
-			<p className="text-[11px] font-medium text-(--muted-foreground)">
-				{label}
+		<div className="rounded-(--radius) bg-white/4 px-3 py-3">
+			<p className="eyebrow text-(--muted-foreground)/70">{label}</p>
+			<p className="tnum font-data mt-1.5 text-sm text-(--foreground)">
+				{value}
 			</p>
-			<p className="tnum mt-0.5 text-sm text-(--foreground)">{value}</p>
 		</div>
 	);
 }

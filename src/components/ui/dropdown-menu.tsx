@@ -13,7 +13,7 @@ export function DropdownMenuContent({
 			<DropdownMenuPrimitive.Content
 				sideOffset={8}
 				className={cn(
-					"z-50 min-w-44 rounded-lg border border-(--border) bg-(--panel-elevated) p-1 text-(--foreground) shadow-2xl",
+					"island-strong z-50 min-w-44 overflow-hidden rounded-(--radius-md) p-1 text-(--foreground)",
 					className,
 				)}
 				{...props}
@@ -32,7 +32,7 @@ export function DropdownMenuItem({
 	return (
 		<DropdownMenuPrimitive.Item
 			className={cn(
-				"relative flex cursor-default select-none items-center rounded-md px-2 py-2 text-sm outline-none data-[highlighted]:bg-(--panel)",
+				"relative flex cursor-default select-none items-center gap-2 rounded-(--radius-sm) px-2 py-2 text-[13px] outline-none data-[highlighted]:bg-white/8",
 				inset && "pl-8",
 				className,
 			)}

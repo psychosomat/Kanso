@@ -1,26 +1,21 @@
 import { Link, useLocation, useRouter } from "@tanstack/react-router";
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { CategoryIcon } from "@/lib/category-icons";
-import {
-	buildCategoryTree,
-	type CategoryTreeNode,
-	flattenCategoryTree,
-} from "@/lib/category-tree";
-import { APP_NAME } from "@/lib/constants";
+import { buildCategoryTree, type CategoryTreeNode } from "@/lib/category-tree";
 import type { CategoryDto } from "@/lib/contracts";
 import { getPlayerApi } from "@/lib/player-api";
 import { cn, paletteShortcutLabel, resolveTitlebarMode } from "@/lib/utils";
 import { getDraggedVideoId, hasDraggedVideo } from "@/lib/video-drag";
 import IconChevronDown from "~icons/tabler/chevron-down";
+import IconChevronLeft from "~icons/tabler/chevron-left";
 import IconChevronRight from "~icons/tabler/chevron-right";
 import IconFolderPlus from "~icons/tabler/folder-plus";
 import IconInbox from "~icons/tabler/inbox";
 import IconLayoutGrid from "~icons/tabler/layout-grid";
-import IconLayoutSidebarLeftCollapse from "~icons/tabler/layout-sidebar-left-collapse";
-import IconLayoutSidebarLeftExpand from "~icons/tabler/layout-sidebar-left-expand";
 import IconMenu2 from "~icons/tabler/menu-2";
 import IconPencil from "~icons/tabler/pencil";
-import IconPlayerPlayFilled from "~icons/tabler/player-play-filled";
+import IconPin from "~icons/tabler/pin";
+import IconPinFilled from "~icons/tabler/pin-filled";
 import IconSearch from "~icons/tabler/search";
 import IconSettings from "~icons/tabler/settings";
 import { CategoryFormDialog } from "../categories/category-form-dialog";
@@ -43,11 +38,8 @@ import { useAppState } from "./app-state";
 import { WindowTitlebar } from "./window-titlebar";
 
 const NOISE_STORAGE_KEY = "player:noiseOpacity";
-const SIDEBAR_COLLAPSED_KEY = "player:sidebar:collapsed";
-const SIDEBAR_AUTO_COLLAPSE_KEY = "player:sidebar:auto-collapsed";
-const SIDEBAR_PRE_PLAYER_KEY = "player:sidebar:pre-player";
+const SIDEBAR_PINNED_KEY = "player:sidebar:pinned";
 const COLLAPSED_CATEGORIES_KEY = "player:sidebar:collapsed-categories";
-const SIDEBAR_WIDTH_KEY = "player:sidebar:width";
 
 function initNoise() {
 	const stored = localStorage.getItem(NOISE_STORAGE_KEY);
@@ -56,19 +48,29 @@ function initNoise() {
 	}
 }
 
+function ActiveBar({ active }: { active: boolean }) {
+	return (
+		<span
+			aria-hidden="true"
+			className={cn(
+				"absolute left-0 top-1/2 h-4 w-[2px] -translate-y-1/2 rounded-full bg-(--accent) transition-opacity duration-150",
+				active ? "opacity-100" : "opacity-0",
+			)}
+		/>
+	);
+}
+
 function NavItem({
 	to,
 	icon,
 	label,
 	active,
-	collapsed,
 	count,
 }: {
 	to: "/dump" | "/settings";
 	icon: React.ReactNode;
 	label: string;
 	active: boolean;
-	collapsed: boolean;
 	count?: number;
 }) {
 	const handleMouseDown = (e: React.MouseEvent) => {
@@ -80,46 +82,32 @@ function NavItem({
 	return (
 		<Link
 			to={to}
-			title={collapsed ? label : undefined}
 			onMouseDown={handleMouseDown}
 			className={cn(
-				"group relative flex h-7 items-center gap-2.5 rounded-md px-2.5 text-[13px] transition-colors duration-100",
+				"group relative flex h-8 items-center gap-2.5 rounded-(--radius) px-2.5 text-[13px] transition-colors duration-150",
 				active
-					? "bg-(--accent) font-medium text-white"
-					: "text-(--foreground)/80 hover:bg-white/5",
-				collapsed && "justify-center px-0",
+					? "bg-white/8 text-(--foreground)"
+					: "text-(--muted-foreground) hover:bg-white/5 hover:text-(--foreground)",
 			)}
 		>
+			<ActiveBar active={active} />
 			<span
 				className={cn(
 					"shrink-0",
-					active ? "text-white" : "text-(--muted-foreground)",
+					active ? "text-(--accent)" : "text-(--muted-foreground)",
 				)}
 			>
 				{icon}
 			</span>
-			{!collapsed && <span className="flex-1 truncate">{label}</span>}
-			{!collapsed && count !== undefined && (
-				<span
-					className={cn(
-						"tnum text-xs",
-						active ? "text-white/75" : "text-(--muted-foreground)",
-					)}
-				>
-					{count}
-				</span>
+			<span className="flex-1 truncate">{label}</span>
+			{count !== undefined && (
+				<span className="tnum text-xs text-(--muted-foreground)">{count}</span>
 			)}
 		</Link>
 	);
 }
 
-function SidebarContent({
-	collapsed = false,
-	onOpenPalette,
-}: {
-	collapsed?: boolean;
-	onOpenPalette: () => void;
-}) {
+function SidebarContent({ onOpenPalette }: { onOpenPalette: () => void }) {
 	const { categories, library, scanStatus, refreshAll, refreshCategories } =
 		useAppState();
 	const location = useLocation();
@@ -214,42 +202,31 @@ function SidebarContent({
 	}
 
 	return (
-		<div className="flex h-full flex-col">
-			{/* Navigation */}
+		<div className="flex min-h-full flex-col">
 			<nav className="space-y-px">
 				<button
 					type="button"
 					onClick={onOpenPalette}
-					title={collapsed ? "Search" : undefined}
-					className={cn(
-						"flex h-7 w-full items-center gap-2.5 rounded-md px-2.5 text-[13px] text-(--muted-foreground) transition-colors duration-100 hover:bg-white/5 hover:text-(--foreground)",
-						collapsed && "justify-center px-0",
-					)}
+					className="flex h-8 w-full items-center gap-2.5 rounded-(--radius) px-2.5 text-[13px] text-(--muted-foreground) transition-colors duration-150 hover:bg-white/5 hover:text-(--foreground)"
 				>
 					<span className="shrink-0">
 						<IconSearch size={16} />
 					</span>
-					{!collapsed && (
-						<>
-							<span className="flex-1 text-left">Search</span>
-							<kbd className="font-data rounded border border-white/10 bg-white/5 px-1 text-[10px] text-(--muted-foreground)/70">
-								{paletteShortcutLabel()}
-							</kbd>
-						</>
-					)}
+					<span className="flex-1 text-left">Search</span>
+					<kbd className="font-data rounded border border-white/10 bg-white/5 px-1 py-px text-[10px] text-(--muted-foreground)/70">
+						{paletteShortcutLabel()}
+					</kbd>
 				</button>
-				{!collapsed && (
-					<p className="mb-1 px-2.5 pt-2 text-[11px] font-semibold text-(--muted-foreground)">
-						Library
-					</p>
-				)}
+
+				<p className="eyebrow px-2.5 pb-1 pt-3 text-(--muted-foreground)/70">
+					Library
+				</p>
 
 				<NavItem
 					to="/dump"
-					icon={<IconInbox size={18} />}
+					icon={<IconInbox size={17} />}
 					label="Unsorted"
 					active={location.pathname.startsWith("/dump")}
-					collapsed={collapsed}
 				/>
 
 				{/* Boards group */}
@@ -257,50 +234,40 @@ function SidebarContent({
 					<ContextMenuTrigger asChild>
 						<button
 							type="button"
-							onClick={() => !collapsed && toggleBoards()}
-							title={collapsed ? "Boards" : undefined}
+							onClick={toggleBoards}
 							className={cn(
-								"group relative flex h-7 w-full items-center gap-2.5 rounded-md px-2.5 text-[13px] transition-colors duration-100",
+								"group relative flex h-8 w-full items-center gap-2.5 rounded-(--radius) px-2.5 text-[13px] transition-colors duration-150",
 								location.pathname.startsWith("/categories/")
-									? "bg-(--accent) font-medium text-white"
-									: "text-(--foreground)/80 hover:bg-white/5",
-								collapsed && "justify-center px-0",
+									? "bg-white/8 text-(--foreground)"
+									: "text-(--muted-foreground) hover:bg-white/5 hover:text-(--foreground)",
 							)}
 						>
+							<ActiveBar
+								active={location.pathname.startsWith("/categories/")}
+							/>
 							<span
 								className={cn(
 									"shrink-0",
 									location.pathname.startsWith("/categories/")
-										? "text-white"
+										? "text-(--accent)"
 										: "text-(--muted-foreground)",
 								)}
 							>
 								<IconLayoutGrid size={16} />
 							</span>
-							{!collapsed && (
-								<>
-									<span className="flex-1 text-left">Boards</span>
-									{categories.length > 0 && (
-										<span
-											className={cn(
-												"tnum text-xs",
-												location.pathname.startsWith("/categories/")
-													? "text-white/75"
-													: "text-(--muted-foreground)",
-											)}
-										>
-											{categories.length}
-										</span>
-									)}
-									<IconChevronDown
-										size={14}
-										className={cn(
-											"shrink-0 transition-transform duration-200",
-											boardsExpanded && "rotate-180",
-										)}
-									/>
-								</>
+							<span className="flex-1 text-left">Boards</span>
+							{categories.length > 0 && (
+								<span className="tnum text-xs text-(--muted-foreground)">
+									{categories.length}
+								</span>
 							)}
+							<IconChevronDown
+								size={14}
+								className={cn(
+									"shrink-0 text-(--muted-foreground) transition-transform duration-200",
+									boardsExpanded && "rotate-180",
+								)}
+							/>
 						</button>
 					</ContextMenuTrigger>
 					<ContextMenuContent>
@@ -317,8 +284,8 @@ function SidebarContent({
 				</ContextMenu>
 
 				{/* Board list */}
-				{boardsExpanded && !collapsed && (
-					<div className="mt-px space-y-px pl-5">
+				{boardsExpanded && (
+					<div className="mt-px space-y-px pl-3">
 						{categoryTree.map((category) => (
 							<CategoryTreeItem
 								key={category.id}
@@ -341,7 +308,7 @@ function SidebarContent({
 									setCreateParentCategoryId(null);
 									setCreateDialogOpen(true);
 								}}
-								className="flex w-full items-center gap-2 rounded-sm px-3 py-2 text-xs text-(--muted-foreground) transition-colors hover:text-(--foreground)"
+								className="flex w-full items-center gap-2 rounded-(--radius) px-3 py-2 text-xs text-(--muted-foreground) transition-colors hover:text-(--foreground)"
 							>
 								<IconFolderPlus size={14} />
 								New board
@@ -349,76 +316,51 @@ function SidebarContent({
 						)}
 					</div>
 				)}
-
-				{/* Collapsed: compact category icons */}
-				{collapsed && categories.length > 0 && (
-					<div className="mt-2 flex flex-wrap justify-center gap-1">
-						{flattenCategoryTree(categoryTree).map((category) => (
-							<CollapsedCategoryItem
-								key={category.id}
-								category={category}
-								pathname={location.pathname}
-								onDropVideo={handleDropVideo}
-							/>
-						))}
-					</div>
-				)}
 			</nav>
 
 			{/* Bottom nav */}
-			<div
-				className={cn(
-					"mt-auto space-y-0.5 border-t border-(--border) pt-3",
-					collapsed && "flex flex-col items-center",
-				)}
-			>
+			<div className="mt-auto space-y-0.5 pt-3">
 				<NavItem
 					to="/settings"
-					icon={<IconSettings size={18} />}
+					icon={<IconSettings size={17} />}
 					label="Settings"
 					active={location.pathname.startsWith("/settings")}
-					collapsed={collapsed}
 				/>
 
-				{/* Status row */}
-				{!collapsed && (
-					<>
-						<div className="flex items-center gap-2 px-3 py-2">
-							<div
-								className={cn(
-									"h-1.5 w-1.5 shrink-0 rounded-full",
-									scanStatus?.status === "scanning"
-										? "animate-pulse bg-(--accent)"
-										: "bg-(--success)",
-								)}
-							/>
-							<span className="truncate text-xs text-(--muted-foreground)">
-								{scanStatus?.status === "scanning"
-									? `Scanning ${scanStatus.scannedFiles}/${scanStatus.totalFiles}`
-									: library?.sourcePaths?.length
-										? `${library.sourcePaths[0].path.split(/[\\/]/).pop()}${library.sourcePaths.length > 1 ? ` +${library.sourcePaths.length - 1}` : ""}`
-										: "No folder"}
-							</span>
-						</div>
-
-						{scanStatus?.status === "scanning" && (
-							<div className="px-3 pb-2">
-								<div className="h-1 w-full overflow-hidden rounded-full bg-(--panel-strong)">
-									<div
-										className="h-full rounded-full bg-(--accent) transition-all duration-300 ease-out"
-										style={{
-											width: `${scanStatus.totalFiles > 0 ? (scanStatus.scannedFiles / scanStatus.totalFiles) * 100 : 0}%`,
-										}}
-									/>
-								</div>
-								<p className="mt-1 truncate text-[10px] text-(--muted-foreground)/70">
-									{scanStatus.currentPath
-										? scanStatus.currentPath.split(/[\\/]/).pop()
-										: scanStatus.message}
-								</p>
-							</div>
+				<div className="flex items-center gap-2 px-2.5 py-2">
+					<div
+						className={cn(
+							"h-1.5 w-1.5 shrink-0 rounded-full",
+							scanStatus?.status === "scanning"
+								? "animate-pulse bg-(--accent)"
+								: "bg-(--success)",
 						)}
-					</>
+					/>
+					<span className="truncate text-xs text-(--muted-foreground)">
+						{scanStatus?.status === "scanning"
+							? `Scanning ${scanStatus.scannedFiles}/${scanStatus.totalFiles}`
+							: library?.sourcePaths?.length
+								? `${library.sourcePaths[0].path.split(/[\\/]/).pop()}${library.sourcePaths.length > 1 ? ` +${library.sourcePaths.length - 1}` : ""}`
+								: "No folder"}
+					</span>
+				</div>
+
+				{scanStatus?.status === "scanning" && (
+					<div className="px-2.5 pb-2">
+						<div className="h-0.5 w-full overflow-hidden rounded-full bg-white/8">
+							<div
+								className="h-full rounded-full bg-(--accent) transition-all duration-300 ease-out"
+								style={{
+									width: `${scanStatus.totalFiles > 0 ? (scanStatus.scannedFiles / scanStatus.totalFiles) * 100 : 0}%`,
+								}}
+							/>
+						</div>
+						<p className="mt-1 truncate text-[10px] text-(--muted-foreground)/70">
+							{scanStatus.currentPath
+								? scanStatus.currentPath.split(/[\\/]/).pop()
+								: scanStatus.message}
+						</p>
+					</div>
 				)}
 			</div>
 
@@ -512,6 +454,7 @@ function CategoryTreeItem({
 
 	const hasChildren = category.children.length > 0;
 	const collapsed = isCollapsed(category.id);
+	const active = pathname === `/categories/${category.slug}`;
 
 	return (
 		<>
@@ -520,18 +463,19 @@ function CategoryTreeItem({
 					{/* biome-ignore lint/a11y/noStaticElementInteractions: drop target for video drag-and-drop */}
 					<div
 						className={cn(
-							"flex h-7 items-center justify-between rounded-md px-2.5 text-[13px] transition-colors duration-100",
+							"group relative flex h-8 items-center justify-between rounded-(--radius) px-2.5 text-[13px] transition-colors duration-150",
 							dragOver || dropping
-								? "bg-(--accent)/85 text-white ring-1 ring-(--accent)"
-								: pathname === `/categories/${category.slug}`
-									? "bg-(--accent) font-medium text-white"
-									: "text-(--foreground)/80 hover:bg-white/5",
+								? "bg-(--accent-subtle) text-(--foreground) ring-1 ring-(--accent)/40"
+								: active
+									? "bg-white/8 text-(--foreground)"
+									: "text-(--muted-foreground) hover:bg-white/5 hover:text-(--foreground)",
 						)}
-						style={{ marginLeft: `${category.depth * 14}px` }}
+						style={{ marginLeft: `${category.depth * 12}px` }}
 						onDragOver={handleDragOver}
 						onDragLeave={handleDragLeave}
 						onDrop={handleDrop}
 					>
+						<ActiveBar active={active} />
 						<Link
 							to="/categories/$categorySlug"
 							params={{ categorySlug: category.slug }}
@@ -542,7 +486,7 @@ function CategoryTreeItem({
 							<span className="truncate">{category.name}</span>
 						</Link>
 						<div className="ml-2 flex shrink-0 items-center gap-1">
-							<span className="tnum text-xs opacity-70">
+							<span className="tnum text-xs opacity-60">
 								{category.postCount}
 							</span>
 							{hasChildren && (
@@ -552,10 +496,7 @@ function CategoryTreeItem({
 										e.stopPropagation();
 										onToggleCollapsed(category.id);
 									}}
-									className={cn(
-										"ml-1 flex h-5 w-5 items-center justify-center rounded-sm transition-colors",
-										"text-(--muted-foreground) hover:bg-(--panel-elevated) hover:text-(--foreground)",
-									)}
+									className="ml-1 flex h-5 w-5 items-center justify-center rounded-full text-(--muted-foreground) transition-colors hover:bg-white/8 hover:text-(--foreground)"
 								>
 									<IconChevronRight
 										size={14}
@@ -597,77 +538,49 @@ function CategoryTreeItem({
 	);
 }
 
-function CollapsedCategoryItem({
-	category,
-	pathname,
-	onDropVideo,
+function SidebarPanel({
+	pinned,
+	onTogglePinned,
+	onDismiss,
+	onOpenPalette,
 }: {
-	category: CategoryTreeNode;
-	pathname: string;
-	onDropVideo: (videoId: string, categoryId: string) => Promise<void>;
+	pinned: boolean;
+	onTogglePinned: () => void;
+	onDismiss: () => void;
+	onOpenPalette: () => void;
 }) {
-	const [dragOver, setDragOver] = useState(false);
-	const [dropping, setDropping] = useState(false);
-
-	function handleDragOver(e: React.DragEvent<HTMLAnchorElement>) {
-		if (!hasDraggedVideo(e.dataTransfer)) {
-			return;
-		}
-		e.preventDefault();
-		e.dataTransfer.dropEffect = "copy";
-		setDragOver(true);
-	}
-
-	function handleDragLeave(e: React.DragEvent<HTMLAnchorElement>) {
-		const relatedTarget = e.relatedTarget;
-		if (
-			relatedTarget instanceof Node &&
-			e.currentTarget.contains(relatedTarget)
-		) {
-			return;
-		}
-		setDragOver(false);
-	}
-
-	async function handleDrop(e: React.DragEvent<HTMLAnchorElement>) {
-		if (!hasDraggedVideo(e.dataTransfer)) {
-			return;
-		}
-		e.preventDefault();
-		setDragOver(false);
-
-		const videoId = getDraggedVideoId(e.dataTransfer);
-		if (!videoId) {
-			return;
-		}
-
-		setDropping(true);
-		try {
-			await onDropVideo(videoId, category.id);
-		} finally {
-			setDropping(false);
-		}
-	}
-
 	return (
-		<Link
-			to="/categories/$categorySlug"
-			params={{ categorySlug: category.slug }}
-			title={category.name}
-			onDragOver={handleDragOver}
-			onDragLeave={handleDragLeave}
-			onDrop={handleDrop}
-			className={cn(
-				"flex h-7 w-7 items-center justify-center rounded-md transition-colors",
-				dragOver || dropping
-					? "bg-(--accent-subtle) text-(--accent) ring-1 ring-(--accent)/40"
-					: pathname === `/categories/${category.slug}`
-						? "bg-(--accent-subtle) text-(--accent)"
-						: "text-(--muted-foreground) hover:bg-(--panel-strong) hover:text-(--foreground)",
-			)}
-		>
-			<CategoryIcon name={category.icon} size={16} />
-		</Link>
+		<div className="flex h-full flex-col">
+			<div className="flex h-11 shrink-0 items-center justify-end gap-0.5 px-3">
+				{!pinned && (
+					<button
+						type="button"
+						onClick={onDismiss}
+						title="Hide sidebar"
+						className="flex h-7 w-7 items-center justify-center rounded-full text-(--muted-foreground) transition-colors hover:bg-white/8 hover:text-(--foreground)"
+					>
+						<IconChevronLeft size={15} />
+					</button>
+				)}
+				<button
+					type="button"
+					onClick={onTogglePinned}
+					title={pinned ? "Unpin sidebar (Ctrl+S)" : "Pin sidebar (Ctrl+S)"}
+					className={cn(
+						"flex h-7 w-7 items-center justify-center rounded-full transition-colors",
+						pinned
+							? "text-(--accent) hover:bg-white/8"
+							: "text-(--muted-foreground) hover:bg-white/8 hover:text-(--foreground)",
+					)}
+				>
+					{pinned ? <IconPinFilled size={14} /> : <IconPin size={14} />}
+				</button>
+			</div>
+
+			<div className="app-scrollbar min-h-0 flex-1 overflow-y-auto px-2 pb-3">
+				<SidebarContent onOpenPalette={onOpenPalette} />
+			</div>
+		</div>
 	);
 }
 
@@ -677,111 +590,51 @@ export function AppShell({ children }: { children: React.ReactNode }) {
 	const { preferences } = useAppState();
 	const [mobileOpen, setMobileOpen] = useState(false);
 	const [paletteOpen, setPaletteOpen] = useState(false);
-	const [collapsed, setCollapsed] = useState(
-		() => sessionStorage.getItem(SIDEBAR_COLLAPSED_KEY) === "1",
+	const [pinned, setPinned] = useState(
+		() => localStorage.getItem(SIDEBAR_PINNED_KEY) === "1",
 	);
-	const [sidebarHidden, setSidebarHidden] = useState(false);
-	const [sidebarHovered, setSidebarHovered] = useState(false);
-	const [sidebarWidth, setSidebarWidth] = useState(() => {
-		const stored = localStorage.getItem(SIDEBAR_WIDTH_KEY);
-		return stored ? parseInt(stored, 10) : 232;
-	});
-	const [isResizing, setIsResizing] = useState(false);
+	const [hovered, setHovered] = useState(false);
 
-	function toggleCollapsed() {
-		const next = !collapsed;
-		setCollapsed(next);
-		sessionStorage.setItem(SIDEBAR_COLLAPSED_KEY, next ? "1" : "0");
-		sessionStorage.setItem(SIDEBAR_AUTO_COLLAPSE_KEY, "0");
-	}
+	const inPlayer = location.pathname.startsWith("/player/");
+	const sidebarVisible = !inPlayer && (pinned || hovered);
 
-	function handleMouseDown(e: React.MouseEvent) {
-		if (collapsed) return;
-		setIsResizing(true);
-		e.preventDefault();
-	}
-
-	useEffect(() => {
-		if (!isResizing) return;
-
-		const handleMouseMove = (e: MouseEvent) => {
-			const newWidth = e.clientX;
-			if (newWidth >= 200 && newWidth <= 500) {
-				setSidebarWidth(newWidth);
-			}
-		};
-
-		const handleMouseUp = () => {
-			setIsResizing(false);
-			localStorage.setItem(SIDEBAR_WIDTH_KEY, sidebarWidth.toString());
-		};
-
-		document.addEventListener("mousemove", handleMouseMove);
-		document.addEventListener("mouseup", handleMouseUp);
-
-		return () => {
-			document.removeEventListener("mousemove", handleMouseMove);
-			document.removeEventListener("mouseup", handleMouseUp);
-		};
-	}, [isResizing, sidebarWidth]);
+	const togglePinned = useCallback(() => {
+		setPinned((prev) => {
+			const next = !prev;
+			localStorage.setItem(SIDEBAR_PINNED_KEY, next ? "1" : "0");
+			if (!next) setHovered(false);
+			return next;
+		});
+	}, []);
 
 	useEffect(() => {
 		const onKeyDown = (e: KeyboardEvent) => {
+			const target = e.target;
+			const typing =
+				target instanceof HTMLElement &&
+				(target.isContentEditable ||
+					["INPUT", "TEXTAREA", "SELECT"].includes(target.tagName));
+
 			if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === "p") {
-				const target = e.target;
-				if (
-					target instanceof HTMLElement &&
-					(target.isContentEditable ||
-						["INPUT", "TEXTAREA", "SELECT"].includes(target.tagName))
-				) {
-					return;
-				}
+				if (typing) return;
 				e.preventDefault();
 				setPaletteOpen((open) => !open);
+				return;
+			}
+
+			if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === "s") {
+				if (typing) return;
+				e.preventDefault();
+				togglePinned();
 			}
 		};
 		window.addEventListener("keydown", onKeyDown);
 		return () => window.removeEventListener("keydown", onKeyDown);
-	}, []);
+	}, [togglePinned]);
 
 	useEffect(() => {
 		initNoise();
 	}, []);
-
-	useEffect(() => {
-		const inPlayerRoute = location.pathname.startsWith("/player/");
-		const autoCollapsed =
-			sessionStorage.getItem(SIDEBAR_AUTO_COLLAPSE_KEY) === "1";
-
-		if (inPlayerRoute) {
-			const currentCollapsed =
-				sessionStorage.getItem(SIDEBAR_COLLAPSED_KEY) === "1";
-			if (currentCollapsed) {
-				return;
-			}
-
-			sessionStorage.setItem(SIDEBAR_PRE_PLAYER_KEY, "0");
-			sessionStorage.setItem(SIDEBAR_AUTO_COLLAPSE_KEY, "1");
-			setCollapsed(true);
-			sessionStorage.setItem(SIDEBAR_COLLAPSED_KEY, "1");
-			return;
-		}
-
-		if (!autoCollapsed) {
-			setSidebarHidden(false);
-			return;
-		}
-
-		const previousCollapsed =
-			sessionStorage.getItem(SIDEBAR_PRE_PLAYER_KEY) === "1";
-		setCollapsed(previousCollapsed);
-		sessionStorage.setItem(
-			SIDEBAR_COLLAPSED_KEY,
-			previousCollapsed ? "1" : "0",
-		);
-		sessionStorage.setItem(SIDEBAR_AUTO_COLLAPSE_KEY, "0");
-		setSidebarHidden(false);
-	}, [location.pathname]);
 
 	useEffect(() => {
 		if (!window.playerApi) {
@@ -789,137 +642,95 @@ export function AppShell({ children }: { children: React.ReactNode }) {
 		}
 
 		return window.playerApi.app.subscribeOpenVideo(({ filePath }) => {
-			sessionStorage.setItem(SIDEBAR_PRE_PLAYER_KEY, collapsed ? "1" : "0");
-			sessionStorage.setItem(SIDEBAR_AUTO_COLLAPSE_KEY, collapsed ? "0" : "1");
-			setCollapsed(true);
-			sessionStorage.setItem(SIDEBAR_COLLAPSED_KEY, "1");
-			setSidebarHidden(true);
 			void router.navigate({
 				to: "/player/external",
 				search: { path: filePath },
 			});
 		});
-	}, [collapsed, router]);
+	}, [router]);
 
 	return (
-		<div className="flex h-screen flex-col bg-(--background) text-(--foreground)">
+		<div className="relative flex h-screen overflow-hidden text-(--foreground)">
 			<WindowTitlebar
 				mode={resolveTitlebarMode(preferences?.titlebarMode ?? "auto")}
+				nonBlocking={inPlayer}
 			/>
-			<div className="flex min-h-0 flex-1">
-				{/* Hover zone for hidden sidebar */}
-				{sidebarHidden && (
+
+			{/* Overlay sidebar: reveals on hover, floats above the content. */}
+			{!inPlayer && !pinned && (
+				<>
 					<div
-						className="hidden lg:block"
-						style={{ width: "20px" }}
-						onMouseEnter={() => setSidebarHovered(true)}
-						onMouseLeave={() => setSidebarHovered(false)}
+						className="group fixed inset-y-0 left-0 z-30 hidden w-3 lg:block"
+						onMouseEnter={() => setHovered(true)}
+						onMouseLeave={() => setHovered(false)}
 						role="presentation"
 						aria-hidden="true"
-					/>
-				)}
-
-				{/* Desktop sidebar */}
-				<aside
-					className={cn(
-						"relative hidden min-h-0 shrink-0 flex-col border-r border-(--border) bg-(--panel-elevated) lg:flex",
-						isResizing ? "" : "transition-[width] duration-200 ease-in-out",
-						sidebarHidden && !sidebarHovered
-							? "w-0 overflow-hidden border-none"
-							: collapsed
-								? "w-[52px]"
-								: "",
-					)}
-					style={
-						!collapsed && !sidebarHidden
-							? { width: `${sidebarWidth}px` }
-							: undefined
-					}
-					onMouseEnter={() => sidebarHidden && setSidebarHovered(true)}
-					onMouseLeave={() => sidebarHidden && setSidebarHovered(false)}
-				>
-					<div className="flex min-h-0 flex-1 flex-col overflow-hidden p-2">
-						<SidebarContent
-							collapsed={collapsed}
+					>
+						<span className="absolute left-0 top-1/2 h-16 w-[3px] -translate-y-1/2 rounded-r-full bg-(--accent) opacity-30 transition-all duration-200 group-hover:h-24 group-hover:w-1 group-hover:opacity-80" />
+					</div>
+					<aside
+						inert={!hovered}
+						className={cn(
+							"fixed inset-y-0 left-0 z-40 hidden w-[264px] flex-col border-r border-(--border) bg-(--panel) shadow-[0_0_60px_-15px_rgba(0,0,0,0.85)] backdrop-blur-2xl lg:flex",
+							"transition-transform duration-300 ease-[cubic-bezier(0.16,1,0.3,1)]",
+							hovered ? "translate-x-0" : "-translate-x-full",
+						)}
+						onMouseEnter={() => setHovered(true)}
+						onMouseLeave={() => setHovered(false)}
+					>
+						<SidebarPanel
+							pinned={false}
+							onTogglePinned={togglePinned}
+							onDismiss={() => setHovered(false)}
 							onOpenPalette={() => setPaletteOpen(true)}
 						/>
-					</div>
+					</aside>
+				</>
+			)}
 
-					{/* Resize handle */}
-					{!collapsed && (
-						<button
-							type="button"
-							className={cn(
-								"absolute right-0 top-0 h-full w-1 cursor-col-resize bg-transparent hover:bg-(--accent) transition-colors",
-								isResizing && "bg-(--accent)",
-							)}
-							onMouseDown={handleMouseDown}
-							aria-label="Resize sidebar"
-						/>
-					)}
-
-					{/* Collapse toggle */}
-					<button
-						type="button"
-						onClick={() => {
-							toggleCollapsed();
-							if (sidebarHidden) {
-								setSidebarHidden(false);
-							}
-						}}
-						className={cn(
-							"absolute -right-3 top-3 z-10 flex h-6 w-6 items-center justify-center rounded-full border border-(--border) bg-(--background) text-(--muted-foreground) shadow-md transition-colors hover:text-(--foreground) hover:bg-(--panel-strong)",
-							sidebarHidden && !sidebarHovered && "hidden",
-						)}
-						aria-label={collapsed ? "Expand sidebar" : "Collapse sidebar"}
-					>
-						{collapsed ? (
-							<IconLayoutSidebarLeftExpand size={14} />
-						) : (
-							<IconLayoutSidebarLeftCollapse size={14} />
-						)}
-					</button>
+			{/* Pinned sidebar: part of the layout, content reflows around it. */}
+			{sidebarVisible && pinned && (
+				<aside className="relative hidden h-full w-[264px] shrink-0 flex-col border-r border-(--border) bg-(--panel) backdrop-blur-2xl lg:flex">
+					<SidebarPanel
+						pinned
+						onTogglePinned={togglePinned}
+						onDismiss={() => setHovered(false)}
+						onOpenPalette={() => setPaletteOpen(true)}
+					/>
 				</aside>
+			)}
 
-				<div className="flex min-h-0 flex-1 flex-col">
-					{/* Mobile topbar */}
-					<div className="flex items-center justify-between border-b border-(--border) bg-(--panel-elevated) px-4 py-2 lg:hidden">
-						<div className="flex items-center gap-2">
-							<div className="flex h-7 w-7 items-center justify-center rounded-md bg-white/10 text-(--foreground)">
-								<IconPlayerPlayFilled size={13} />
-							</div>
-							<span className="text-[13px] font-semibold text-(--foreground)">
-								{APP_NAME}
-							</span>
-						</div>
-						<Sheet open={mobileOpen} onOpenChange={setMobileOpen}>
-							<SheetTrigger asChild>
-								<Button variant="ghost" size="icon">
-									<IconMenu2 size={18} />
-								</Button>
-							</SheetTrigger>
-							<SheetContent side="left" className="h-full w-64 border-0 p-3">
-								<SheetHeader className="mb-4">
-									<SheetTitle className="sr-only">Navigation</SheetTitle>
-								</SheetHeader>
-								<SidebarContent
-									onOpenPalette={() => {
-										setMobileOpen(false);
-										setPaletteOpen(true);
-									}}
-								/>
-							</SheetContent>
-						</Sheet>
-					</div>
-
-					<main
-						id="main-scroll"
-						className="app-scrollbar min-h-0 flex-1 overflow-y-auto"
-					>
-						{children}
-					</main>
+			<div className="flex min-h-0 min-w-0 flex-1 flex-col">
+				{/* Mobile topbar */}
+				<div className="flex items-center px-3 py-3 lg:hidden">
+					<Sheet open={mobileOpen} onOpenChange={setMobileOpen}>
+						<SheetTrigger asChild>
+							<Button variant="ghost" size="icon">
+								<IconMenu2 size={18} />
+							</Button>
+						</SheetTrigger>
+						<SheetContent side="left" className="h-full w-64 p-3">
+							<SheetHeader className="sr-only">
+								<SheetTitle>Navigation</SheetTitle>
+							</SheetHeader>
+							<SidebarContent
+								onOpenPalette={() => {
+									setMobileOpen(false);
+									setPaletteOpen(true);
+								}}
+							/>
+						</SheetContent>
+					</Sheet>
 				</div>
+
+				<main
+					id="main-scroll"
+					className="app-scrollbar min-h-0 flex-1 overflow-y-auto"
+				>
+					{children}
+				</main>
 			</div>
+
 			<CommandPalette open={paletteOpen} onOpenChange={setPaletteOpen} />
 		</div>
 	);

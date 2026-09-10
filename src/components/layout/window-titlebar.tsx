@@ -1,13 +1,13 @@
-import { APP_NAME } from "@/lib/constants";
+import { useEffect, useRef, useState } from "react";
 import type { TitlebarMode } from "@/lib/contracts";
+import { cn } from "@/lib/utils";
 import IconMinus from "~icons/tabler/minus";
-import IconPlayerPlayFilled from "~icons/tabler/player-play-filled";
 import IconSquare from "~icons/tabler/square";
 import IconX from "~icons/tabler/x";
-import { Button } from "../ui/button";
 
 type WindowTitlebarProps = {
 	mode: TitlebarMode;
+	nonBlocking?: boolean;
 };
 
 function getWindowApi() {
@@ -18,31 +18,92 @@ function getWindowApi() {
 	return window.playerApi.window;
 }
 
-function BrandMark() {
+const REVEAL_ZONE = 56;
+const RELEASE_ZONE = 132;
+
+function useEdgeReveal() {
+	const [revealed, setRevealed] = useState(false);
+	const revealedRef = useRef(false);
+
+	useEffect(() => {
+		const set = (next: boolean) => {
+			if (revealedRef.current === next) return;
+			revealedRef.current = next;
+			setRevealed(next);
+		};
+
+		const onMove = (event: MouseEvent) => {
+			if (event.clientY <= REVEAL_ZONE) {
+				set(true);
+			} else if (event.clientY > RELEASE_ZONE) {
+				set(false);
+			}
+		};
+
+		window.addEventListener("mousemove", onMove);
+		return () => window.removeEventListener("mousemove", onMove);
+	}, []);
+
+	return { revealed, reveal: () => setRevealed(true) };
+}
+
+function WindowButton({
+	label,
+	onClick,
+	children,
+	danger,
+}: {
+	label: string;
+	onClick: () => void;
+	children: React.ReactNode;
+	danger?: boolean;
+}) {
 	return (
-		<span className="flex items-center gap-2">
-			<span
-				aria-hidden="true"
-				className="flex h-5 w-5 items-center justify-center rounded-[5px] bg-white/10 text-(--foreground)"
-			>
-				<IconPlayerPlayFilled size={11} />
-			</span>
-			<span className="text-xs font-medium text-(--foreground)">
-				{APP_NAME}
-			</span>
-		</span>
+		<button
+			type="button"
+			onClick={onClick}
+			aria-label={label}
+			className={cn(
+				"flex h-7 w-8 items-center justify-center rounded-(--radius-sm) text-(--muted-foreground) transition-colors duration-150",
+				danger
+					? "hover:bg-(--destructive) hover:text-white"
+					: "hover:bg-white/8 hover:text-(--foreground)",
+			)}
+		>
+			{children}
+		</button>
 	);
 }
 
-export function WindowTitlebar({ mode }: WindowTitlebarProps) {
+export function WindowTitlebar({ mode, nonBlocking }: WindowTitlebarProps) {
+	const { revealed, reveal } = useEdgeReveal();
+
 	if (mode === "hidden") {
 		return null;
 	}
 
+	const shellClass = cn(
+		"window-drag fixed inset-x-0 top-0 z-40 flex h-11 items-center justify-end px-3",
+		nonBlocking && "pointer-events-none",
+	);
+	const revealClass = cn(
+		"transition-all duration-300 ease-[cubic-bezier(0.16,1,0.3,1)]",
+		revealed
+			? "pointer-events-auto translate-y-0 opacity-100"
+			: "pointer-events-none -translate-y-2 opacity-0",
+	);
+
 	if (mode === "macos") {
 		return (
-			<header className="window-drag relative flex h-10 shrink-0 items-center justify-between border-b border-(--border) bg-(--panel-elevated) px-4">
-				<div className="window-no-drag flex items-center gap-2">
+			// biome-ignore lint/a11y/noStaticElementInteractions: reveals the HUD on hover/focus
+			<header
+				className={cn(shellClass, "justify-start")}
+				onMouseEnter={reveal}
+				onFocus={reveal}
+			>
+				<div
+					className={cn("window-no-drag flex items-center gap-2", revealClass)}
+				>
 					<button
 						type="button"
 						className="h-3 w-3 rounded-full bg-[#ff5f57] transition-opacity hover:opacity-85"
@@ -62,45 +123,35 @@ export function WindowTitlebar({ mode }: WindowTitlebarProps) {
 						aria-label="Toggle maximize"
 					/>
 				</div>
-				<p className="pointer-events-none absolute left-1/2 -translate-x-1/2 truncate text-[13px] font-semibold text-(--muted-foreground)">
-					{APP_NAME}
-				</p>
-				<div className="w-13" aria-hidden="true" />
 			</header>
 		);
 	}
 
 	return (
-		<header className="window-drag flex h-10 shrink-0 items-center justify-between border-b border-(--border) bg-(--panel-elevated) pl-3">
-			<BrandMark />
-			<div className="window-no-drag flex h-full items-stretch">
-				<Button
-					variant="ghost"
-					size="icon"
-					className="h-full w-12 rounded-none border-0 hover:bg-white/6"
+		// biome-ignore lint/a11y/noStaticElementInteractions: reveals the HUD on hover/focus
+		<header className={shellClass} onMouseEnter={reveal} onFocus={reveal}>
+			<div
+				className={cn("window-no-drag flex items-center gap-0.5", revealClass)}
+			>
+				<WindowButton
+					label="Minimize window"
 					onClick={() => void getWindowApi()?.minimize()}
-					aria-label="Minimize window"
 				>
-					<IconMinus size={15} />
-				</Button>
-				<Button
-					variant="ghost"
-					size="icon"
-					className="h-full w-12 rounded-none border-0 hover:bg-white/6"
+					<IconMinus size={14} />
+				</WindowButton>
+				<WindowButton
+					label="Toggle maximize"
 					onClick={() => void getWindowApi()?.toggleMaximize()}
-					aria-label="Toggle maximize"
 				>
-					<IconSquare size={12} />
-				</Button>
-				<Button
-					variant="ghost"
-					size="icon"
-					className="h-full w-12 rounded-none border-0 hover:bg-[#e81123] hover:text-white"
+					<IconSquare size={11} />
+				</WindowButton>
+				<WindowButton
+					label="Close window"
+					danger
 					onClick={() => void getWindowApi()?.close()}
-					aria-label="Close window"
 				>
-					<IconX size={15} />
-				</Button>
+					<IconX size={14} />
+				</WindowButton>
 			</div>
 		</header>
 	);

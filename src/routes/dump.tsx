@@ -247,7 +247,7 @@ function DumpPage() {
 						ref={gridRef}
 						className={
 							view === "comfortable"
-								? "grid grid-cols-2 gap-x-4 gap-y-6 md:grid-cols-3 xl:grid-cols-4"
+								? "grid grid-cols-2 gap-x-5 gap-y-7 md:grid-cols-3 xl:grid-cols-4 2xl:grid-cols-5"
 								: "grid gap-1 lg:grid-cols-2"
 						}
 					>
@@ -265,17 +265,17 @@ function DumpPage() {
 						))}
 					</div>
 				) : !data || loading ? (
-					<div className="grid grid-cols-2 gap-x-4 gap-y-6 md:grid-cols-3 xl:grid-cols-4">
+					<div className="grid grid-cols-2 gap-x-5 gap-y-7 md:grid-cols-3 xl:grid-cols-4 2xl:grid-cols-5">
 						{["s1", "s2", "s3", "s4"].map((key) => (
 							<div key={key}>
-								<Skeleton className="aspect-video w-full rounded-md" />
-								<Skeleton className="mt-2 h-4 w-3/4 rounded" />
-								<Skeleton className="mt-1.5 h-3 w-1/2 rounded" />
+								<Skeleton className="aspect-video w-full rounded-(--radius-lg)" />
+								<Skeleton className="mt-2 h-4 w-3/4 rounded-full" />
+								<Skeleton className="mt-1.5 h-3 w-1/2 rounded-full" />
 							</div>
 						))}
 					</div>
 				) : (
-					<div className="flex flex-col items-center justify-center rounded-lg border border-dashed border-(--border) p-12 text-center">
+					<div className="flex flex-col items-center justify-center rounded-(--radius-lg) border border-dashed border-(--border) p-12 text-center">
 						<p className="text-(--muted-foreground)">
 							No unsorted videos. All videos have been organized into
 							categories.

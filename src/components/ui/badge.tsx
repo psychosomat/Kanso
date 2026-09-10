@@ -3,18 +3,18 @@ import type { HTMLAttributes } from "react";
 import { cn } from "@/lib/utils";
 
 const badgeVariants = cva(
-	"inline-flex items-center gap-1 rounded-md px-1.5 py-0.5 text-[11px] font-medium tracking-wide transition-colors",
+	"inline-flex items-center gap-1 rounded-full px-2 py-0.5 font-mono text-[10px] font-medium uppercase tracking-[0.12em] transition-colors",
 	{
 		variants: {
 			variant: {
 				default:
-					"bg-(--panel-strong) text-(--muted-foreground) border border-(--border)",
+					"border border-(--border) bg-white/5 text-(--muted-foreground)",
 				accent:
-					"bg-(--accent-subtle) text-(--accent-strong) border border-(--accent)/30",
+					"border border-(--accent)/25 bg-(--accent-subtle) text-(--accent-strong)",
 				destructive:
-					"bg-(--destructive-subtle) text-(--destructive) border border-(--destructive)/30",
+					"border border-(--destructive)/25 bg-(--destructive-subtle) text-(--destructive)",
 				success:
-					"bg-(--success-subtle) text-(--success) border border-(--success)/30",
+					"border border-(--success)/25 bg-(--success-subtle) text-(--success)",
 				outline: "border border-(--border-strong) text-(--foreground)",
 				ghost: "text-(--muted-foreground)",
 			},
