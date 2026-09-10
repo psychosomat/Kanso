@@ -20,3 +20,6 @@ release/
 
 # repowise API keys (local)
 .repowise/.env
+
+.claude/
+.repowise/
