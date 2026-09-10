@@ -1,0 +1,45 @@
+
+--- post-commit hook fired at Thu Sep 10 03:16:04 PM MSK 2026 for HEAD 87516dc6ebf461b935aac9787c9ee53d802e5316 ---
+ targeting /home/dark/Code/Kanso (workspace also detected at /home/dark; pass --workspace to run across all repos)
+repowise update · Kanso
+dee7e8e7..87516dc6
+3 changed · 3 modified
+    modified  .gitignore
+    modified  packaging/aur/.SRCINFO
+    modified  packaging/aur/PKGBUILD
+Pages to regenerate: 3
+Health analysis (partial): 3 changed, 0 performance-affected, 0 findings
+Dead code findings: 99
+Knowledge graph refreshed: 8 layers, 12 tour steps
+  Generating pages... ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ 0 0:00:00 $0.000
+Health re-score: 84 files, 110 findings
+  ✓ VS Code MCP configured (/home/dark/Code/Kanso/.vscode/mcp.json)
+  ✓ VS Code extension recommended (/home/dark/Code/Kanso/.vscode/extensions.json)
+Running cross-repo analysis...
+Cross-repo analysis updated.
+
+╭────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────── {^ ^}  repowise update complete ───────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────╮
+│                                                                                                                                                                                                                                                                                                                                                                                                              │
+│   Pages updated           0                                                                                                                                                                                                                                                                                                                                                                                  │
+│   Provider                openrouter / inclusionai/ling-3.0-flash-fin:free                                                                                                                                                                                                                                                                                                                                   │
+│   Elapsed                 13.7s                                                                                                                                                                                                                                                                                                                                                                              │
+│                                                                                                                                                                                                                                                                                                                                                                                                              │
+│   What's next:                                                                                                                                                                                                                                                                                                                                                                                               │
+│   repowise serve              browse the updated wiki at localhost:3000                                                                                                                                                                                                                                                                                                                                      │
+│   repowise search <query>     search the wiki                                                                                                                                                                                                                                                                                                                                                                │
+│                                                                                                                                                                                                                                                                                                                                                                                                              │
+╰──────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────╯
+
+                      Generation Checks                      
+┏━━━━━━━━━━━━━━━━━━━━━━┳━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┓
+┃ Check                ┃                             Result ┃
+┡━━━━━━━━━━━━━━━━━━━━━━╇━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┩
+│ Orientation overlap  │ not computed (0 orientation pages) │
+│ Layer grouping       │  not computed (no groupable pages) │
+│ Artifact checks      │      not run (0 responses checked) │
+│ Overview length      │            no overview in this run │
+│ Question-shaped text │    not measured (0 template pages) │
+│ Module page openings │    not measured (0 module page(s)) │
+│ Module concept index │      not measured (0 module pages) │
+│ House vocabulary     │  not measured (no repository path) │
+└──────────────────────┴────────────────────────────────────┘

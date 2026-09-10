@@ -17,3 +17,6 @@ src/routeTree.gen.ts
 .vscode
 AGENTS.md
 release/
+
+# repowise API keys (local)
+.repowise/.env
