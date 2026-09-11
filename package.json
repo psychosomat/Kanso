@@ -200,5 +200,9 @@
       "priority": "optional"
     }
   },
-  "packageManager": "bun@1.22.5"
+  "packageManager": "bun@1.22.5",
+  "overrides": {
+    "seroval": "^1.5.3",
+    "seroval-plugins": "^1.5.3"
+  }
 }
