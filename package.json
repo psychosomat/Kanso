@@ -107,6 +107,11 @@
       "!**/*.md",
       "build-resources/**/*",
       "!build-resources/installer.nsh",
+      "!build-resources/installerIcon.ico",
+      "!build-resources/uninstallerIcon.ico",
+      "!build-resources/installerHeader.bmp",
+      "!build-resources/installerSidebar.bmp",
+      "!build-resources/uninstallerSidebar.bmp",
       "!build-resources/windows-thumbnail-provider/obj/**/*",
       "!build-resources/windows-thumbnail-provider/*.cs",
       "!build-resources/windows-thumbnail-provider/*.csproj",
@@ -194,6 +199,11 @@
       "allowToChangeInstallationDirectory": true,
       "createDesktopShortcut": "always",
       "createStartMenuShortcut": true,
+      "installerIcon": "build-resources/installerIcon.ico",
+      "uninstallerIcon": "build-resources/uninstallerIcon.ico",
+      "installerHeader": "build-resources/installerHeader.bmp",
+      "installerSidebar": "build-resources/installerSidebar.bmp",
+      "uninstallerSidebar": "build-resources/uninstallerSidebar.bmp",
       "include": "build-resources/installer.nsh"
     },
     "deb": {

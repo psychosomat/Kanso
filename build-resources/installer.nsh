@@ -61,6 +61,18 @@
   System::Call 'shell32::SHChangeNotify(i ${SHCNE_ASSOCCHANGED}, i ${SHCNF_IDLIST}, i 0, i 0)'
 !macroend
 
+!macro customWelcomePage
+  !define MUI_WELCOMEPAGE_TITLE "Welcome to Kanso Setup"
+  !define MUI_WELCOMEPAGE_TEXT "Kanso is a modern media player focused on convenience, beauty, and performance.$\r$\n$\r$\nClick Next to continue."
+  !insertmacro MUI_PAGE_WELCOME
+!macroend
+
+!macro customUnWelcomePage
+  !define MUI_WELCOMEPAGE_TITLE "Remove Kanso"
+  !define MUI_WELCOMEPAGE_TEXT "Kanso will be removed from your computer.$\r$\n$\r$\nYour library and settings are kept and will be available if you install Kanso again."
+  !insertmacro MUI_UNPAGE_WELCOME
+!macroend
+
 !macro customInstall
   DetailPrint "Installing Kanso Video Thumbnail Provider..."
 
