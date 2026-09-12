@@ -29,10 +29,18 @@ export function shouldHideTitlebar(clientY: number): boolean {
 	return clientY > TITLEBAR_RELEASE_ZONE;
 }
 
-export function getTitlebarShellClass(nonBlocking?: boolean): string {
+export function getTitlebarShellClass(
+	nonBlocking?: boolean,
+	align?: "start" | "end",
+): string {
+	if (nonBlocking) {
+		return cn(
+			"pointer-events-none fixed top-0 z-40 flex h-11 w-auto items-center px-3",
+			align === "start" ? "left-0" : "right-0",
+		);
+	}
 	return cn(
 		"window-drag fixed inset-x-0 top-0 z-40 flex h-11 items-center justify-end px-3",
-		nonBlocking && "pointer-events-none",
 	);
 }
 
@@ -125,10 +133,7 @@ function TitlebarShell({
 	return (
 		// biome-ignore lint/a11y/noStaticElementInteractions: reveals the HUD on hover/focus
 		<header
-			className={cn(
-				getTitlebarShellClass(nonBlocking),
-				align === "start" && "justify-start",
-			)}
+			className={getTitlebarShellClass(nonBlocking, align)}
 			onMouseEnter={reveal}
 			onFocus={reveal}
 		>
