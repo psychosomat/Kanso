@@ -9,6 +9,7 @@
 /* Begin PBXBuildFile section */
 		5E2D9681502210E000000001 /* QuickLookThumbnailProvider.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5E2D9681502210E000000002 /* QuickLookThumbnailProvider.swift */; };
 		5E2D9681502210E000000013 /* QuickLook.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 5E2D9681502210E000000014 /* QuickLook.framework */; };
+		5E2D9681502210E000000030 /* QuickLookThumbnailing.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 5E2D9681502210E000000031 /* QuickLookThumbnailing.framework */; };
 		5E2D9681502210E000000015 /* AVFoundation.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 5E2D9681502210E000000016 /* AVFoundation.framework */; };
 		5E2D9681502210E000000021 /* kanso-logo.png in Resources */ = {isa = PBXBuildFile; fileRef = 5E2D9681502210E000000022 /* kanso-logo.png */; };
 /* End PBXBuildFile section */
@@ -19,6 +20,7 @@
 		5E2D9681502210E000000022 /* kanso-logo.png */ = {isa = PBXFileReference; lastKnownFileType = image.png; path = "kanso-logo.png"; sourceTree = "<group>"; };
 		5E2D9681502210E000000004 /* KansoQuickLook.qlgenerator */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = KansoQuickLook.qlgenerator; sourceTree = BUILT_PRODUCTS_DIR; };
 		5E2D9681502210E000000014 /* QuickLook.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = QuickLook.framework; path = System/Library/Frameworks/QuickLook.framework; sourceTree = SDKROOT; };
+		5E2D9681502210E000000031 /* QuickLookThumbnailing.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = QuickLookThumbnailing.framework; path = System/Library/Frameworks/QuickLookThumbnailing.framework; sourceTree = SDKROOT; };
 		5E2D9681502210E000000016 /* AVFoundation.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = AVFoundation.framework; path = System/Library/Frameworks/AVFoundation.framework; sourceTree = SDKROOT; };
 /* End PBXFileReference section */
 
@@ -28,6 +30,7 @@
 			buildActionMask = 2147483647;
 			files = (
 				5E2D9681502210E000000013 /* QuickLook.framework in Frameworks */,
+				5E2D9681502210E000000030 /* QuickLookThumbnailing.framework in Frameworks */,
 				5E2D9681502210E000000015 /* AVFoundation.framework in Frameworks */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;

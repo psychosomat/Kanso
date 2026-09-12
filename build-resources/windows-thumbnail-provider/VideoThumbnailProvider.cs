@@ -11,7 +11,7 @@ using Microsoft.Win32;
 
 namespace KansoThumbnailProvider
 {
-	internal enum WTS_ALPHATYPE : uint
+	public enum WTS_ALPHATYPE : uint
 	{
 		WTSAT_UNKNOWN = 0,
 		WTSAT_RGB = 1,

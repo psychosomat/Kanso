@@ -1,30 +1,15 @@
 import Cocoa
 import AVFoundation
 import ImageIO
+import QuickLookThumbnailing
 
-#if canImport(QuickLookUI)
-import QuickLookUI
-#else
-import QuickLook
-#endif
-
-#if canImport(QuickLookUI)
-typealias QLProvider = QLThumbnailProvider
-typealias QLFileRequest = QLFileThumbnailRequest
-typealias QLReply = QLThumbnailReply
-#else
-typealias QLProvider = QLThumbnailProvider
-typealias QLFileRequest = QLFileThumbnailRequest
-typealias QLReply = QLThumbnailReply
-#endif
-
-class QuickLookThumbnailProvider: QLProvider {
+class QuickLookThumbnailProvider: QLThumbnailProvider {
 
     private static let logoFileName = "kanso-logo"
     private static let logoFileExtension = "png"
     private static let minLogoCanvas: CGFloat = 64
 
-    override func provideThumbnail(for request: QLFileRequest, completionHandler: @escaping (QLReply?, Error?) -> Void) {
+    override func provideThumbnail(for request: QLFileThumbnailRequest, completionHandler: @escaping (QLThumbnailReply?, Error?) -> Void) {
         let fileURL = request.fileURL
         let size = request.maximumSize
 
@@ -34,7 +19,7 @@ class QuickLookThumbnailProvider: QLProvider {
                 return
             }
 
-            let reply = QLReply(contextSize: size, currentContextDrawing: {
+            let reply = QLThumbnailReply(contextSize: size, currentContextDrawing: {
                 guard let context = NSGraphicsContext.current?.cgContext else { return false }
                 context.interpolationQuality = .high
 
