@@ -185,6 +185,7 @@ export class DatabaseService {
         speed_preset_secondary REAL NOT NULL DEFAULT 2.2,
         accent_color TEXT NOT NULL DEFAULT '#ff5a36',
         player_loop INTEGER NOT NULL DEFAULT 0,
+        player_playback_rate REAL NOT NULL DEFAULT 1,
         eq_enabled INTEGER NOT NULL DEFAULT 0,
         eq_bands TEXT NOT NULL DEFAULT '${defaultEqBands}',
         created_at TEXT NOT NULL,
@@ -215,6 +216,11 @@ export class DatabaseService {
 			"ui_preferences",
 			"player_loop",
 			"INTEGER NOT NULL DEFAULT 0",
+		);
+		this.ensureColumn(
+			"ui_preferences",
+			"player_playback_rate",
+			"REAL NOT NULL DEFAULT 1",
 		);
 		this.ensureColumn(
 			"ui_preferences",
@@ -287,8 +293,8 @@ export class DatabaseService {
 		this.db
 			.prepare(
 				`INSERT OR IGNORE INTO ui_preferences
-         (id, dump_sort, dump_view, sidebar_collapsed, titlebar_mode, player_volume, player_muted, player_fit_mode, speed_preset_primary, speed_preset_secondary, accent_color, player_loop, eq_enabled, eq_bands, created_at, updated_at)
-         VALUES (1, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+         (id, dump_sort, dump_view, sidebar_collapsed, titlebar_mode, player_volume, player_muted, player_fit_mode, speed_preset_primary, speed_preset_secondary, accent_color, player_loop, player_playback_rate, eq_enabled, eq_bands, created_at, updated_at)
+         VALUES (1, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
 			)
 			.run(
 				DEFAULT_PLAYER_PREFERENCES.dumpSort,
@@ -302,6 +308,7 @@ export class DatabaseService {
 				DEFAULT_PLAYER_PREFERENCES.speedPresetSecondary,
 				DEFAULT_PLAYER_PREFERENCES.accentColor,
 				Number(DEFAULT_PLAYER_PREFERENCES.playerLoop),
+				DEFAULT_PLAYER_PREFERENCES.playerPlaybackRate,
 				Number(DEFAULT_PLAYER_PREFERENCES.playerEqEnabled),
 				JSON.stringify(DEFAULT_PLAYER_PREFERENCES.playerEqGains),
 				now,
@@ -469,6 +476,7 @@ export class DatabaseService {
 				speed_preset_secondary: number;
 				accent_color: PlayerPreferencesDto["accentColor"];
 				player_loop: number;
+				player_playback_rate: number | null;
 				eq_enabled: number;
 				eq_bands: string | null;
 			};
@@ -484,6 +492,11 @@ export class DatabaseService {
 				speedPresetSecondary: row.speed_preset_secondary,
 				accentColor: row.accent_color,
 				playerLoop: Boolean(row.player_loop),
+				playerPlaybackRate:
+					typeof row.player_playback_rate === "number" &&
+					Number.isFinite(row.player_playback_rate)
+						? row.player_playback_rate
+						: DEFAULT_PLAYER_PREFERENCES.playerPlaybackRate,
 				playerEqEnabled: Boolean(row.eq_enabled),
 				playerEqGains: this.parseEqGains(row.eq_bands),
 			};
@@ -497,7 +510,7 @@ export class DatabaseService {
 		this.db
 			.prepare(
 				`UPDATE ui_preferences
-         SET dump_sort = ?, dump_view = ?, sidebar_collapsed = ?, titlebar_mode = ?, player_volume = ?, player_muted = ?, player_fit_mode = ?, speed_preset_primary = ?, speed_preset_secondary = ?, accent_color = ?, player_loop = ?, eq_enabled = ?, eq_bands = ?, updated_at = ?
+         SET dump_sort = ?, dump_view = ?, sidebar_collapsed = ?, titlebar_mode = ?, player_volume = ?, player_muted = ?, player_fit_mode = ?, speed_preset_primary = ?, speed_preset_secondary = ?, accent_color = ?, player_loop = ?, player_playback_rate = ?, eq_enabled = ?, eq_bands = ?, updated_at = ?
          WHERE id = 1`,
 			)
 			.run(
@@ -512,6 +525,7 @@ export class DatabaseService {
 				next.speedPresetSecondary,
 				next.accentColor,
 				Number(next.playerLoop),
+				next.playerPlaybackRate,
 				Number(eqEnabled),
 				JSON.stringify(normalizedGains),
 				new Date().toISOString(),

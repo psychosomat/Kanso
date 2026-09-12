@@ -18,6 +18,7 @@ export const DEFAULT_PLAYER_PREFERENCES = {
 	playerMuted: false,
 	playerFitMode: "contain",
 	playerLoop: false,
+	playerPlaybackRate: 1,
 	speedPresetPrimary: 1,
 	speedPresetSecondary: 2.2,
 	accentColor: "#f76f53",

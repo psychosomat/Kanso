@@ -210,6 +210,7 @@ export type PlayerPreferencesDto = {
 	playerMuted: boolean;
 	playerFitMode: PlayerFitMode;
 	playerLoop: boolean;
+	playerPlaybackRate: number;
 	speedPresetPrimary: number;
 	speedPresetSecondary: number;
 	accentColor: string;
