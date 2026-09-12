@@ -14,6 +14,7 @@ import { useAppState } from "@/components/layout/app-state";
 import { RemoveVideoDialog } from "@/components/shared/remove-video-dialog";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import { Slider } from "@/components/ui/slider";
 import {
 	Select,
 	SelectContent,
@@ -45,6 +46,8 @@ import {
 	isLibraryVideo,
 	nextSpeedPreset,
 	normalizePlaybackRate,
+	PLAYBACK_RATE_MAX,
+	PLAYBACK_RATE_MIN,
 	resolveCurrentVolume,
 } from "@/lib/player-playback";
 import { getPlayerReturnTarget } from "@/lib/player-return";
@@ -124,6 +127,7 @@ export function PlayerPage({
 	});
 	const [ambient, setAmbient] = useState<string | null>(null);
 	const [paletteOpen, setPaletteOpen] = useState(false);
+	const [speedOpen, setSpeedOpen] = useState(false);
 
 	const videoRef = useRef<HTMLVideoElement | null>(null);
 	const previewVideoRef = useRef<HTMLVideoElement | null>(null);
@@ -131,6 +135,7 @@ export function PlayerPage({
 	const playerContainerRef = useRef<HTMLDivElement | null>(null);
 	const timelineTrackRef = useRef<HTMLDivElement | null>(null);
 	const gaugeButtonRef = useRef<HTMLButtonElement | null>(null);
+	const speedControlRef = useRef<HTMLDivElement | null>(null);
 	const topBarRef = useRef<HTMLDivElement | null>(null);
 	const bottomBarRef = useRef<HTMLDivElement | null>(null);
 	const previewSeekBusyRef = useRef(false);
@@ -143,7 +148,9 @@ export function PlayerPage({
 	>(new WeakMap());
 	const eqNodesRef = useRef<BiquadFilterNode[]>([]);
 
-	const { isVisible, resetTimer } = usePlayerUiVisibility();
+	const { isVisible, resetTimer } = usePlayerUiVisibility({
+		suspended: speedOpen,
+	});
 
 	const applyEq = useCallback(
 		(enabled: boolean, gains: number[] | undefined) => {
@@ -188,7 +195,13 @@ export function PlayerPage({
 			([videoDetail, preferences]) => {
 				setVideo(videoDetail);
 				setPrefs(preferences);
-				setPlaybackRate(preferences.speedPresetPrimary);
+				setPlaybackRate(
+					normalizePlaybackRate(
+						preferences.playerPlaybackRate ??
+							preferences.speedPresetPrimary ??
+							1,
+					),
+				);
 				setIsLooping(preferences.playerLoop ?? false);
 				applyEq(preferences.playerEqEnabled, preferences.playerEqGains);
 			},
@@ -220,6 +233,14 @@ export function PlayerPage({
 		if (videoRef.current) {
 			videoRef.current.playbackRate = normalized;
 		}
+		setPrefs((current) =>
+			current && current.playerPlaybackRate !== normalized
+				? { ...current, playerPlaybackRate: normalized }
+				: current,
+		);
+		void getPlayerApi().player.savePreferences({
+			playerPlaybackRate: normalized,
+		});
 	}, []);
 
 	const syncPreviewFrame = useCallback((time: number) => {
@@ -626,6 +647,27 @@ export function PlayerPage({
 		return () => button.removeEventListener("wheel", handler);
 	}, []);
 
+	useEffect(() => {
+		if (!speedOpen) return;
+		const onPointerDown = (event: PointerEvent) => {
+			if (
+				speedControlRef.current &&
+				!speedControlRef.current.contains(event.target as Node)
+			) {
+				setSpeedOpen(false);
+			}
+		};
+		const onKeyDown = (event: KeyboardEvent) => {
+			if (event.key === "Escape") setSpeedOpen(false);
+		};
+		document.addEventListener("pointerdown", onPointerDown);
+		document.addEventListener("keydown", onKeyDown);
+		return () => {
+			document.removeEventListener("pointerdown", onPointerDown);
+			document.removeEventListener("keydown", onKeyDown);
+		};
+	}, [speedOpen]);
+
 	// UI visibility animation with GSAP
 	useGSAP(
 		() => {
@@ -765,6 +807,17 @@ export function PlayerPage({
 		);
 		setRate(next);
 	}, [playbackRate, prefs, setRate]);
+
+	const speedPresets = useMemo(() => {
+		const raw = [
+			prefs?.speedPresetPrimary ?? 1,
+			prefs?.speedPresetSecondary ?? 2.2,
+			1,
+		];
+		return [...new Set(raw.map((value) => normalizePlaybackRate(value)))].sort(
+			(a, b) => a - b,
+		);
+	}, [prefs?.speedPresetPrimary, prefs?.speedPresetSecondary]);
 
 	// Page entrance animation
 	useGSAP(
@@ -934,7 +987,7 @@ export function PlayerPage({
 												`Space/K` play, `J/L` seek, `F` fullscreen, `M` mute,
 												`R` loop, `Up/Down` volume
 											</p>
-											<p>Scroll on `Gauge` to change speed by 0.2×</p>
+											<p>Click `Gauge` for speed slider, scroll for ±0.2×</p>
 										</div>
 									</section>
 
@@ -1211,13 +1264,57 @@ export function PlayerPage({
 							<div className="flex-1" />
 
 							{/* Speed */}
-							<div className="flex items-center">
+							<div ref={speedControlRef} className="relative flex items-center">
+								{speedOpen ? (
+									<div className="absolute right-0 bottom-full z-30 mb-2 w-60 rounded-xl border border-white/15 bg-black/90 p-3 shadow-2xl backdrop-blur-md">
+										<div className="mb-2 flex items-center justify-between">
+											<span className="text-[11px] font-medium tracking-[0.14em] text-white/50 uppercase">
+												Speed
+											</span>
+											<span className="tnum text-xs font-semibold text-white/85">
+												{playbackRate.toFixed(1)}×
+											</span>
+										</div>
+										<Slider
+											aria-label="Playback speed"
+											min={PLAYBACK_RATE_MIN}
+											max={PLAYBACK_RATE_MAX}
+											step={0.1}
+											value={[playbackRate]}
+											onValueChange={(values) => {
+												const next = values[0];
+												if (next !== undefined) setRate(next);
+											}}
+										/>
+										<div className="mt-1 flex items-center justify-between text-[11px] text-white/40">
+											<span>{PLAYBACK_RATE_MIN.toFixed(1)}×</span>
+											<span>{PLAYBACK_RATE_MAX.toFixed(1)}×</span>
+										</div>
+										<div className="mt-2 flex items-center gap-1">
+											{speedPresets.map((preset) => (
+												<button
+													key={preset}
+													type="button"
+													onClick={() => setRate(preset)}
+													className={
+														preset === playbackRate
+															? "tnum h-7 flex-1 rounded-md bg-(--accent)/30 text-[11px] font-semibold text-white transition-colors"
+															: "tnum h-7 flex-1 rounded-md text-[11px] text-white/60 transition-colors hover:bg-white/10 hover:text-white"
+													}
+												>
+													{preset.toFixed(1)}×
+												</button>
+											))}
+										</div>
+									</div>
+								) : null}
 								<button
 									ref={gaugeButtonRef}
 									type="button"
-									onClick={() => cycleSpeed()}
+									onClick={() => setSpeedOpen((open) => !open)}
 									className="hidden h-8 w-8 items-center justify-center rounded-md text-white/65 transition-colors hover:bg-white/10 hover:text-white sm:flex"
-									aria-label="Cycle speed presets. Scroll to fine-tune"
+									aria-label="Adjust playback speed. Scroll to fine-tune"
+									aria-expanded={speedOpen}
 								>
 									<IconGauge size={15} />
 								</button>

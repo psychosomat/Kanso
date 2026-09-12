@@ -491,8 +491,8 @@ function SettingsPage() {
 
 				<SettingsSection icon={<IconPlayerPlay size={16} />} title="Playback">
 					<p className="text-sm text-(--muted-foreground)">
-						Speed presets shown as quick-access buttons in the player. Wheel on
-						the gauge icon adjusts speed in 0.2 increments.
+						Speed presets shown as quick-access buttons in the player. Click the
+						gauge icon for a speed slider, wheel adjusts in 0.2 increments.
 					</p>
 					<div className="mt-4 grid gap-4 sm:grid-cols-2">
 						<div>
