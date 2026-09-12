@@ -9,7 +9,7 @@ class QuickLookThumbnailProvider: QLThumbnailProvider {
     private static let logoFileExtension = "png"
     private static let minLogoCanvas: CGFloat = 64
 
-    override func provideThumbnail(for request: QLFileThumbnailRequest, completionHandler: @escaping (QLThumbnailReply?, Error?) -> Void) {
+    override func provideThumbnail(for request: QLFileThumbnailRequest, _ completionHandler: @escaping (QLThumbnailReply?, Error?) -> Void) {
         let fileURL = request.fileURL
         let size = request.maximumSize
 
