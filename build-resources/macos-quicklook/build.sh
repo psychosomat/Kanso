@@ -20,13 +20,12 @@ fi
 # Create output directory
 mkdir -p "$OUTPUT_DIR"
 
-# Build the project
+# Build the project (fail loudly: a broken thumbnail bundle must not ship silently)
 xcodebuild \
     -project "$PROJECT_PATH" \
     -scheme "$PROJECT_NAME" \
     -configuration Release \
-    -derivedDataPath "$OUTPUT_DIR/DerivedData" \
-    -quiet 2>/dev/null || echo "Warning: QuickLook thumbnail build failed, continuing..."
+    -derivedDataPath "$OUTPUT_DIR/DerivedData"
 
 # Copy the built bundle to output directory (if it exists)
 BUILT_BUNDLE="$OUTPUT_DIR/DerivedData/Build/Products/Release/$PROJECT_NAME.qlgenerator"
@@ -35,5 +34,6 @@ if [ -d "$BUILT_BUNDLE" ]; then
     echo "Build completed successfully!"
     echo "Output: $OUTPUT_DIR/$PROJECT_NAME.qlgenerator"
 else
-    echo "Warning: QuickLook thumbnail bundle not found, skipping."
+    echo "Error: QuickLook thumbnail bundle not found, build failed."
+    exit 1
 fi
