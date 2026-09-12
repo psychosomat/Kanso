@@ -30,6 +30,7 @@ import {
 	SheetTitle,
 	SheetTrigger,
 } from "@/components/ui/sheet";
+import { useEscapeLayer } from "@/hooks/use-escape-layer";
 import { usePlayerHotkeys } from "@/hooks/use-player-hotkeys";
 import { usePlayerUiVisibility } from "@/hooks/use-player-ui-visibility";
 import { CategoryIcon } from "@/lib/category-icons";
@@ -80,6 +81,7 @@ export const Route = createFileRoute("/player/$videoId")({
 });
 
 const SEEK_STEP = 5;
+const LONG_SEEK_STEP = 10;
 const SPEED_STEP = 0.2;
 const VOLUME_STEP = 0.05;
 
@@ -403,14 +405,75 @@ export function PlayerPage({
 		[playbackRate, setRate],
 	);
 
+	const handleBack = useCallback(() => {
+		const returnTarget = getPlayerReturnTarget();
+		if (returnTarget?.pathname) {
+			void router.navigate({ to: returnTarget.pathname as never });
+			return;
+		}
+
+		if (window.history.length > 1) {
+			router.history.back();
+			return;
+		}
+		void router.navigate({ to: "/dump" });
+	}, [router]);
+
+	const cycleSpeed = useCallback(() => {
+		const next = nextSpeedPreset(
+			playbackRate,
+			prefs?.speedPresetPrimary,
+			prefs?.speedPresetSecondary,
+		);
+		setRate(next);
+	}, [playbackRate, prefs, setRate]);
+
+	const seekToFraction = useCallback(
+		(fraction: number) => {
+			const mediaDuration =
+				videoRef.current?.duration || duration || video?.durationSec || 0;
+			if (!mediaDuration) return;
+			seekTo(fraction * mediaDuration);
+		},
+		[duration, seekTo, video?.durationSec],
+	);
+
+	useEscapeLayer(speedOpen, () => setSpeedOpen(false));
+	useEscapeLayer(removeDialogOpen, () => {
+		if (!removing) setRemoveDialogOpen(false);
+	});
+
 	usePlayerHotkeys({
-		enabled: !paletteOpen,
+		enabled:
+			!paletteOpen &&
+			!speedOpen &&
+			!detailsOpen &&
+			!assignOpen &&
+			!removeDialogOpen,
+		overlayOpen: detailsOpen || assignOpen || paletteOpen,
 		onTogglePlay: togglePlay,
 		onSeekBackward: () => seekBy(-SEEK_STEP),
 		onSeekForward: () => seekBy(SEEK_STEP),
+		onSeekLongBackward: () => seekBy(-LONG_SEEK_STEP),
+		onSeekLongForward: () => seekBy(LONG_SEEK_STEP),
+		onSeekToStart: () => seekTo(0),
+		onSeekToEnd: () => {
+			const mediaDuration =
+				videoRef.current?.duration || duration || video?.durationSec || 0;
+			if (mediaDuration) seekTo(mediaDuration);
+		},
+		onSeekToFraction: seekToFraction,
 		onToggleMute: toggleMute,
 		onToggleFullscreen: toggleFullscreen,
 		onToggleLoop: toggleLoop,
+		onCycleSpeed: cycleSpeed,
+		onSpeedDown: () => setRate(playbackRate - SPEED_STEP),
+		onSpeedUp: () => setRate(playbackRate + SPEED_STEP),
+		onToggleCategories: () => {
+			if (isLibraryVideo(video)) setAssignOpen((open) => !open);
+		},
+		onToggleDetails: () => setDetailsOpen((open) => !open),
+		onExit: handleBack,
 		onVolumeUp: () => adjustVolumeBy(VOLUME_STEP),
 		onVolumeDown: () => adjustVolumeBy(-VOLUME_STEP),
 	});
@@ -657,14 +720,9 @@ export function PlayerPage({
 				setSpeedOpen(false);
 			}
 		};
-		const onKeyDown = (event: KeyboardEvent) => {
-			if (event.key === "Escape") setSpeedOpen(false);
-		};
 		document.addEventListener("pointerdown", onPointerDown);
-		document.addEventListener("keydown", onKeyDown);
 		return () => {
 			document.removeEventListener("pointerdown", onPointerDown);
-			document.removeEventListener("keydown", onKeyDown);
 		};
 	}, [speedOpen]);
 
@@ -781,32 +839,9 @@ export function PlayerPage({
 		}
 	}
 
-	const handleBack = useCallback(() => {
-		const returnTarget = getPlayerReturnTarget();
-		if (returnTarget?.pathname) {
-			void router.navigate({ to: returnTarget.pathname as never });
-			return;
-		}
-
-		if (window.history.length > 1) {
-			router.history.back();
-			return;
-		}
-		void router.navigate({ to: "/dump" });
-	}, [router]);
-
 	const volumePercent = Math.round(
 		(prefs?.playerMuted ? 0 : (prefs?.playerVolume ?? 1)) * 100,
 	);
-
-	const cycleSpeed = useCallback(() => {
-		const next = nextSpeedPreset(
-			playbackRate,
-			prefs?.speedPresetPrimary,
-			prefs?.speedPresetSecondary,
-		);
-		setRate(next);
-	}, [playbackRate, prefs, setRate]);
 
 	const speedPresets = useMemo(() => {
 		const raw = [
@@ -858,6 +893,7 @@ export function PlayerPage({
 						className="glass window-no-drag h-9 w-9 rounded-full text-white/85 ring-1 ring-white/10 hover:bg-white/15 hover:text-white"
 						onClick={handleBack}
 						aria-label="Back to library"
+						title="Back to library (Esc)"
 					>
 						<IconArrowLeft size={16} />
 					</Button>
@@ -984,10 +1020,18 @@ export function PlayerPage({
 										<div className="space-y-1 text-xs text-(--muted-foreground)">
 											<p>Shortcuts</p>
 											<p>
-												`Space/K` play, `J/L` seek, `F` fullscreen, `M` mute,
-												`R` loop, `Up/Down` volume
+												`Space/K` play, `J/L` seek, `Shift+J/L` long seek, `0-9`
+												jump, `Home/End` edges
 											</p>
-											<p>Click `Gauge` for speed slider, scroll for ±0.2×</p>
+											<p>
+												`F` fullscreen, `M` mute, `R` loop, `Up/Down` volume,
+												`S` speed, `-`/`=` rate, `C` boards, `I` details, `Esc`
+												back
+											</p>
+											<p>
+												`Alt+Left/Right` history, click `Gauge` for speed
+												slider, scroll for ±0.2×
+											</p>
 										</div>
 									</section>
 

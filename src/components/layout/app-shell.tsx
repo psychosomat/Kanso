@@ -86,17 +86,28 @@ export function isTypingTarget(target: EventTarget | null): boolean {
 	);
 }
 
-export type AppShellShortcut = "palette" | "pin";
+export type AppShellShortcut = "palette" | "pin" | "back" | "forward";
 
 export function getAppShellShortcut(
-	e: { metaKey: boolean; ctrlKey: boolean; key: string },
+	e: { metaKey: boolean; ctrlKey: boolean; altKey?: boolean; key: string },
 	typing: boolean,
 ): AppShellShortcut | null {
 	if (typing) return null;
-	if (!(e.metaKey || e.ctrlKey)) return null;
-	const key = e.key.toLowerCase();
-	if (key === "p") return "palette";
-	if (key === "s") return "pin";
+	if (e.altKey && !e.metaKey && !e.ctrlKey) {
+		if (e.key === "ArrowLeft") return "back";
+		if (e.key === "ArrowRight") return "forward";
+		return null;
+	}
+	if (e.metaKey || e.ctrlKey) {
+		if (e.altKey) return null;
+		const key = e.key.toLowerCase();
+		if (key === "p" || key === "k") return "palette";
+		if (key === "b" || key === "s") return "pin";
+		if (e.key === "[") return "back";
+		if (e.key === "]") return "forward";
+		return null;
+	}
+	if (e.key === "/" || e.key === "?") return "palette";
 	return null;
 }
 
@@ -604,7 +615,7 @@ function SidebarPanel({
 				<button
 					type="button"
 					onClick={onTogglePinned}
-					title={pinned ? "Unpin sidebar (Ctrl+S)" : "Pin sidebar (Ctrl+S)"}
+					title={pinned ? "Unpin sidebar (Ctrl+B)" : "Pin sidebar (Ctrl+B)"}
 					className={cn(
 						"flex h-7 w-7 items-center justify-center rounded-full transition-colors",
 						pinned
@@ -654,11 +665,19 @@ export function AppShell({ children }: { children: React.ReactNode }) {
 				setPaletteOpen((open) => !open);
 				return;
 			}
-			togglePinned();
+			if (action === "pin") {
+				togglePinned();
+				return;
+			}
+			if (action === "back") {
+				router.history.back();
+				return;
+			}
+			router.history.forward();
 		};
 		window.addEventListener("keydown", onKeyDown);
 		return () => window.removeEventListener("keydown", onKeyDown);
-	}, [togglePinned]);
+	}, [togglePinned, router]);
 
 	useEffect(() => {
 		initNoise();

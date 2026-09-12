@@ -702,8 +702,10 @@ function SettingsPage() {
 						<p>All video files remain in their original location.</p>
 						<p>
 							Keyboard shortcuts: <kbd>Space/K</kbd> play · <kbd>J/L</kbd> seek
-							· <kbd>F</kbd> fullscreen · <kbd>M</kbd> mute · <kbd>Up/Down</kbd>
-							volume
+							· <kbd>Shift+J/L</kbd> long seek · <kbd>0-9</kbd> jump ·{" "}
+							<kbd>F</kbd> fullscreen · <kbd>M</kbd> mute · <kbd>Up/Down</kbd>{" "}
+							volume · <kbd>S</kbd> speed · <kbd>Esc</kbd> back ·{" "}
+							<kbd>Alt+Left/Right</kbd> history
 						</p>
 					</div>
 					<Separator className="my-4" />

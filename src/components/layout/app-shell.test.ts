@@ -61,6 +61,72 @@ describe("getAppShellShortcut", () => {
 		).toBe("pin");
 	});
 
+	it("maps Ctrl/Cmd+B to pin toggling", () => {
+		expect(
+			getAppShellShortcut({ metaKey: false, ctrlKey: true, key: "b" }, false),
+		).toBe("pin");
+		expect(
+			getAppShellShortcut({ metaKey: true, ctrlKey: false, key: "B" }, false),
+		).toBe("pin");
+	});
+
+	it("maps Ctrl/Cmd+K to the palette", () => {
+		expect(
+			getAppShellShortcut({ metaKey: false, ctrlKey: true, key: "k" }, false),
+		).toBe("palette");
+	});
+
+	it("maps bare / and ? to the palette", () => {
+		expect(
+			getAppShellShortcut({ metaKey: false, ctrlKey: false, key: "/" }, false),
+		).toBe("palette");
+		expect(
+			getAppShellShortcut({ metaKey: false, ctrlKey: false, key: "?" }, false),
+		).toBe("palette");
+	});
+
+	it("maps Alt+Left/Right to history navigation", () => {
+		expect(
+			getAppShellShortcut(
+				{ metaKey: false, ctrlKey: false, altKey: true, key: "ArrowLeft" },
+				false,
+			),
+		).toBe("back");
+		expect(
+			getAppShellShortcut(
+				{ metaKey: false, ctrlKey: false, altKey: true, key: "ArrowRight" },
+				false,
+			),
+		).toBe("forward");
+	});
+
+	it("maps Ctrl/Cmd+[ and Ctrl/Cmd+] to history navigation", () => {
+		expect(
+			getAppShellShortcut({ metaKey: false, ctrlKey: true, key: "[" }, false),
+		).toBe("back");
+		expect(
+			getAppShellShortcut({ metaKey: true, ctrlKey: false, key: "]" }, false),
+		).toBe("forward");
+	});
+
+	it("ignores Alt with unrelated keys and mixed modifiers", () => {
+		expect(
+			getAppShellShortcut(
+				{ metaKey: false, ctrlKey: false, altKey: true, key: "x" },
+				false,
+			),
+		).toBe(null);
+		expect(
+			getAppShellShortcut(
+				{ metaKey: false, ctrlKey: true, altKey: true, key: "p" },
+				false,
+			),
+		).toBe(null);
+		expect(
+			getAppShellShortcut({ metaKey: false, ctrlKey: false, key: "F1" }, false),
+		).toBe(null);
+	});
+
 	it("ignores shortcuts while typing or without a modifier", () => {
 		expect(
 			getAppShellShortcut({ metaKey: false, ctrlKey: true, key: "p" }, true),
@@ -70,6 +136,15 @@ describe("getAppShellShortcut", () => {
 		).toBe(null);
 		expect(
 			getAppShellShortcut({ metaKey: false, ctrlKey: true, key: "x" }, false),
+		).toBe(null);
+		expect(
+			getAppShellShortcut(
+				{ metaKey: false, ctrlKey: false, altKey: true, key: "ArrowLeft" },
+				true,
+			),
+		).toBe(null);
+		expect(
+			getAppShellShortcut({ metaKey: false, ctrlKey: false, key: "/" }, true),
 		).toBe(null);
 	});
 });
