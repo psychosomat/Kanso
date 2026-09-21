@@ -18,6 +18,15 @@ describe("getMimeType", () => {
 		expect(getMimeType("clip.TS")).toBe("video/mp2t");
 	});
 
+	it("serves every supported video extension as video/*", async () => {
+		const { SUPPORTED_VIDEO_EXTENSIONS } = await import(
+			"../../src/lib/constants"
+		);
+		for (const ext of SUPPORTED_VIDEO_EXTENSIONS) {
+			expect(getMimeType(`clip${ext}`)).toMatch(/^video\//);
+		}
+	});
+
 	it("falls back to octet-stream for unknown extensions", () => {
 		expect(getMimeType("archive.xyz")).toBe("application/octet-stream");
 		expect(getMimeType("no-extension")).toBe("application/octet-stream");

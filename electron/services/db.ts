@@ -613,9 +613,12 @@ export class DatabaseService {
 	}
 
 	markMissingUnderRoot(rootPath: string, existingPaths: Set<string>) {
+		const prefix = rootPath.endsWith(path.sep)
+			? rootPath
+			: `${rootPath}${path.sep}`;
 		const rows = this.db
 			.prepare("SELECT source_path FROM videos WHERE source_path LIKE ?")
-			.all(`${rootPath}%`) as Array<{ source_path: string }>;
+			.all(`${prefix}%`) as Array<{ source_path: string }>;
 		const markMissing = this.db.prepare(
 			"UPDATE videos SET is_missing = 1, updated_at = ? WHERE source_path = ?",
 		);

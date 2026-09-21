@@ -1,14 +1,15 @@
 import fs from "node:fs/promises";
+import type { Dirent } from "node:fs";
 import path from "node:path";
 import { SUPPORTED_VIDEO_EXTENSIONS } from "../../src/lib/constants";
 import type { ScanStatusDto } from "../../src/lib/contracts";
 import { DatabaseService } from "./db";
 import { FileWatchService } from "./file-watch";
-import { probeMedia } from "./media-metadata";
+import { EMPTY_METADATA, probeMedia } from "./media-metadata";
 import { PosterCacheService } from "./poster-cache";
 import { TransmuxerService } from "./transmuxer";
 
-function isSupportedVideo(filePath: string) {
+export function isSupportedVideo(filePath: string) {
 	return SUPPORTED_VIDEO_EXTENSIONS.includes(
 		path
 			.extname(filePath)
@@ -27,15 +28,33 @@ export function selectWatchPaths(
 }
 
 async function listFilesRecursive(rootPath: string): Promise<string[]> {
-	const entries = await fs.readdir(rootPath, { withFileTypes: true });
+	let entries: Dirent[];
+	try {
+		entries = await fs.readdir(rootPath, { withFileTypes: true });
+	} catch (error) {
+		console.error(
+			"[INDEXER] Cannot read directory, skipping:",
+			rootPath,
+			error,
+		);
+		return [];
+	}
 	const nested = await Promise.all(
 		entries.map(async (entry) => {
 			const entryPath = path.join(rootPath, entry.name);
-			if (entry.isDirectory()) {
-				return listFilesRecursive(entryPath);
-			}
-			if (entry.isFile() && isSupportedVideo(entryPath)) {
-				return [entryPath];
+			try {
+				if (entry.isDirectory()) {
+					return listFilesRecursive(entryPath);
+				}
+				if (entry.isFile() && isSupportedVideo(entryPath)) {
+					return [entryPath];
+				}
+			} catch (error) {
+				console.error(
+					"[INDEXER] Cannot inspect path, skipping:",
+					entryPath,
+					error,
+				);
 			}
 			return [];
 		}),
@@ -96,7 +115,18 @@ export class LibraryIndexerService {
 		this.db.updateScanState({ scanStatus: "scanning", scanError: null });
 		try {
 			const grouped = await Promise.all(
-				sourcePaths.map((sourcePath) => listFilesRecursive(sourcePath)),
+				sourcePaths.map(async (sourcePath) => {
+					try {
+						return await listFilesRecursive(sourcePath);
+					} catch (error) {
+						console.error(
+							"[INDEXER] Failed to list files under source, skipping:",
+							sourcePath,
+							error,
+						);
+						return [];
+					}
+				}),
 			);
 			const allFiles: string[] = grouped.flat();
 			const seen = new Set<string>();
@@ -117,7 +147,15 @@ export class LibraryIndexerService {
 			for (let index = 0; index < allFiles.length; index += 1) {
 				const filePath = allFiles[index];
 				seen.add(filePath);
-				await this.processFile(filePath);
+				try {
+					await this.processFile(filePath);
+				} catch (error) {
+					console.error(
+						"[INDEXER] Failed to index file, skipping:",
+						filePath,
+						error,
+					);
+				}
 
 				// Publish progress (throttled to avoid IPC spam)
 				const now = Date.now();
@@ -278,7 +316,14 @@ export class LibraryIndexerService {
 			}
 			throw error;
 		}
-		const metadata = await probeMedia(filePath);
+		const metadata = await probeMedia(filePath).catch((error) => {
+			console.error(
+				"[INDEXER] Probe failed, indexing without metadata:",
+				filePath,
+				error,
+			);
+			return EMPTY_METADATA;
+		});
 		const modifiedAt = stats.mtime.toISOString();
 		const videoId = this.db.upsertVideo({
 			sourcePath: filePath,

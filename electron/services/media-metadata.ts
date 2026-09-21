@@ -12,7 +12,7 @@ export type MediaMetadata = {
 	bitrate: number | null;
 };
 
-const EMPTY_METADATA: MediaMetadata = {
+export const EMPTY_METADATA: MediaMetadata = {
 	durationSec: null,
 	width: null,
 	height: null,
@@ -77,7 +77,7 @@ export async function probeMedia(sourcePath: string): Promise<MediaMetadata> {
 		return EMPTY_METADATA;
 	}
 
-	const parsed = JSON.parse(stdout) as {
+	let parsed: {
 		streams?: Array<{
 			codec_type?: string;
 			codec_name?: string;
@@ -90,6 +90,12 @@ export async function probeMedia(sourcePath: string): Promise<MediaMetadata> {
 			bit_rate?: string;
 		};
 	};
+	try {
+		parsed = JSON.parse(stdout);
+	} catch (error) {
+		console.error("[FFPROBE] unparsable output for", sourcePath, error);
+		return EMPTY_METADATA;
+	}
 
 	const videoStream = parsed.streams?.find(
 		(stream) => stream.codec_type === "video",

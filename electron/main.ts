@@ -13,7 +13,6 @@ import {
 	screen,
 	shell,
 } from "electron";
-import { SUPPORTED_VIDEO_EXTENSIONS } from "../src/lib/constants";
 import { registerIpc } from "./ipc/register-ipc";
 import {
 	getMimeType,
@@ -23,6 +22,7 @@ import {
 import { DatabaseService } from "./services/db";
 import {
 	LibraryIndexerService,
+	isSupportedVideo,
 	selectWatchPaths,
 } from "./services/library-indexer";
 import { PosterCacheService } from "./services/poster-cache";
@@ -81,21 +81,13 @@ function initializeBackend() {
 	});
 }
 
-function isSupportedVideoFile(targetPath: string) {
-	return SUPPORTED_VIDEO_EXTENSIONS.includes(
-		path
-			.extname(targetPath)
-			.toLowerCase() as (typeof SUPPORTED_VIDEO_EXTENSIONS)[number],
-	);
-}
-
 function normalizeOpenPath(targetPath: string) {
 	if (!targetPath) {
 		return null;
 	}
 
 	const resolvedPath = path.resolve(targetPath);
-	if (!existsSync(resolvedPath) || !isSupportedVideoFile(resolvedPath)) {
+	if (!existsSync(resolvedPath) || !isSupportedVideo(resolvedPath)) {
 		return null;
 	}
 
