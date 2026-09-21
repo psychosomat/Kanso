@@ -10,6 +10,7 @@ import type {
 	CategoryFeedSort,
 	CategoryIconName,
 	DumpQueryDto,
+	DuplicateGroupDto,
 	LibrarySettingsDto,
 	PaginatedCategoryPostsDto,
 	PaginatedVideosDto,
@@ -22,6 +23,13 @@ import type {
 } from "../../src/lib/contracts";
 import { normalizeEqGains } from "../../src/lib/equalizer";
 import { slugify } from "../../src/lib/utils";
+import {
+	CONTINUE_WATCHING_DEFAULT_LIMIT,
+	DUPLICATE_GROUPS_SQL,
+	IN_PROGRESS_WHERE,
+	RECENTLY_ADDED_DEFAULT_LIMIT,
+	buildDumpFilter,
+} from "./smart-library";
 
 // Simple timing helper for performance debugging
 function timeQuery<T>(name: string, fn: () => T): T {
@@ -167,6 +175,12 @@ export class DatabaseService {
       CREATE INDEX IF NOT EXISTS idx_videos_folder_path ON videos(folder_path);
       CREATE INDEX IF NOT EXISTS idx_videos_is_missing ON videos(is_missing);
       CREATE INDEX IF NOT EXISTS idx_videos_modified_at ON videos(modified_at);
+      CREATE INDEX IF NOT EXISTS idx_videos_last_played_at ON videos(last_played_at);
+      CREATE INDEX IF NOT EXISTS idx_videos_created_at ON videos(created_at);
+      CREATE INDEX IF NOT EXISTS idx_videos_file_name ON videos(file_name COLLATE NOCASE);
+      CREATE INDEX IF NOT EXISTS idx_videos_codec_video ON videos(codec_video);
+      CREATE INDEX IF NOT EXISTS idx_videos_duration_sec ON videos(duration_sec);
+      CREATE INDEX IF NOT EXISTS idx_videos_resolution ON videos(width, height);
       CREATE INDEX IF NOT EXISTS idx_category_posts_category_id ON category_posts(category_id);
       CREATE INDEX IF NOT EXISTS idx_category_posts_video_id ON category_posts(video_id);
       CREATE INDEX IF NOT EXISTS idx_categories_slug ON categories(slug);
@@ -723,59 +737,83 @@ export class DatabaseService {
 			const page = Math.max(1, input.page);
 			const pageSize = Math.max(1, Math.min(input.pageSize, 100));
 			const offset = (page - 1) * pageSize;
-			const search = input.search?.trim();
-
-			const conditions: string[] = [];
-			if (search) {
-				conditions.push("(file_name LIKE @search OR folder_path LIKE @search)");
-			}
-			if (input.unsortedOnly) {
-				conditions.push(
-					"NOT EXISTS (SELECT 1 FROM category_posts cp WHERE cp.video_id = videos.id)",
-				);
-			}
-			const where =
-				conditions.length > 0 ? `WHERE ${conditions.join(" AND ")}` : "";
-
-			const params = search
-				? { search: `%${search}%`, limit: pageSize, offset }
-				: { limit: pageSize, offset };
+			const filter = buildDumpFilter(input);
 
 			const rows = this.db
 				.prepare(
-					`SELECT * FROM videos ${where}
+					`SELECT * FROM videos ${filter.where}
 					ORDER BY ${this.getDumpSort(input.sort, input.order)}
 					LIMIT @limit OFFSET @offset`,
 				)
-				.all(params) as VideoRow[];
+				.all({ ...filter.params, limit: pageSize, offset }) as VideoRow[];
 
 			const countRow = this.db
-				.prepare(`SELECT COUNT(*) as total FROM videos ${where}`)
-				.get(search ? { search: `%${search}%` } : {}) as { total: number };
-
-			// Get category counts for all videos at once
-			const videoIds = rows.map((r) => r.id);
-			const categoryCounts =
-				videoIds.length > 0
-					? (this.db
-							.prepare(
-								`SELECT video_id, COUNT(*) as count FROM category_posts WHERE video_id IN (${videoIds.map(() => "?").join(",")}) GROUP BY video_id`,
-							)
-							.all(...videoIds) as Array<{ video_id: string; count: number }>)
-					: [];
-			const countMap = new Map(
-				categoryCounts.map((cc) => [cc.video_id, cc.count]),
-			);
+				.prepare(`SELECT COUNT(*) as total FROM videos ${filter.where}`)
+				.get(filter.params) as { total: number };
 
 			return {
-				items: rows.map((row) =>
-					this.toVideoCard(row, countMap.get(row.id) ?? 0),
-				),
+				items: this.toVideoCards(rows),
 				total: countRow.total,
 				page,
 				pageSize,
 			};
 		});
+	}
+
+	getContinueWatching(
+		limit: number = CONTINUE_WATCHING_DEFAULT_LIMIT,
+	): VideoCardDto[] {
+		return timeQuery("getContinueWatching", () => {
+			const rows = this.db
+				.prepare(
+					`SELECT * FROM videos
+					WHERE is_missing = 0 AND ${IN_PROGRESS_WHERE}
+					ORDER BY last_played_at DESC
+					LIMIT ?`,
+				)
+				.all(Math.max(1, Math.min(limit, 100))) as VideoRow[];
+			return this.toVideoCards(rows);
+		});
+	}
+
+	getRecentlyAdded(
+		limit: number = RECENTLY_ADDED_DEFAULT_LIMIT,
+	): VideoCardDto[] {
+		return timeQuery("getRecentlyAdded", () => {
+			const rows = this.db
+				.prepare(
+					`SELECT * FROM videos
+					WHERE is_missing = 0
+					ORDER BY created_at DESC, modified_at DESC
+					LIMIT ?`,
+				)
+				.all(Math.max(1, Math.min(limit, 100))) as VideoRow[];
+			return this.toVideoCards(rows);
+		});
+	}
+
+	getDuplicateGroups(): DuplicateGroupDto[] {
+		return timeQuery("getDuplicateGroups", () => {
+			const rows = this.db.prepare(DUPLICATE_GROUPS_SQL).all() as Array<{
+				fileSize: number;
+				durationBucket: number;
+				memberCount: number;
+				memberIds: string;
+			}>;
+			return rows.map((row) => ({
+				fileSize: row.fileSize,
+				durationBucket: row.durationBucket,
+				memberCount: row.memberCount,
+				memberIds: row.memberIds.split(","),
+			}));
+		});
+	}
+
+	isKnownSourcePath(candidate: string): boolean {
+		const row = this.db
+			.prepare("SELECT 1 as found FROM videos WHERE source_path = ? LIMIT 1")
+			.get(candidate) as { found: number } | undefined;
+		return Boolean(row);
 	}
 
 	listCategories(): CategoryDto[] {
@@ -1293,6 +1331,22 @@ export class DatabaseService {
 			default:
 				return `modified_at ${direction}`;
 		}
+	}
+
+	private toVideoCards(rows: VideoRow[]): VideoCardDto[] {
+		if (rows.length === 0) {
+			return [];
+		}
+		const videoIds = rows.map((row) => row.id);
+		const categoryCounts = this.db
+			.prepare(
+				`SELECT video_id, COUNT(*) as count FROM category_posts WHERE video_id IN (${videoIds.map(() => "?").join(",")}) GROUP BY video_id`,
+			)
+			.all(...videoIds) as Array<{ video_id: string; count: number }>;
+		const countMap = new Map(
+			categoryCounts.map((cc) => [cc.video_id, cc.count]),
+		);
+		return rows.map((row) => this.toVideoCard(row, countMap.get(row.id) ?? 0));
 	}
 
 	private toVideoCard(row: VideoRow, categoryCount = 0): VideoCardDto {

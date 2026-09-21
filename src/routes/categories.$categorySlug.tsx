@@ -222,7 +222,7 @@ function CategoryFeedPage() {
 				}
 				actions={
 					<>
-						<Badge variant="accent">{data?.total ?? 0} posts</Badge>
+						<Badge variant="accent">{data ? data.total : "…"} posts</Badge>
 						<Select
 							value={sort}
 							onValueChange={(value) => {
@@ -233,7 +233,7 @@ function CategoryFeedPage() {
 								} catch {}
 							}}
 						>
-							<SelectTrigger className="w-44">
+							<SelectTrigger aria-label="Sort board feed" className="w-44">
 								<SelectValue placeholder="Feed sort" />
 							</SelectTrigger>
 							<SelectContent>
@@ -247,7 +247,7 @@ function CategoryFeedPage() {
 				}
 			>
 				{reorderError ? (
-					<p className="mb-3 rounded-(--radius) border border-(--destructive)/30 bg-(--destructive)/10 px-3 py-2 text-xs text-(--destructive)">
+					<p role="alert" className="mb-3 rounded-(--radius) border border-(--destructive)/30 bg-(--destructive)/10 px-3 py-2 text-xs text-(--destructive)">
 						{reorderError}
 					</p>
 				) : null}

@@ -51,7 +51,7 @@ function Slider({
 					// biome-ignore lint/suspicious/noArrayIndexKey: thumbs are positional; keying by value remounts the thumb mid-drag and breaks pointer capture
 					key={`slider-thumb-${index}`}
 					className={cn(
-						"block h-3.5 w-3.5 rounded-full border-2 border-(--accent) bg-(--accent) shadow-[0_0_14px_-2px_var(--accent)] transition-all focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-(--ring) disabled:pointer-events-none disabled:opacity-50",
+						"block h-3.5 w-3.5 rounded-full border-2 border-(--accent) bg-(--accent) shadow-[0_0_14px_-2px_var(--accent)] transition-[transform,box-shadow] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-(--ring) disabled:pointer-events-none disabled:opacity-50",
 					)}
 				/>
 			))}

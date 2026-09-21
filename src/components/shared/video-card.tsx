@@ -30,6 +30,7 @@ import { setDraggedVideoId } from "@/lib/video-drag";
 import IconCopy from "~icons/tabler/copy";
 import IconDots from "~icons/tabler/dots";
 import IconFolder from "~icons/tabler/folder";
+import IconFolderPlus from "~icons/tabler/folder-plus";
 import IconFolderSearch from "~icons/tabler/folder-search";
 import IconPlayerPlayFilled from "~icons/tabler/player-play-filled";
 import IconTrash from "~icons/tabler/trash";
@@ -44,6 +45,9 @@ type Props = {
 	onRemove?: (videoId: string) => Promise<void>;
 	caption?: string | null;
 	draggable?: boolean;
+	duplicate?: boolean;
+	showResumeProgress?: boolean;
+	resumeLabel?: string;
 };
 
 export function getRemoveDialogDescription(exists: boolean): string {
@@ -92,7 +96,22 @@ export function buildVideoCardMenuItems(
 	return items;
 }
 
-function VideoThumbnail({ video }: { video: VideoCardDto }) {
+function VideoThumbnail({
+	video,
+	duplicate,
+	showResumeProgress,
+}: {
+	video: VideoCardDto;
+	duplicate?: boolean;
+	showResumeProgress?: boolean;
+}) {
+	const progressPercent =
+		showResumeProgress &&
+		video.resumeSec > 0 &&
+		video.durationSec &&
+		video.durationSec > 0
+			? Math.min(100, (video.resumeSec / video.durationSec) * 100)
+			: null;
 	return (
 		<div className="relative aspect-video overflow-hidden rounded-(--radius-lg) bg-black ring-1 ring-white/8 transition-[box-shadow,ring-color,transform] duration-300 ease-out group-hover:shadow-[0_24px_60px_-24px_var(--accent-subtle)] group-hover:ring-(--accent)/45">
 			{video.posterUrl ? (
@@ -119,17 +138,39 @@ function VideoThumbnail({ video }: { video: VideoCardDto }) {
 				</div>
 			)}
 
+			{duplicate && video.exists && (
+				<div className="absolute left-2 top-2">
+					<Badge>Possible duplicates</Badge>
+				</div>
+			)}
+
 			<div className="pointer-events-none absolute inset-0 bg-linear-to-t from-black/70 via-black/0 to-transparent opacity-0 transition-opacity duration-300 group-hover:opacity-100" />
 
-			<div className="absolute inset-0 flex items-center justify-center opacity-0 transition-opacity duration-300 group-hover:opacity-100">
+			<div className="absolute inset-0 flex items-center justify-center opacity-0 transition-opacity duration-300 group-hover:opacity-100 group-focus-within:opacity-100">
 				<div className="flex h-12 w-12 items-center justify-center rounded-full bg-(--accent) text-white shadow-[0_12px_36px_-8px_var(--accent)] transition-transform duration-300 group-hover:scale-100 scale-90">
 					<IconPlayerPlayFilled size={18} />
 				</div>
 			</div>
 
-			<div className="tnum font-data pointer-events-none absolute bottom-2 right-2 rounded-full bg-black/60 px-2 py-0.5 text-[10px] font-medium text-white/90 opacity-0 backdrop-blur-md transition-opacity duration-300 group-hover:opacity-100">
+			<div className="tnum font-data pointer-events-none absolute bottom-2 right-2 rounded-full bg-black/60 px-2 py-0.5 text-[10px] font-medium text-white/90 backdrop-blur-md">
 				{formatDuration(video.durationSec)}
 			</div>
+
+			{progressPercent !== null && (
+				<div
+					className="absolute inset-x-0 bottom-0 h-1 bg-white/15"
+					role="progressbar"
+					aria-label="Resume progress"
+					aria-valuenow={Math.round(progressPercent)}
+					aria-valuemin={0}
+					aria-valuemax={100}
+				>
+					<div
+						className="h-full bg-(--accent)"
+						style={{ width: `${progressPercent}%` }}
+					/>
+				</div>
+			)}
 		</div>
 	);
 }
@@ -137,20 +178,27 @@ function VideoThumbnail({ video }: { video: VideoCardDto }) {
 function VideoMeta({
 	video,
 	caption,
+	resumeLabel,
 }: {
 	video: VideoCardDto;
 	caption?: string | null;
+	resumeLabel?: string;
 }) {
 	return (
 		<div className="min-w-0 flex-1">
 			<h3 className="line-clamp-2 text-[13px] font-medium leading-snug text-(--foreground)/90 transition-colors group-hover:text-(--foreground)">
 				{video.fileName}
 			</h3>
-			<p className="font-data mt-1 line-clamp-1 text-[10px] uppercase tracking-[0.08em] text-(--muted-foreground)/80">
+			<p className="font-data mt-1 line-clamp-1 text-[10px] uppercase tracking-[0.08em] text-(--muted-foreground)">
 				{formatResolution(video.width, video.height)}
 				{" · "}
 				{formatDateTime(video.modifiedAt)}
 			</p>
+			{resumeLabel && (
+				<p className="tnum mt-1 line-clamp-1 text-[11px] text-(--accent-strong)">
+					{resumeLabel}
+				</p>
+			)}
 			{caption && (
 				<p className="mt-1 line-clamp-2 text-xs text-(--muted-foreground)">
 					{caption}
@@ -164,8 +212,8 @@ const VIDEO_CARD_MENU_ICONS: Record<
 	VideoCardMenuItemId,
 	(props: { size: number }) => React.ReactNode
 > = {
-	categorize: (props) => <IconFolder {...props} />,
-	"open-folder": (props) => <IconFolderSearch {...props} />,
+	categorize: (props) => <IconFolderPlus {...props} />,
+	"open-folder": (props) => <IconFolder {...props} />,
 	"reveal-file": (props) => <IconFolderSearch {...props} />,
 	"copy-path": (props) => <IconCopy {...props} />,
 	remove: (props) => <IconTrash {...props} />,
@@ -178,6 +226,9 @@ export function VideoCard({
 	onRemove,
 	caption,
 	draggable = true,
+	duplicate = false,
+	showResumeProgress = false,
+	resumeLabel,
 }: Props) {
 	const location = useLocation();
 	const [removeDialogOpen, setRemoveDialogOpen] = useState(false);
@@ -246,18 +297,27 @@ export function VideoCard({
 						draggable={draggable}
 						className="group block cursor-grab active:cursor-grabbing"
 					>
-						<VideoThumbnail video={video} />
+						<VideoThumbnail
+							video={video}
+							duplicate={duplicate}
+							showResumeProgress={showResumeProgress}
+						/>
 
 						<div className="mt-2 flex items-start gap-2 px-0.5">
-							<VideoMeta video={video} caption={caption} />
+							<VideoMeta
+								video={video}
+								caption={caption}
+								resumeLabel={resumeLabel}
+							/>
 
 							<DropdownMenu>
 								<DropdownMenuTrigger asChild>
 									<Button
 										variant="ghost"
 										size="icon-sm"
-										className="mt-0.5 shrink-0 opacity-0 group-hover:opacity-100 focus-visible:opacity-100"
-										onClick={(e) => e.stopPropagation()}
+										className="mt-0.5 shrink-0 opacity-0 transition-opacity duration-150 group-hover:opacity-100 group-focus-within:opacity-100 focus-visible:opacity-100 data-[state=open]:opacity-100"
+										aria-label={`Video actions for ${video.fileName}`}
+										onClick={(e) => { e.preventDefault(); e.stopPropagation(); }}
 									>
 										<IconDots size={16} />
 									</Button>

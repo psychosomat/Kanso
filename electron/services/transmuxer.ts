@@ -4,6 +4,7 @@ import fs from "node:fs/promises";
 import path from "node:path";
 import ffmpegPath from "ffmpeg-static";
 import { resolveNativeBinaryPath } from "./binary-resolver";
+import { sha1Name } from "./smart-library";
 
 function getCacheDir() {
 	const appData =
@@ -22,10 +23,12 @@ export class TransmuxerService {
 		this.cacheDir = cacheDir ?? getCacheDir();
 	}
 
+	getCacheDir(): string {
+		return this.cacheDir;
+	}
+
 	private cachePath(sourcePath: string): string {
-		const parsed = path.parse(sourcePath);
-		const name = `${parsed.name}.mp4`;
-		return path.join(this.cacheDir, name);
+		return path.join(this.cacheDir, `${sha1Name(sourcePath)}.mp4`);
 	}
 
 	async ensureTransmuxed(sourcePath: string): Promise<string> {

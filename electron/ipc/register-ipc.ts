@@ -25,6 +25,7 @@ import {
 	LibraryIndexerService,
 	selectWatchPaths,
 } from "../services/library-indexer";
+import { allowExternalMediaPath } from "../services/smart-library";
 import { PosterCacheService } from "../services/poster-cache";
 
 type Services = {
@@ -136,12 +137,20 @@ export function registerIpc({
 	ipcMain.handle("library:get-dump-page", (_event, input) =>
 		db.getDumpPage(input),
 	);
+	ipcMain.handle("library:get-continue-watching", (_event, limit?: number) =>
+		db.getContinueWatching(limit),
+	);
+	ipcMain.handle("library:get-recently-added", (_event, limit?: number) =>
+		db.getRecentlyAdded(limit),
+	);
+	ipcMain.handle("library:get-duplicate-groups", () => db.getDuplicateGroups());
 	ipcMain.handle("library:get-video", (_event, videoId: string) =>
 		db.getVideoById(videoId),
 	);
-	ipcMain.handle("library:get-external-video", (_event, sourcePath: string) =>
-		getExternalVideoDetails(sourcePath, posterCache),
-	);
+	ipcMain.handle("library:get-external-video", (_event, sourcePath: string) => {
+		allowExternalMediaPath(sourcePath);
+		return getExternalVideoDetails(sourcePath, posterCache);
+	});
 	ipcMain.handle("library:rescan", async () => {
 		const settings = db.getLibrarySettings();
 		if (settings.sourcePaths.length === 0) return;
@@ -236,6 +245,9 @@ export function registerIpc({
 			"window:toggle-maximize",
 			"window:close",
 			"library:get-dump-page",
+			"library:get-continue-watching",
+			"library:get-recently-added",
+			"library:get-duplicate-groups",
 			"library:get-video",
 			"library:get-external-video",
 			"library:rescan",

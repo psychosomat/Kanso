@@ -215,6 +215,11 @@ select {
 	font: inherit;
 }
 
+input,
+textarea {
+	caret-color: var(--accent);
+}
+
 img {
 	display: block;
 }
@@ -340,6 +345,13 @@ img {
 	transform: scale(1.2);
 }
 
+.lamp-range:focus-visible,
+.volume-range:focus-visible {
+	outline: 2px solid color-mix(in oklab, var(--accent), transparent 30%);
+	outline-offset: 4px;
+	border-radius: 999px;
+}
+
 .lamp-range::-moz-range-track {
 	height: 4px;
 	border-radius: 999px;
@@ -440,6 +452,10 @@ img {
 
 .animate-slide-up {
 	animation: slideUp 0.28s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+.animate-scale-in {
+	animation: scaleIn 0.2s cubic-bezier(0.16, 1, 0.3, 1);
 }
 
 @keyframes fadeOut {

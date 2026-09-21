@@ -26,6 +26,11 @@ import {
 	selectWatchPaths,
 } from "./services/library-indexer";
 import { PosterCacheService } from "./services/poster-cache";
+import {
+	allowExternalMediaPath,
+	isAllowedExternalMediaPath,
+	resolveMediaPath,
+} from "./services/smart-library";
 import { TransmuxerService } from "./services/transmuxer";
 
 // Disable hardware video decoding to prevent crashes with 4K HEVC video
@@ -113,6 +118,7 @@ function queueOpenPath(targetPath: string) {
 		return;
 	}
 
+	allowExternalMediaPath(normalizedPath);
 	pendingOpenPaths.push(normalizedPath);
 	flushPendingOpenPaths();
 }
@@ -401,8 +407,24 @@ function corsHeaders() {
 	};
 }
 
+function resolveMediaRequestPath(targetPath: string): string {
+	if (!db) {
+		throw new Error("Backend services failed to initialize.");
+	}
+	const settings = db.getLibrarySettings();
+	return resolveMediaPath(targetPath, {
+		libraryRoots: settings.sourcePaths.map((source) => source.path),
+		transmuxDir: transmuxer?.getCacheDir() ?? null,
+		isKnownSourcePath: (candidate) => db?.isKnownSourcePath(candidate) ?? false,
+		isAllowedExternalPath: isAllowedExternalMediaPath,
+	});
+}
+
 async function createMediaResponse(targetPath: string, request: Request) {
-	let resolved = path.resolve(targetPath);
+	// Security gate: resolve -> realpath -> must be inside the library,
+	// the transmux cache, the DB index, or an explicitly opened file.
+	const safePath = resolveMediaRequestPath(targetPath);
+	let resolved = safePath;
 
 	// Remux .ts (MPEG-TS) to .mp4 on-the-fly for browser compatibility
 	if (path.extname(resolved).toLowerCase() === ".ts" && transmuxer) {
@@ -543,6 +565,11 @@ function registerVideoProtocolHandler() {
 		} catch (error) {
 			const message =
 				error instanceof Error ? error.message : "Failed to read local media";
+			const status = message.includes("outside the library")
+				? 403
+				: message.includes("not found")
+					? 404
+					: 500;
 
 			// Enhanced error logging for macOS
 			if (process.platform === "darwin") {
@@ -551,7 +578,7 @@ function registerVideoProtocolHandler() {
 				console.error("[VIDEO PROTOCOL] error message:", message);
 			}
 
-			return new Response(message, { status: 500 });
+			return new Response(message, { status });
 		}
 	});
 }

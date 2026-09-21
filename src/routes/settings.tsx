@@ -372,8 +372,12 @@ function SettingsPage() {
 							)}
 						</div>
 
-						<div className="flex flex-wrap gap-2">
-							<Button onClick={() => void chooseFolders()} disabled={busy}>
+						<div className="grid grid-cols-1 gap-2 sm:flex sm:flex-wrap">
+							<Button
+								onClick={() => void chooseFolders()}
+								disabled={busy}
+								className="w-full justify-center sm:w-auto"
+							>
 								<IconFolderOpen size={16} />
 								Choose folders
 							</Button>
@@ -381,6 +385,7 @@ function SettingsPage() {
 								variant="secondary"
 								onClick={() => void addFolder()}
 								disabled={busy}
+								className="w-full justify-center sm:w-auto"
 							>
 								<IconFolderPlus size={16} />
 								Add folder
@@ -389,6 +394,7 @@ function SettingsPage() {
 								variant="secondary"
 								onClick={() => void rescan()}
 								disabled={busy || !hasSourcePaths}
+								className="w-full justify-center sm:w-auto"
 							>
 								<IconRefresh size={16} />
 								Rescan now
@@ -422,7 +428,7 @@ function SettingsPage() {
 
 						<Separator />
 
-						<div className="grid gap-3 sm:grid-cols-4">
+						<div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
 							<StatTile
 								label="Folders"
 								value={String(library?.sourcePaths.length ?? 0)}
@@ -443,14 +449,14 @@ function SettingsPage() {
 				<SettingsSection icon={<IconPalette size={16} />} title="Appearance">
 					<div className="space-y-6">
 						<div>
-							<div className="flex items-center justify-between">
-								<div>
+							<div className="flex flex-col items-stretch gap-3 sm:flex-row sm:items-center sm:justify-between">
+								<div className="min-w-0">
 									<p className="text-sm text-(--foreground)">Accent color</p>
 									<p className="mt-0.5 text-xs text-(--muted-foreground)">
 										Primary interface color for highlights and actions
 									</p>
 								</div>
-								<div className="flex items-center gap-2">
+								<div className="flex shrink-0 items-center gap-2">
 									<input
 										type="color"
 										aria-label="Accent color"
@@ -468,8 +474,8 @@ function SettingsPage() {
 						<Separator />
 
 						<div>
-							<div className="flex items-center justify-between gap-4">
-								<div>
+							<div className="flex flex-col items-stretch gap-3 sm:flex-row sm:items-center sm:justify-between sm:gap-4">
+								<div className="min-w-0">
 									<p className="text-sm text-(--foreground)">Custom titlebar</p>
 									<p className="mt-0.5 text-xs text-(--muted-foreground)">
 										Windows layout, macOS traffic lights, or full hide for
@@ -480,7 +486,7 @@ function SettingsPage() {
 									value={preferences?.titlebarMode ?? "auto"}
 									onValueChange={handleTitlebarModeChange}
 								>
-									<SelectTrigger className="w-44">
+									<SelectTrigger className="w-full sm:w-44">
 										<SelectValue placeholder="Choose mode" />
 									</SelectTrigger>
 									<SelectContent>
@@ -577,14 +583,14 @@ function SettingsPage() {
 					<Separator className="my-6" />
 
 					<div className="space-y-4">
-						<div className="flex items-center justify-between gap-3">
-							<div>
+						<div className="flex flex-col items-stretch gap-3 sm:flex-row sm:items-center sm:justify-between">
+							<div className="min-w-0">
 								<p className="text-sm text-(--foreground)">Equalizer</p>
 								<p className="mt-0.5 text-xs text-(--muted-foreground)">
 									6-band EQ applied to video audio. Gains are in dB.
 								</p>
 							</div>
-							<div className="flex items-center gap-2">
+							<div className="flex shrink-0 flex-wrap items-center gap-2">
 								<Badge variant={eqEnabled ? "accent" : "default"}>
 									{eqEnabled ? "Enabled" : "Disabled"}
 								</Badge>
@@ -800,7 +806,7 @@ function SettingsSection({
 function StatTile({ label, value }: { label: string; value: string }) {
 	return (
 		<div className="rounded-(--radius) bg-white/4 px-3 py-3">
-			<p className="eyebrow text-(--muted-foreground)/70">{label}</p>
+			<p className="eyebrow text-(--muted-foreground)">{label}</p>
 			<p className="tnum font-data mt-1.5 text-sm text-(--foreground)">
 				{value}
 			</p>

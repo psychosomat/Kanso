@@ -22,6 +22,7 @@ export function PageFrame({
 	return (
 		<section
 			ref={containerRef}
+			aria-labelledby="page-frame-title"
 			className={cn(
 				"relative min-h-full px-6 pb-16 pt-14 lg:px-10 lg:pt-16",
 				className,
@@ -38,7 +39,11 @@ export function PageFrame({
 			) : null}
 			<div className="relative mb-8 flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
 				<div className="min-w-0">
-					<h2 className="font-display truncate text-[28px] font-semibold leading-none text-(--foreground)">
+					<h2
+						id="page-frame-title"
+						title={title}
+						className="font-display truncate text-[28px] font-semibold leading-none text-(--foreground)"
+					>
 						{title}
 					</h2>
 					<p className="mt-2.5 max-w-xl text-[13px] leading-relaxed text-(--muted-foreground)">

@@ -1,9 +1,9 @@
-import crypto from "node:crypto";
 import fs from "node:fs";
 import path from "node:path";
 import type { ExternalVideoDto } from "../../src/lib/contracts";
 import { probeMedia } from "./media-metadata";
 import type { PosterCacheService } from "./poster-cache";
+import { sha1Name } from "./smart-library";
 
 export async function getExternalVideoDetails(
 	sourcePath: string,
@@ -19,11 +19,9 @@ export async function getExternalVideoDetails(
 		const metadata = await probeMedia(resolvedPath);
 		const modifiedAt = stats.mtime.toISOString();
 
-		// Generate a temporary ID for poster caching based on file path hash
-		const tempVideoId = crypto
-			.createHash("md5")
-			.update(resolvedPath)
-			.digest("hex");
+		// Content-addressed poster key: sha1 of the source path, never the
+		// raw file name (which may contain shell metacharacters).
+		const tempVideoId = sha1Name(resolvedPath);
 
 		const posterPath = await posterCache.ensurePoster(
 			tempVideoId,

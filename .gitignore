@@ -23,3 +23,4 @@ release/
 
 .claude/
 .repowise/
+.playwright-mcp/

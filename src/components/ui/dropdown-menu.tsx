@@ -13,7 +13,7 @@ export function DropdownMenuContent({
 			<DropdownMenuPrimitive.Content
 				sideOffset={8}
 				className={cn(
-					"island-strong z-50 min-w-44 overflow-hidden rounded-(--radius-md) p-1 text-(--foreground)",
+					"island-strong z-50 min-w-44 overflow-hidden rounded-(--radius-md) p-1 text-(--foreground) data-[state=open]:animate-fade-in data-[state=closed]:animate-fade-out",
 					className,
 				)}
 				{...props}

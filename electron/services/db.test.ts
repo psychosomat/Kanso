@@ -337,4 +337,282 @@ describe("DatabaseService", () => {
 		expect(child.parentCategoryId).toBe(parent.id);
 		expect(child.postCount).toBe(1);
 	});
+
+	describe("continue watching", () => {
+		function seedProgress(
+			fileName: string,
+			durationSec: number | null,
+			fileSize = 100,
+		) {
+			return db.upsertVideo({
+				sourcePath: `C:\\library\\${fileName}`,
+				fileName,
+				folderPath: "C:\\library",
+				fileSize,
+				modifiedAt: "2026-04-05T00:00:00.000Z",
+				durationSec,
+				width: 1920,
+				height: 1080,
+				fps: 30,
+				codecVideo: "h264",
+				codecAudio: "aac",
+				bitrate: 1000,
+				posterPath: null,
+			});
+		}
+
+		it("excludes never-played videos and zero resume", () => {
+			const fresh = seedProgress("fresh.mp4", 1000);
+			expect(db.getContinueWatching()).toHaveLength(0);
+			db.saveProgress(fresh, 0);
+			expect(db.getContinueWatching()).toHaveLength(0);
+		});
+
+		it("includes half-watched videos newest first", async () => {
+			const first = seedProgress("first.mp4", 1000);
+			const second = seedProgress("second.mp4", 1000);
+			db.saveProgress(first, 500);
+			await sleep(5);
+			db.saveProgress(second, 600);
+			expect(db.getContinueWatching().map((video) => video.id)).toEqual([
+				second,
+				first,
+			]);
+		});
+
+		it("excludes credits, near-complete and finished videos", () => {
+			const credits = seedProgress("credits.mp4", 100);
+			db.saveProgress(credits, 90);
+			const almostDone = seedProgress("almost.mp4", 1000);
+			db.saveProgress(almostDone, 960);
+			const finished = seedProgress("finished.mp4", 100);
+			db.markPlayed(finished, true);
+			expect(db.getContinueWatching()).toHaveLength(0);
+		});
+
+		it("keeps videos with unknown duration once started", () => {
+			const unknown = seedProgress("unknown.mp4", null);
+			db.saveProgress(unknown, 30);
+			expect(db.getContinueWatching().map((video) => video.id)).toEqual([
+				unknown,
+			]);
+		});
+
+		it("does not bump play_count on progress ticks", () => {
+			const video = seedProgress("ticks.mp4", 1000);
+			db.saveProgress(video, 100);
+			db.saveProgress(video, 200);
+			db.saveProgress(video, 300);
+			expect(db.getVideoById(video)?.playCount).toBe(0);
+			db.markPlayed(video, false);
+			expect(db.getVideoById(video)?.playCount).toBe(1);
+		});
+
+		it("resets resume when marked completed", () => {
+			const video = seedProgress("reset.mp4", 1000);
+			db.saveProgress(video, 500);
+			db.markPlayed(video, true);
+			const detail = db.getVideoById(video);
+			expect(detail?.resumeSec).toBe(0);
+			expect(db.getContinueWatching()).toHaveLength(0);
+		});
+	});
+
+	describe("recently added", () => {
+		it("returns newest indexed videos first and respects the limit", async () => {
+			const first = db.upsertVideo({
+				sourcePath: "C:\\library\\old.mp4",
+				fileName: "old.mp4",
+				folderPath: "C:\\library",
+				fileSize: 100,
+				modifiedAt: "2026-04-01T00:00:00.000Z",
+				durationSec: 10,
+				width: 1920,
+				height: 1080,
+				fps: 30,
+				codecVideo: "h264",
+				codecAudio: "aac",
+				bitrate: 1000,
+				posterPath: null,
+			});
+			await sleep(5);
+			const second = db.upsertVideo({
+				sourcePath: "C:\\library\\new.mp4",
+				fileName: "new.mp4",
+				folderPath: "C:\\library",
+				fileSize: 100,
+				modifiedAt: "2026-04-02T00:00:00.000Z",
+				durationSec: 10,
+				width: 1920,
+				height: 1080,
+				fps: 30,
+				codecVideo: "h264",
+				codecAudio: "aac",
+				bitrate: 1000,
+				posterPath: null,
+			});
+
+			expect(db.getRecentlyAdded().map((video) => video.id)).toEqual([
+				second,
+				first,
+			]);
+			expect(db.getRecentlyAdded(1).map((video) => video.id)).toEqual([second]);
+		});
+	});
+
+	describe("dump search and filters", () => {
+		function seedSearch(
+			fileName: string,
+			overrides: {
+				width?: number | null;
+				height?: number | null;
+				codecVideo?: string | null;
+				durationSec?: number | null;
+			} = {},
+		) {
+			return db.upsertVideo({
+				sourcePath: `C:\\library\\${fileName}`,
+				fileName,
+				folderPath: "C:\\library",
+				fileSize: 100,
+				modifiedAt: "2026-04-05T00:00:00.000Z",
+				durationSec: overrides.durationSec ?? 60,
+				width: overrides.width ?? 1920,
+				height: overrides.height ?? 1080,
+				fps: 30,
+				codecVideo: overrides.codecVideo ?? "h264",
+				codecAudio: "aac",
+				bitrate: 1000,
+				posterPath: null,
+			});
+		}
+
+		function searchIds(search: string) {
+			return db
+				.getDumpPage({
+					search,
+					sort: "recent",
+					order: "desc",
+					page: 1,
+					pageSize: 100,
+				})
+				.items.map((video) => video.id);
+		}
+
+		it("treats LIKE metacharacters literally", () => {
+			const tricky = seedSearch("100%_hits.mp4");
+			seedSearch("1000.mp4");
+			const quoted = seedSearch('say "hi".mp4');
+
+			expect(searchIds("100%")).toEqual([tricky]);
+			expect(searchIds("%")).toEqual([tricky]);
+			expect(searchIds("100%_hits")).toEqual([tricky]);
+			expect(searchIds('"hi"')).toEqual([quoted]);
+		});
+
+		it("keeps COUNT consistent across pages", () => {
+			for (let index = 0; index < 25; index += 1) {
+				seedSearch(`paged-${index}.mp4`);
+			}
+			const base = {
+				search: "",
+				sort: "recent" as const,
+				order: "desc" as const,
+				pageSize: 10,
+			};
+			const first = db.getDumpPage({ ...base, page: 1 });
+			const second = db.getDumpPage({ ...base, page: 2 });
+			const third = db.getDumpPage({ ...base, page: 3 });
+			expect(first.total).toBe(25);
+			expect(first.items).toHaveLength(10);
+			expect(second.items).toHaveLength(10);
+			expect(third.items).toHaveLength(5);
+			const seen = new Set(
+				[...first.items, ...second.items, ...third.items].map(
+					(video) => video.id,
+				),
+			);
+			expect(seen.size).toBe(25);
+		});
+
+		it("filters unwatched 1080p videos by codec and duration", () => {
+			const target = seedSearch("target.mp4", {
+				width: 1920,
+				height: 1080,
+				codecVideo: "hevc",
+				durationSec: 3600,
+			});
+			const watched = seedSearch("watched.mp4", {
+				width: 1920,
+				height: 1080,
+				codecVideo: "hevc",
+				durationSec: 3600,
+			});
+			db.saveProgress(watched, 100);
+			seedSearch("small.mp4", {
+				width: 1280,
+				height: 720,
+				codecVideo: "h264",
+				durationSec: 60,
+			});
+
+			const page = db.getDumpPage({
+				search: "",
+				sort: "recent",
+				order: "desc",
+				page: 1,
+				pageSize: 100,
+				watched: "unwatched",
+				resolutions: ["1080p"],
+				codecVideo: "HEVC",
+				durationBuckets: ["long"],
+			});
+			expect(page.items.map((video) => video.id)).toEqual([target]);
+			expect(page.total).toBe(1);
+		});
+	});
+
+	describe("duplicate candidates", () => {
+		function seedDuplicate(
+			fileName: string,
+			fileSize: number,
+			durationSec: number | null,
+		) {
+			return db.upsertVideo({
+				sourcePath: `C:\\library\\${fileName}`,
+				fileName,
+				folderPath: "C:\\library",
+				fileSize,
+				modifiedAt: "2026-04-05T00:00:00.000Z",
+				durationSec,
+				width: 1920,
+				height: 1080,
+				fps: 30,
+				codecVideo: "h264",
+				codecAudio: "aac",
+				bitrate: 1000,
+				posterPath: null,
+			});
+		}
+
+		it("groups by file size and ±2s duration buckets", () => {
+			const first = seedDuplicate("dup-a.mp4", 1000, 100);
+			const second = seedDuplicate("dup-b.mp4", 1000, 101.5);
+			seedDuplicate("other-size.mp4", 2000, 100);
+			seedDuplicate("other-duration.mp4", 1000, 200);
+
+			const groups = db.getDuplicateGroups();
+			expect(groups).toHaveLength(1);
+			expect(groups[0]?.memberCount).toBe(2);
+			expect(new Set(groups[0]?.memberIds)).toEqual(new Set([first, second]));
+		});
+
+		it("ignores missing videos", () => {
+			const first = seedDuplicate("gone-a.mp4", 5000, 50);
+			seedDuplicate("gone-b.mp4", 5000, 50);
+			db.markVideoMissingByPath(`C:\\library\\gone-a.mp4`);
+			expect(first).toBeTruthy();
+			expect(db.getDuplicateGroups()).toHaveLength(0);
+		});
+	});
 });

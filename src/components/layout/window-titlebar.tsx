@@ -46,10 +46,10 @@ export function getTitlebarShellClass(
 
 export function getTitlebarRevealClass(revealed: boolean): string {
 	return cn(
-		"transition-all duration-300 ease-[cubic-bezier(0.16,1,0.3,1)]",
+		"transition-[transform,opacity] duration-300 ease-[cubic-bezier(0.16,1,0.3,1)]",
 		revealed
 			? "pointer-events-auto translate-y-0 opacity-100"
-			: "pointer-events-none -translate-y-2 opacity-0",
+			: "pointer-events-none -translate-y-2 opacity-0 focus-within:pointer-events-auto focus-within:translate-y-0 focus-within:opacity-100",
 	);
 }
 
@@ -152,19 +152,19 @@ function MacOSTrafficLights({ revealed }: { revealed: boolean }) {
 		>
 			<button
 				type="button"
-				className="h-3 w-3 rounded-full bg-[#ff5f57] transition-opacity hover:opacity-85"
+				className="relative h-3 w-3 rounded-full bg-[#ff5f57] transition-opacity outline-offset-4 hover:opacity-85 after:absolute after:-inset-2 after:content-['']"
 				onClick={closeWindow}
 				aria-label="Close window"
 			/>
 			<button
 				type="button"
-				className="h-3 w-3 rounded-full bg-[#febc2e] transition-opacity hover:opacity-85"
+				className="relative h-3 w-3 rounded-full bg-[#febc2e] transition-opacity outline-offset-4 hover:opacity-85 after:absolute after:-inset-2 after:content-['']"
 				onClick={minimizeWindow}
 				aria-label="Minimize window"
 			/>
 			<button
 				type="button"
-				className="h-3 w-3 rounded-full bg-[#28c840] transition-opacity hover:opacity-85"
+				className="relative h-3 w-3 rounded-full bg-[#28c840] transition-opacity outline-offset-4 hover:opacity-85 after:absolute after:-inset-2 after:content-['']"
 				onClick={toggleMaximizeWindow}
 				aria-label="Toggle maximize"
 			/>

@@ -58,6 +58,10 @@ export type ScanStatusDto = {
 	updatedAt: string;
 };
 
+export type WatchedFilter = "all" | "watched" | "unwatched";
+export type ResolutionBucketName = "sd" | "720p" | "1080p" | "4k";
+export type DurationBucketName = "short" | "medium" | "long";
+
 export type DumpQueryDto = {
 	search?: string;
 	sort: DumpSort;
@@ -65,6 +69,19 @@ export type DumpQueryDto = {
 	page: number;
 	pageSize: number;
 	unsortedOnly?: boolean;
+	watched?: WatchedFilter;
+	resolutions?: ResolutionBucketName[];
+	codecVideo?: string;
+	durationBuckets?: DurationBucketName[];
+	minDurationSec?: number;
+	maxDurationSec?: number;
+};
+
+export type DuplicateGroupDto = {
+	fileSize: number;
+	durationBucket: number;
+	memberCount: number;
+	memberIds: string[];
 };
 
 export type VideoCardDto = {
@@ -259,6 +276,9 @@ export type PlayerApi = {
 		getDumpPage(input: DumpQueryDto): Promise<PaginatedVideosDto>;
 		getVideo(videoId: string): Promise<VideoDetailDto | null>;
 		getExternalVideo(sourcePath: string): Promise<ExternalVideoDto | null>;
+		getContinueWatching(limit?: number): Promise<VideoCardDto[]>;
+		getRecentlyAdded(limit?: number): Promise<VideoCardDto[]>;
+		getDuplicateGroups(): Promise<DuplicateGroupDto[]>;
 		rescanNow(): Promise<void>;
 		removeVideo(videoId: string): Promise<void>;
 		runVideoAction(videoId: string, action: VideoNativeAction): Promise<void>;

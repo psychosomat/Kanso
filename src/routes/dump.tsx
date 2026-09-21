@@ -10,6 +10,7 @@ import { AssignVideoDialog } from "@/components/categories/assign-video-dialog";
 import { CategoryFormDialog } from "@/components/categories/category-form-dialog";
 import { useAppState } from "@/components/layout/app-state";
 import { EmptyLibraryState } from "@/components/shared/empty-library-state";
+import { LibraryRails } from "@/components/shared/library-rails";
 import { PageFrame } from "@/components/shared/page-frame";
 import { VideoCard } from "@/components/shared/video-card";
 import { Badge } from "@/components/ui/badge";
@@ -29,9 +30,12 @@ import { useScrollRestore } from "@/hooks/use-scroll-restore";
 import { DEFAULT_DUMP_QUERY } from "@/lib/constants";
 import type {
 	CategoryIconName,
+	DurationBucketName,
 	PaginatedVideosDto,
 	PlayerPreferencesDto,
+	ResolutionBucketName,
 	VideoDetailDto,
+	WatchedFilter,
 } from "@/lib/contracts";
 import { getPlayerApi } from "@/lib/player-api";
 import { folderDisplayName } from "@/lib/utils";
@@ -58,6 +62,15 @@ function DumpPage() {
 	const [order] = useState<"asc" | "desc">(DEFAULT_DUMP_QUERY.order);
 	const [view, setView] =
 		useState<PlayerPreferencesDto["dumpView"]>("comfortable");
+	const [watched, setWatched] = useState<WatchedFilter>("all");
+	const [resolution, setResolution] = useState<"all" | ResolutionBucketName>(
+		"all",
+	);
+	const [durationBucket, setDurationBucket] = useState<
+		"all" | DurationBucketName
+	>("all");
+	const [codec, setCodec] = useState("");
+	const [duplicateIds, setDuplicateIds] = useState<Set<string>>(new Set());
 	const [loading, setLoading] = useState(false);
 	const [_currentPage, _setCurrentPage] = useState(1);
 	useScrollRestore("/dump", !loading);
@@ -70,7 +83,14 @@ function DumpPage() {
 	);
 	const [electronReady, setElectronReady] = useState(false);
 	const deferredSearch = useDeferredValue(search);
+	const deferredCodec = useDeferredValue(codec);
 	const gridRef = useRef<HTMLDivElement>(null);
+	const filtersActive =
+		deferredSearch.trim() !== "" ||
+		watched !== "all" ||
+		resolution !== "all" ||
+		durationBucket !== "all" ||
+		deferredCodec.trim() !== "";
 
 	useEffect(() => {
 		if (!window.playerApi) return;
@@ -101,6 +121,11 @@ function DumpPage() {
 				page: 1,
 				pageSize: DEFAULT_DUMP_QUERY.pageSize,
 				unsortedOnly: true,
+				watched,
+				resolutions: resolution === "all" ? undefined : [resolution],
+				codecVideo: deferredCodec.trim() || undefined,
+				durationBuckets:
+					durationBucket === "all" ? undefined : [durationBucket],
 			})
 			.then((response) => {
 				if (cancelled) {
@@ -117,7 +142,35 @@ function DumpPage() {
 		return () => {
 			cancelled = true;
 		};
-	}, [deferredSearch, library?.sourcePaths, order, sort]);
+	}, [
+		deferredSearch,
+		deferredCodec,
+		durationBucket,
+		library?.sourcePaths,
+		order,
+		resolution,
+		sort,
+		watched,
+	]);
+
+	useEffect(() => {
+		if (!library?.sourcePaths.length || !window.playerApi) {
+			setDuplicateIds(new Set());
+			return;
+		}
+		let cancelled = false;
+		void getPlayerApi()
+			.library.getDuplicateGroups()
+			.then((groups) => {
+				if (cancelled) {
+					return;
+				}
+				setDuplicateIds(new Set(groups.flatMap((group) => group.memberIds)));
+			});
+		return () => {
+			cancelled = true;
+		};
+	}, [library?.sourcePaths]);
 
 	useEffect(() => {
 		if (!window.playerApi) return;
@@ -196,7 +249,19 @@ function DumpPage() {
 				page: 1,
 				pageSize: DEFAULT_DUMP_QUERY.pageSize,
 				unsortedOnly: true,
+				watched,
+				resolutions: resolution === "all" ? undefined : [resolution],
+				codecVideo: deferredCodec.trim() || undefined,
+				durationBuckets:
+					durationBucket === "all" ? undefined : [durationBucket],
 			}),
+		);
+		setDuplicateIds(
+			new Set(
+				(await api.library.getDuplicateGroups()).flatMap(
+					(group) => group.memberIds,
+				),
+			),
 		);
 	}
 
@@ -218,7 +283,9 @@ function DumpPage() {
 				description="Videos without categories - organize them into your boards"
 				actions={
 					<>
-						<Badge variant="accent">{data?.total ?? 0} unsorted</Badge>
+						<Badge variant="accent">
+							{loading || !data ? "…" : data.total} unsorted
+						</Badge>
 						<Button
 							variant="secondary"
 							onClick={() => void getPlayerApi().library.rescanNow()}
@@ -232,6 +299,7 @@ function DumpPage() {
 				<div className="mb-4 flex flex-wrap items-center gap-2">
 					<div className="flex-1 min-w-50">
 						<Input
+							aria-label="Search videos"
 							placeholder="Search videos..."
 							value={search}
 							onChange={(event) => setSearch(event.target.value)}
@@ -243,7 +311,7 @@ function DumpPage() {
 							setSort(value as PlayerPreferencesDto["dumpSort"])
 						}
 					>
-						<SelectTrigger className="w-36">
+						<SelectTrigger aria-label="Sort videos" className="w-36">
 							<SelectValue placeholder="Sort" />
 						</SelectTrigger>
 						<SelectContent>
@@ -270,6 +338,80 @@ function DumpPage() {
 					</Tabs>
 				</div>
 
+				<div className="mb-6 grid grid-cols-2 items-center gap-2 sm:flex sm:flex-wrap">
+					<Select
+						value={watched}
+						onValueChange={(value) => setWatched(value as WatchedFilter)}
+					>
+						<SelectTrigger
+							aria-label="Filter by watched state"
+							className="w-full sm:w-32"
+						>
+							<SelectValue placeholder="Watched" />
+						</SelectTrigger>
+						<SelectContent>
+							<SelectItem value="all">All</SelectItem>
+							<SelectItem value="unwatched">Unwatched</SelectItem>
+							<SelectItem value="watched">Watched</SelectItem>
+						</SelectContent>
+					</Select>
+					<Select
+						value={resolution}
+						onValueChange={(value) =>
+							setResolution(value as "all" | ResolutionBucketName)
+						}
+					>
+						<SelectTrigger
+							aria-label="Filter by quality"
+							className="w-full sm:w-40"
+						>
+							<SelectValue placeholder="Quality" />
+						</SelectTrigger>
+						<SelectContent>
+							<SelectItem value="all">Any quality</SelectItem>
+							<SelectItem value="sd">SD</SelectItem>
+							<SelectItem value="720p">720p</SelectItem>
+							<SelectItem value="1080p">1080p</SelectItem>
+							<SelectItem value="4k">4K</SelectItem>
+						</SelectContent>
+					</Select>
+					<Select
+						value={durationBucket}
+						onValueChange={(value) =>
+							setDurationBucket(value as "all" | DurationBucketName)
+						}
+					>
+						<SelectTrigger
+							aria-label="Filter by length"
+							className="w-full sm:w-40"
+						>
+							<SelectValue placeholder="Length" />
+						</SelectTrigger>
+						<SelectContent>
+							<SelectItem value="all">Any length</SelectItem>
+							<SelectItem value="short">Short</SelectItem>
+							<SelectItem value="medium">Medium</SelectItem>
+							<SelectItem value="long">Long</SelectItem>
+						</SelectContent>
+					</Select>
+					<div className="col-span-2 w-full sm:col-span-1 sm:w-32">
+						<Input
+							aria-label="Filter by codec"
+							placeholder="Codec"
+							value={codec}
+							onChange={(event) => setCodec(event.target.value)}
+						/>
+					</div>
+				</div>
+
+				{filtersActive ? null : (
+					<LibraryRails
+						duplicateIds={duplicateIds}
+						onAssign={(videoId) => void openAssign(videoId)}
+						onAction={(videoId, action) => void runVideoAction(videoId, action)}
+					/>
+				)}
+
 				{data && data.items.length > 0 ? (
 					<div
 						ref={gridRef}
@@ -283,6 +425,7 @@ function DumpPage() {
 							<div key={video.id} data-video-card data-index={index}>
 								<VideoCard
 									video={video}
+									duplicate={duplicateIds.has(video.id)}
 									onAssign={(videoId) => void openAssign(videoId)}
 									onAction={(videoId, action) =>
 										void runVideoAction(videoId, action)
@@ -293,7 +436,11 @@ function DumpPage() {
 						))}
 					</div>
 				) : !data || loading ? (
-					<div className="grid grid-cols-2 gap-x-5 gap-y-7 md:grid-cols-3 xl:grid-cols-4 2xl:grid-cols-5">
+					<div
+						role="status"
+						aria-label="Loading videos"
+						className="grid grid-cols-2 gap-x-5 gap-y-7 md:grid-cols-3 xl:grid-cols-4 2xl:grid-cols-5"
+					>
 						{["s1", "s2", "s3", "s4"].map((key) => (
 							<div key={key}>
 								<Skeleton className="aspect-video w-full rounded-(--radius-lg)" />
@@ -303,11 +450,26 @@ function DumpPage() {
 						))}
 					</div>
 				) : (
-					<div className="flex flex-col items-center justify-center rounded-(--radius-lg) border border-dashed border-(--border) p-12 text-center">
+					<div className="flex flex-col items-center justify-center gap-4 rounded-(--radius-lg) border border-dashed border-(--border) p-12 text-center">
 						<p className="text-(--muted-foreground)">
-							No unsorted videos. All videos have been organized into
-							categories.
+							{filtersActive
+								? "No videos match these filters. Try widening the search."
+								: "No unsorted videos. All videos have been organized into categories."}
 						</p>
+						{filtersActive ? (
+							<Button
+								variant="secondary"
+								onClick={() => {
+									setSearch("");
+									setWatched("all");
+									setResolution("all");
+									setDurationBucket("all");
+									setCodec("");
+								}}
+							>
+								Clear filters
+							</Button>
+						) : null}
 					</div>
 				)}
 			</PageFrame>

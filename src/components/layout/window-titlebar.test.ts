@@ -41,7 +41,7 @@ describe("getTitlebarRevealClass", () => {
 		expect(getTitlebarRevealClass(true)).toContain("opacity-100");
 		expect(getTitlebarRevealClass(true)).not.toContain("opacity-0");
 		expect(getTitlebarRevealClass(false)).toContain("opacity-0");
-		expect(getTitlebarRevealClass(false)).not.toContain("opacity-100");
+		expect(getTitlebarRevealClass(false)).toContain("focus-within:opacity-100");
 	});
 });
 

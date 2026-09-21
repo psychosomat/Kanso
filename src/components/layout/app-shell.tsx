@@ -287,6 +287,7 @@ function SidebarContent({ onOpenPalette }: { onOpenPalette: () => void }) {
 						<button
 							type="button"
 							onClick={toggleBoards}
+							aria-expanded={boardsExpanded}
 							className={cn(
 								"group relative flex h-8 w-full items-center gap-2.5 rounded-(--radius) px-2.5 text-[13px] transition-colors duration-150",
 								location.pathname.startsWith("/categories/")
@@ -381,6 +382,7 @@ function SidebarContent({ onOpenPalette }: { onOpenPalette: () => void }) {
 
 				<div className="flex items-center gap-2 px-2.5 py-2">
 					<div
+						aria-hidden="true"
 						className={cn(
 							"h-1.5 w-1.5 shrink-0 rounded-full",
 							scanStatus?.status === "scanning"
@@ -546,7 +548,7 @@ function CategoryTreeItem({
 										e.stopPropagation();
 										onToggleCollapsed(category.id);
 									}}
-									className="ml-1 flex h-5 w-5 items-center justify-center rounded-full text-(--muted-foreground) transition-colors hover:bg-white/8 hover:text-(--foreground)"
+									className="ml-1 flex h-6 w-6 items-center justify-center rounded-full text-(--muted-foreground) transition-colors hover:bg-white/8 hover:text-(--foreground)"
 								>
 									<IconChevronRight
 										size={14}
@@ -607,6 +609,7 @@ function SidebarPanel({
 						type="button"
 						onClick={onDismiss}
 						title="Hide sidebar"
+						aria-label="Hide sidebar"
 						className="flex h-7 w-7 items-center justify-center rounded-full text-(--muted-foreground) transition-colors hover:bg-white/8 hover:text-(--foreground)"
 					>
 						<IconChevronLeft size={15} />
@@ -616,6 +619,8 @@ function SidebarPanel({
 					type="button"
 					onClick={onTogglePinned}
 					title={pinned ? "Unpin sidebar (Ctrl+B)" : "Pin sidebar (Ctrl+B)"}
+					aria-label={pinned ? "Unpin sidebar" : "Pin sidebar"}
+					aria-pressed={pinned}
 					className={cn(
 						"flex h-7 w-7 items-center justify-center rounded-full transition-colors",
 						pinned
@@ -752,7 +757,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
 				<div className="flex items-center px-3 py-3 lg:hidden">
 					<Sheet open={mobileOpen} onOpenChange={setMobileOpen}>
 						<SheetTrigger asChild>
-							<Button variant="ghost" size="icon">
+							<Button variant="ghost" size="icon" aria-label="Open navigation">
 								<IconMenu2 size={18} />
 							</Button>
 						</SheetTrigger>

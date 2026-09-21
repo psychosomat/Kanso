@@ -68,6 +68,12 @@ const playerApi: PlayerApi = {
 		getVideo: (videoId) => ipcRenderer.invoke("library:get-video", videoId),
 		getExternalVideo: (sourcePath) =>
 			ipcRenderer.invoke("library:get-external-video", sourcePath),
+		getContinueWatching: (limit) =>
+			ipcRenderer.invoke("library:get-continue-watching", limit),
+		getRecentlyAdded: (limit) =>
+			ipcRenderer.invoke("library:get-recently-added", limit),
+		getDuplicateGroups: () =>
+			ipcRenderer.invoke("library:get-duplicate-groups"),
 		rescanNow: () => ipcRenderer.invoke("library:rescan"),
 		removeVideo: (videoId) =>
 			ipcRenderer.invoke("library:remove-video", videoId),

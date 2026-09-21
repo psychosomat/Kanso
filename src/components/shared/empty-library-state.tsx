@@ -20,14 +20,14 @@ export function EmptyLibraryState({
 	electronReady?: boolean;
 }) {
 	return (
-		<div className="flex min-h-screen items-center justify-center px-6">
+		<div className="flex min-h-[60dvh] items-center justify-center px-6 py-16">
 			<div className="relative max-w-md text-center">
 				<div
 					aria-hidden="true"
 					className="pointer-events-none absolute left-1/2 top-0 h-40 w-40 -translate-x-1/2 -translate-y-1/2 rounded-full bg-(--accent) opacity-20 blur-3xl"
 				/>
 
-				<p className="eyebrow relative text-(--muted-foreground)/70">
+				<p className="eyebrow relative text-(--muted-foreground)">
 					Local-first video library
 				</p>
 				<h2 className="font-display relative mt-3 text-[34px] font-semibold leading-none text-(--foreground)">
@@ -39,7 +39,10 @@ export function EmptyLibraryState({
 				</p>
 
 				{shouldShowElectronWarning(electronReady) && (
-					<div className="relative mt-6 rounded-(--radius) border border-(--destructive)/25 bg-(--destructive-subtle) px-4 py-3 text-sm text-(--destructive)">
+					<div
+						role="alert"
+						className="relative mt-6 rounded-(--radius) border border-(--destructive)/25 bg-(--destructive-subtle) px-4 py-3 text-sm text-(--destructive)"
+					>
 						Electron bridge is not available. Waiting to load...
 					</div>
 				)}

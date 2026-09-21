@@ -12,7 +12,7 @@ export function ContextMenuContent({
 		<ContextMenuPrimitive.Portal>
 			<ContextMenuPrimitive.Content
 				className={cn(
-					"island-strong z-50 min-w-40 overflow-hidden rounded-(--radius-md) p-1 text-(--foreground)",
+					"island-strong z-50 min-w-40 overflow-hidden rounded-(--radius-md) p-1 text-(--foreground) data-[state=open]:animate-fade-in data-[state=closed]:animate-fade-out",
 					className,
 				)}
 				{...props}

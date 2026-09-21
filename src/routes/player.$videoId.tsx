@@ -117,7 +117,7 @@ export function PlayerPage({
 	const [detailsOpen, setDetailsOpen] = useState(false);
 	const [removeDialogOpen, setRemoveDialogOpen] = useState(false);
 	const [removing, setRemoving] = useState(false);
-	const [completedMarked, setCompletedMarked] = useState(false);
+	const completedMarkedRef = useRef(false);
 	const [playbackRate, setPlaybackRate] = useState(1);
 	const [isScrubbing, setIsScrubbing] = useState(false);
 	const [isLooping, setIsLooping] = useState(false);
@@ -195,6 +195,7 @@ export function PlayerPage({
 
 		void Promise.all([videoPromise, api.player.getPreferences()]).then(
 			([videoDetail, preferences]) => {
+				completedMarkedRef.current = false;
 				setVideo(videoDetail);
 				setPrefs(preferences);
 				setPlaybackRate(
@@ -574,11 +575,11 @@ export function PlayerPage({
 			setDuration(element.duration || video.durationSec || 0);
 			if (
 				isLibraryVideo(video) &&
-				!completedMarked &&
+				!completedMarkedRef.current &&
 				element.duration &&
 				element.currentTime / element.duration >= 0.9
 			) {
-				setCompletedMarked(true);
+				completedMarkedRef.current = true;
 				void getPlayerApi().player.markPlayed({
 					videoId: video.id,
 					completed: true,
@@ -600,11 +601,13 @@ export function PlayerPage({
 			if (isLooping && videoRef.current) {
 				videoRef.current.currentTime = 0;
 				void videoRef.current.play();
-				setCompletedMarked(false);
+				completedMarkedRef.current = false;
 				return;
 			}
 			setPlaying(false);
 			if (!isLibraryVideo(video)) return;
+			if (completedMarkedRef.current) return;
+			completedMarkedRef.current = true;
 			void getPlayerApi().player.markPlayed({
 				videoId: video.id,
 				completed: true,
@@ -634,15 +637,7 @@ export function PlayerPage({
 			element.removeEventListener("pause", onPause);
 			element.removeEventListener("ended", onEnded);
 		};
-	}, [
-		applyEq,
-		completedMarked,
-		isLooping,
-		isScrubbing,
-		playbackRate,
-		prefs,
-		video,
-	]);
+	}, [applyEq, isLooping, isScrubbing, playbackRate, prefs, video]);
 
 	useEffect(() => {
 		const previewVideo = previewVideoRef.current;

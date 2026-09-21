@@ -39,7 +39,10 @@ export function DialogContent({
 				{...props}
 			>
 				{children}
-				<DialogPrimitive.Close className="absolute right-4 top-4 rounded-full p-1.5 text-(--muted-foreground) transition-[background-color,color,transform] duration-150 hover:bg-white/8 hover:text-(--foreground) active:scale-95">
+				<DialogPrimitive.Close
+					aria-label="Close dialog"
+					className="absolute right-4 top-4 rounded-full p-1.5 text-(--muted-foreground) transition-[background-color,color,transform] duration-150 hover:bg-white/8 hover:text-(--foreground) active:scale-95"
+				>
 					<IconX size={16} />
 				</DialogPrimitive.Close>
 			</DialogPrimitive.Content>
@@ -114,7 +117,7 @@ export function SheetContent({
 			<DialogOverlay />
 			<DialogPrimitive.Content
 				className={cn(
-					"island-strong fixed top-0 z-50 h-full w-[min(92vw,24rem)] gap-4 p-6",
+					"island-strong fixed top-0 z-50 flex h-full w-[min(92vw,24rem)] flex-col gap-4 p-6",
 					sideClasses[side],
 					"transition-[transform,opacity] duration-200",
 					className,
@@ -122,7 +125,10 @@ export function SheetContent({
 				{...props}
 			>
 				{children}
-				<DialogPrimitive.Close className="absolute right-4 top-4 rounded-full p-1.5 text-(--muted-foreground) transition-[background-color,color,transform] duration-150 hover:bg-white/8 hover:text-(--foreground) active:scale-95">
+				<DialogPrimitive.Close
+					aria-label="Close dialog"
+					className="absolute right-4 top-4 rounded-full p-1.5 text-(--muted-foreground) transition-[background-color,color,transform] duration-150 hover:bg-white/8 hover:text-(--foreground) active:scale-95"
+				>
 					<IconX size={16} />
 				</DialogPrimitive.Close>
 			</DialogPrimitive.Content>
