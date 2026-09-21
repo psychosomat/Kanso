@@ -55,6 +55,13 @@ export function slugify(value: string) {
 		.replace(/^-+|-+$/g, "");
 }
 
+export function folderDisplayName(folderPath: string) {
+	const segments = folderPath.split(/[\\/]/).filter(Boolean);
+	const last = segments[segments.length - 1];
+	if (last) return last;
+	return folderPath;
+}
+
 const dateTimeFormatter = new Intl.DateTimeFormat("en-US", {
 	dateStyle: "medium",
 	timeStyle: "short",

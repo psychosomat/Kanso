@@ -1,5 +1,10 @@
 import { describe, expect, it } from "vitest";
-import { formatDuration, shouldResume, slugify } from "./utils";
+import {
+	folderDisplayName,
+	formatDuration,
+	shouldResume,
+	slugify,
+} from "./utils";
 
 describe("utils", () => {
 	it("slugifies names for categories", () => {
@@ -15,5 +20,11 @@ describe("utils", () => {
 		expect(shouldResume(10, 500)).toBe(false);
 		expect(shouldResume(120, 130)).toBe(false);
 		expect(shouldResume(120, 500)).toBe(true);
+	});
+
+	it("takes the last segment as the folder display name", () => {
+		expect(folderDisplayName("/media/trips")).toBe("trips");
+		expect(folderDisplayName("C:\\media\\trips\\")).toBe("trips");
+		expect(folderDisplayName("/")).toBe("/");
 	});
 });

@@ -1,6 +1,7 @@
 import { createFileRoute } from "@tanstack/react-router";
 import type React from "react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { CategoryFormDialog } from "@/components/categories/category-form-dialog";
 import { useAppState } from "@/components/layout/app-state";
 import { PageFrame } from "@/components/shared/page-frame";
 import { Badge } from "@/components/ui/badge";
@@ -14,9 +15,14 @@ import {
 	SelectValue,
 } from "@/components/ui/select";
 import { Separator } from "@/components/ui/separator";
+import { useFolderPlaylistPrompt } from "@/hooks/use-folder-playlist-prompt";
 import { useScrollRestore } from "@/hooks/use-scroll-restore";
 import { APP_NAME } from "@/lib/constants";
-import type { TitlebarMode } from "@/lib/contracts";
+import type {
+	CategoryIconName,
+	LibrarySettingsDto,
+	TitlebarMode,
+} from "@/lib/contracts";
 import {
 	bandX,
 	buildEqAreaPath,
@@ -29,6 +35,7 @@ import {
 } from "@/lib/eq-graph";
 import { clampEqGain, EQ_BANDS, normalizeEqGains } from "@/lib/equalizer";
 import { getPlayerApi } from "@/lib/player-api";
+import { folderDisplayName } from "@/lib/utils";
 import {
 	applyAccentColor,
 	applyNoiseOpacity,
@@ -56,6 +63,16 @@ export const Route = createFileRoute("/settings")({
 	component: SettingsPage,
 });
 
+function findNewFolders(
+	previousPaths: string[],
+	next: LibrarySettingsDto | null,
+) {
+	const previous = new Set(previousPaths);
+	return (next?.sourcePaths ?? [])
+		.map((source) => source.path)
+		.filter((sourcePath) => !previous.has(sourcePath));
+}
+
 function SettingsPage() {
 	useScrollRestore("/settings");
 	const {
@@ -67,6 +84,8 @@ function SettingsPage() {
 		savePreferences,
 	} = useAppState();
 	const [busy, setBusy] = useState(false);
+	const { promptFolder, promptForFolders, dismissCurrent } =
+		useFolderPlaylistPrompt();
 	const [noiseOpacity, setNoiseOpacity] = useState<number>(0.09);
 	const [accentColor, setAccentColor] = useState<string>(DEFAULT_ACCENT);
 	const [eqEnabled, setEqEnabled] = useState(false);
@@ -192,23 +211,43 @@ function SettingsPage() {
 	}
 
 	async function chooseFolders() {
+		const previousPaths =
+			library?.sourcePaths.map((source) => source.path) ?? [];
 		setBusy(true);
 		try {
-			await getPlayerApi().settings.chooseLibraryFolders();
+			const next = await getPlayerApi().settings.chooseLibraryFolders();
 			await refreshAll();
+			promptForFolders(findNewFolders(previousPaths, next));
 		} finally {
 			setBusy(false);
 		}
 	}
 
 	async function addFolder() {
+		const previousPaths =
+			library?.sourcePaths.map((source) => source.path) ?? [];
 		setBusy(true);
 		try {
-			await getPlayerApi().settings.addLibraryFolder();
+			const next = await getPlayerApi().settings.addLibraryFolder();
 			await refreshAll();
+			promptForFolders(findNewFolders(previousPaths, next));
 		} finally {
 			setBusy(false);
 		}
+	}
+
+	async function submitFolderPlaylist(input: {
+		name: string;
+		description?: string;
+		parentCategoryId?: string | null;
+		icon?: CategoryIconName;
+	}) {
+		if (!promptFolder) return;
+		await getPlayerApi().categories.createFromFolder({
+			...input,
+			folderPath: promptFolder,
+		});
+		await refreshAll();
 	}
 
 	async function removeFolder(folderId: string) {
@@ -719,6 +758,19 @@ function SettingsPage() {
 					</Button>
 				</SettingsSection>
 			</div>
+			{promptFolder ? (
+				<CategoryFormDialog
+					key={promptFolder}
+					open
+					onOpenChange={(value) => {
+						if (!value) dismissCurrent();
+					}}
+					categories={categories}
+					initialName={folderDisplayName(promptFolder)}
+					initialDescription={promptFolder}
+					onSubmit={submitFolderPlaylist}
+				/>
+			) : null}
 		</PageFrame>
 	);
 }

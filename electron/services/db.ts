@@ -888,6 +888,66 @@ export class DatabaseService {
 		};
 	}
 
+	createCategoryFromFolder(input: {
+		name: string;
+		description?: string;
+		parentCategoryId?: string | null;
+		icon?: CategoryIconName;
+		folderPath: string;
+	}) {
+		const now = new Date().toISOString();
+		const id = randomUUID();
+		const slug = this.ensureUniqueSlug(slugify(input.name));
+		const parentCategoryId = this.validateParentCategoryId(
+			input.parentCategoryId ?? null,
+			id,
+		);
+		const root = input.folderPath.replace(/[\\/]+$/, "") || path.sep;
+		const prefix = root.endsWith(path.sep) ? root : `${root}${path.sep}`;
+		this.db
+			.prepare(
+				`INSERT INTO categories (id, slug, name, description, parent_id, icon, created_at, updated_at)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+			)
+			.run(
+				id,
+				slug,
+				input.name.trim(),
+				input.description?.trim() || null,
+				parentCategoryId,
+				this.normalizeCategoryIcon(input.icon),
+				now,
+				now,
+			);
+		const maxRow = this.db
+			.prepare(
+				"SELECT COALESCE(MAX(position), 0) as max FROM category_posts WHERE category_id = ?",
+			)
+			.get(id) as { max: number };
+		const videoRows = this.db
+			.prepare(
+				`SELECT id FROM videos
+         WHERE is_missing = 0 AND (folder_path = ? OR folder_path LIKE ?)
+         ORDER BY file_name COLLATE NOCASE ASC`,
+			)
+			.all(root, `${prefix}%`) as Array<{ id: string }>;
+		const insert = this.db.prepare(
+			`INSERT INTO category_posts (id, category_id, video_id, caption, position, created_at)
+       VALUES (?, ?, ?, NULL, ?, ?)
+       ON CONFLICT(category_id, video_id) DO NOTHING`,
+		);
+		const transaction = this.db.transaction(() => {
+			let position = maxRow.max;
+			for (const row of videoRows) {
+				position += 1;
+				insert.run(randomUUID(), id, row.id, position, now);
+			}
+		});
+		transaction();
+		// biome-ignore lint/style/noNonNullAssertion: category just created, must exist
+		return this.getCategoryById(id)!;
+	}
+
 	createCategory(input: {
 		name: string;
 		description?: string;

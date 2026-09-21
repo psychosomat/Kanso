@@ -82,10 +82,12 @@ const playerApi: PlayerApi = {
 	},
 	categories: {
 		list: () => ipcRenderer.invoke("categories:list"),
-		getBySlug: (slug) => ipcRenderer.invoke("categories:get-by-slug", slug),
 		create: (input) => ipcRenderer.invoke("categories:create", input),
+		createFromFolder: (input) =>
+			ipcRenderer.invoke("categories:create-from-folder", input),
 		update: (input) => ipcRenderer.invoke("categories:update", input),
 		remove: (categoryId) => ipcRenderer.invoke("categories:remove", categoryId),
+		getBySlug: (slug) => ipcRenderer.invoke("categories:get-by-slug", slug),
 		getFeed: (input) => ipcRenderer.invoke("categories:get-feed", input),
 		addVideo: (input) => ipcRenderer.invoke("categories:add-video", input),
 		removeVideo: (input) =>

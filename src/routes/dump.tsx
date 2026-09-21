@@ -7,6 +7,7 @@ import {
 	useState,
 } from "react";
 import { AssignVideoDialog } from "@/components/categories/assign-video-dialog";
+import { CategoryFormDialog } from "@/components/categories/category-form-dialog";
 import { useAppState } from "@/components/layout/app-state";
 import { EmptyLibraryState } from "@/components/shared/empty-library-state";
 import { PageFrame } from "@/components/shared/page-frame";
@@ -23,14 +24,17 @@ import {
 } from "@/components/ui/select";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { useFolderPlaylistPrompt } from "@/hooks/use-folder-playlist-prompt";
 import { useScrollRestore } from "@/hooks/use-scroll-restore";
 import { DEFAULT_DUMP_QUERY } from "@/lib/constants";
 import type {
+	CategoryIconName,
 	PaginatedVideosDto,
 	PlayerPreferencesDto,
 	VideoDetailDto,
 } from "@/lib/contracts";
 import { getPlayerApi } from "@/lib/player-api";
+import { folderDisplayName } from "@/lib/utils";
 import IconRefresh from "~icons/tabler/refresh";
 
 export const Route = createFileRoute("/dump")({
@@ -58,6 +62,8 @@ function DumpPage() {
 	const [_currentPage, _setCurrentPage] = useState(1);
 	useScrollRestore("/dump", !loading);
 	const [folderPending, setFolderPending] = useState(false);
+	const { promptFolder, promptForFolders, dismissCurrent } =
+		useFolderPlaylistPrompt();
 	const [assignOpen, setAssignOpen] = useState(false);
 	const [selectedVideo, setSelectedVideo] = useState<VideoDetailDto | null>(
 		null,
@@ -124,13 +130,35 @@ function DumpPage() {
 	}, [sort, view]);
 
 	async function chooseFolder() {
+		const previousPaths =
+			library?.sourcePaths.map((source) => source.path) ?? [];
+		const previous = new Set(previousPaths);
 		setFolderPending(true);
 		try {
-			await getPlayerApi().settings.chooseLibraryFolders();
+			const next = await getPlayerApi().settings.chooseLibraryFolders();
 			await refreshAll();
+			promptForFolders(
+				(next?.sourcePaths ?? [])
+					.map((source) => source.path)
+					.filter((sourcePath) => !previous.has(sourcePath)),
+			);
 		} finally {
 			setFolderPending(false);
 		}
+	}
+
+	async function submitFolderPlaylist(input: {
+		name: string;
+		description?: string;
+		parentCategoryId?: string | null;
+		icon?: CategoryIconName;
+	}) {
+		if (!promptFolder) return;
+		await getPlayerApi().categories.createFromFolder({
+			...input,
+			folderPath: promptFolder,
+		});
+		await refreshAll();
 	}
 
 	async function openAssign(videoId: string) {
@@ -291,6 +319,19 @@ function DumpPage() {
 				video={selectedVideo}
 				onSubmit={submitAssignments}
 			/>
+			{promptFolder ? (
+				<CategoryFormDialog
+					key={promptFolder}
+					open
+					onOpenChange={(value) => {
+						if (!value) dismissCurrent();
+					}}
+					categories={categories}
+					initialName={folderDisplayName(promptFolder)}
+					initialDescription={promptFolder}
+					onSubmit={submitFolderPlaylist}
+				/>
+			) : null}
 		</>
 	);
 }

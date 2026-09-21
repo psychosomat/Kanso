@@ -10,6 +10,7 @@ import {
 import type {
 	AddVideoToCategoriesDto,
 	CreateCategoryDto,
+	CreateCategoryFromFolderDto,
 	MarkPlayedDto,
 	RemoveVideoFromCategoryDto,
 	ReorderCategoryPostsDto,
@@ -176,6 +177,11 @@ export function registerIpc({
 	ipcMain.handle("categories:create", (_event, input: CreateCategoryDto) =>
 		db.createCategory(input),
 	);
+	ipcMain.handle(
+		"categories:create-from-folder",
+		(_event, input: CreateCategoryFromFolderDto) =>
+			db.createCategoryFromFolder(input),
+	);
 	ipcMain.handle("categories:update", (_event, input: UpdateCategoryDto) =>
 		db.updateCategory(input),
 	);
@@ -238,6 +244,7 @@ export function registerIpc({
 			"categories:list",
 			"categories:get-by-slug",
 			"categories:create",
+			"categories:create-from-folder",
 			"categories:update",
 			"categories:remove",
 			"categories:get-feed",

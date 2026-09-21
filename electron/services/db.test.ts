@@ -264,4 +264,77 @@ describe("DatabaseService", () => {
 			videoA,
 		]);
 	});
+
+	it("creates a playlist from a folder with its videos", () => {
+		const seed = (sourcePath: string, fileName: string, folderPath: string) =>
+			db.upsertVideo({
+				sourcePath,
+				fileName,
+				folderPath,
+				fileSize: 1,
+				modifiedAt: "2026-04-03T00:00:00.000Z",
+				durationSec: 1,
+				width: 1,
+				height: 1,
+				fps: 1,
+				codecVideo: null,
+				codecAudio: null,
+				bitrate: null,
+				posterPath: null,
+			});
+		const one = seed("/media/trips/b.mp4", "b.mp4", "/media/trips");
+		const two = seed("/media/trips/a.mp4", "a.mp4", "/media/trips");
+		const nested = seed(
+			"/media/trips/2024/c.mp4",
+			"c.mp4",
+			"/media/trips/2024",
+		);
+		const sibling = seed("/media/trips2/d.mp4", "d.mp4", "/media/trips2");
+		const missing = seed("/media/trips/gone.mp4", "gone.mp4", "/media/trips");
+		db.markVideoMissingByPath("/media/trips/gone.mp4");
+
+		const playlist = db.createCategoryFromFolder({
+			name: "Trips",
+			folderPath: "/media/trips",
+		});
+
+		expect(playlist.name).toBe("Trips");
+		expect(playlist.postCount).toBe(3);
+		const feed = db.getCategoryFeed({
+			categoryId: playlist.id,
+			page: 1,
+			pageSize: 100,
+			sort: "manual",
+		});
+		expect(feed.items.map((item) => item.video.id)).toEqual([two, one, nested]);
+		expect(feed.items.map((item) => item.video.id)).not.toContain(sibling);
+		expect(feed.items.map((item) => item.video.id)).not.toContain(missing);
+	});
+
+	it("creates a folder playlist as a sub-playlist", () => {
+		db.upsertVideo({
+			sourcePath: "/media/music/a.mp4",
+			fileName: "a.mp4",
+			folderPath: "/media/music",
+			fileSize: 1,
+			modifiedAt: "2026-04-03T00:00:00.000Z",
+			durationSec: 1,
+			width: 1,
+			height: 1,
+			fps: 1,
+			codecVideo: null,
+			codecAudio: null,
+			bitrate: null,
+			posterPath: null,
+		});
+		const parent = db.createCategory({ name: "Media" });
+		const child = db.createCategoryFromFolder({
+			name: "Music",
+			parentCategoryId: parent.id,
+			folderPath: "/media/music",
+		});
+
+		expect(child.parentCategoryId).toBe(parent.id);
+		expect(child.postCount).toBe(1);
+	});
 });

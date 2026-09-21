@@ -175,6 +175,10 @@ export type CreateCategoryDto = {
 	icon?: CategoryIconName;
 };
 
+export type CreateCategoryFromFolderDto = CreateCategoryDto & {
+	folderPath: string;
+};
+
 export type UpdateCategoryDto = {
 	id: string;
 	name: string;
@@ -263,6 +267,7 @@ export type PlayerApi = {
 	categories: {
 		list(): Promise<CategoryDto[]>;
 		create(input: CreateCategoryDto): Promise<CategoryDto>;
+		createFromFolder(input: CreateCategoryFromFolderDto): Promise<CategoryDto>;
 		update(input: UpdateCategoryDto): Promise<CategoryDto>;
 		remove(categoryId: string): Promise<void>;
 		getFeed(input: {

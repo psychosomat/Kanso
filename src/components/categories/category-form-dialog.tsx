@@ -31,6 +31,8 @@ export function CategoryFormDialog({
 	category,
 	categories,
 	initialParentCategoryId,
+	initialName,
+	initialDescription,
 	onSubmit,
 }: {
 	open: boolean;
@@ -38,6 +40,8 @@ export function CategoryFormDialog({
 	category?: CategoryDto | null;
 	categories: CategoryDto[];
 	initialParentCategoryId?: string | null;
+	initialName?: string;
+	initialDescription?: string;
 	onSubmit: (input: {
 		name: string;
 		description?: string;
@@ -60,13 +64,13 @@ export function CategoryFormDialog({
 	});
 
 	useEffect(() => {
-		setName(category?.name ?? "");
-		setDescription(category?.description ?? "");
+		setName(category?.name ?? initialName ?? "");
+		setDescription(category?.description ?? initialDescription ?? "");
 		setParentCategoryId(
 			category?.parentCategoryId ?? initialParentCategoryId ?? "root",
 		);
 		setIcon(category?.icon ?? "folder");
-	}, [category, initialParentCategoryId]);
+	}, [category, initialParentCategoryId, initialName, initialDescription]);
 
 	async function handleSubmit() {
 		setSaving(true);
