@@ -28,10 +28,18 @@ namespace KansoThumbnailProvider
 
 	[ComImport]
 	[InterfaceType(ComInterfaceType.InterfaceIsIUnknown)]
-	[Guid("b824b496-5ac0-4b88-a8f2-e2c2c6e7e0a8")]
+	[Guid("b7d14566-0509-4cce-a71f-0a554233bd9b")]
 	internal interface IInitializeWithFile
 	{
 		void Initialize([MarshalAs(UnmanagedType.LPWStr)] string pszFilePath, uint grfMode);
+	}
+
+	[ComImport]
+	[InterfaceType(ComInterfaceType.InterfaceIsIUnknown)]
+	[Guid("b824b49d-22ac-4161-ac8a-9916e8fa3f7f")]
+	internal interface IInitializeWithStream
+	{
+		void Initialize([MarshalAs(UnmanagedType.Interface)] System.Runtime.InteropServices.ComTypes.IStream pstream, uint grfMode);
 	}
 
 	internal static class Logger
@@ -128,7 +136,7 @@ namespace KansoThumbnailProvider
 	[Guid("E8F3A4C0-5D8B-4A3E-9B2F-1C7D8E9F0A1B")]
 	[ClassInterface(ClassInterfaceType.None)]
 	[ProgId("Kanso.VideoThumbnailProvider")]
-	public sealed class VideoThumbnailProvider : IThumbnailProvider, IInitializeWithFile
+	public sealed class VideoThumbnailProvider : IThumbnailProvider, IInitializeWithFile, IInitializeWithStream
 	{
 		private const string LogoFileName = "kanso-logo.png";
 		private const int FfmpegTimeoutMs = 20000;
@@ -139,11 +147,102 @@ namespace KansoThumbnailProvider
 		private static Bitmap _cachedLogo;
 
 		private string _filePath;
+		private bool _isTempCopy;
 
 		public void Initialize(string pszFilePath, uint grfMode)
 		{
+			CleanupTempCopy();
 			_filePath = pszFilePath;
 			Logger.Info("Initialize(IInitializeWithFile): " + (pszFilePath ?? "<null>"));
+		}
+
+		public void Initialize(System.Runtime.InteropServices.ComTypes.IStream pstream, uint grfMode)
+		{
+			CleanupTempCopy();
+
+			if (pstream == null)
+			{
+				throw new ArgumentNullException("pstream");
+			}
+
+			string tempPath = Path.Combine(Path.GetTempPath(), "kanso_stream_" + Guid.NewGuid().ToString("N") + ".tmp");
+			Logger.Info("Initialize(IInitializeWithStream): copying stream to " + tempPath);
+
+			try
+			{
+				try
+				{
+					pstream.Seek(0, 0, IntPtr.Zero);
+				}
+				catch
+				{
+				}
+
+				using (FileStream output = File.Create(tempPath))
+				{
+					var buffer = new byte[81920];
+					IntPtr bytesReadPtr = Marshal.AllocCoTaskMem(4);
+					try
+					{
+						while (true)
+						{
+							Marshal.WriteInt32(bytesReadPtr, 0);
+							pstream.Read(buffer, buffer.Length, bytesReadPtr);
+							int bytesRead = Marshal.ReadInt32(bytesReadPtr);
+							if (bytesRead <= 0)
+							{
+								break;
+							}
+
+							output.Write(buffer, 0, bytesRead);
+						}
+					}
+					finally
+					{
+						Marshal.FreeCoTaskMem(bytesReadPtr);
+					}
+				}
+
+				_filePath = tempPath;
+				_isTempCopy = true;
+			}
+			catch (Exception exception)
+			{
+				Logger.Error("Initialize(IInitializeWithStream) threw: " + exception);
+				try
+				{
+					if (File.Exists(tempPath))
+					{
+						File.Delete(tempPath);
+					}
+				}
+				catch
+				{
+				}
+
+				throw;
+			}
+		}
+
+		private void CleanupTempCopy()
+		{
+			if (!_isTempCopy || string.IsNullOrEmpty(_filePath))
+			{
+				return;
+			}
+
+			try
+			{
+				if (File.Exists(_filePath))
+				{
+					File.Delete(_filePath);
+				}
+			}
+			catch
+			{
+			}
+
+			_isTempCopy = false;
 		}
 
 		public void GetThumbnail(uint cx, out IntPtr phbmp, out WTS_ALPHATYPE pdwAlpha)
@@ -186,6 +285,10 @@ namespace KansoThumbnailProvider
 
 				Logger.Error("GetThumbnail threw: " + exception);
 				throw;
+			}
+			finally
+			{
+				CleanupTempCopy();
 			}
 		}
 
