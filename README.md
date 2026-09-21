@@ -1,198 +1,197 @@
-<div align="center">
+<picture>
+  <source media="(prefers-color-scheme: light)" srcset="./assets/hero-light.svg">
+  <source media="(prefers-color-scheme: dark)" srcset="./assets/hero-dark.svg">
+  <img alt="Kanso — a player where there is nothing extra" src="./assets/hero-dark.svg" width="100%">
+</picture>
 
-<img src="assets/banner.svg" alt="Kanso — a local-first desktop media player" width="100%" />
+<p align="left">
+  <a href="https://github.com/psychosomat/Kanso/actions/workflows/ci.yml"><img alt="CI" src="https://img.shields.io/github/actions/workflow/status/psychosomat/Kanso/CI?style=flat-square&label=CI"></a>
+  <img alt="Platform" src="https://img.shields.io/badge/platform-win_%7C_mac_%7C_linux-121316?style=flat-square">
+  <img alt="Electron" src="https://img.shields.io/badge/electron-41-121316?style=flat-square">
+  <img alt="React" src="https://img.shields.io/badge/react-19-121316?style=flat-square">
+  <img alt="License" src="https://img.shields.io/badge/license-MIT-F76F53?style=flat-square">
+</p>
 
-<br />
+# Kanso
 
-[![Release](https://img.shields.io/github/v/release/psychosomat/Kanso?style=flat-square&label=release&color=f76f53)](https://github.com/psychosomat/Kanso/releases/latest)
-[![License](https://img.shields.io/github/license/psychosomat/Kanso?style=flat-square&color=f76f53)](LICENSE)
-[![Platforms](https://img.shields.io/badge/platforms-windows%20%7C%20macos%20%7C%20linux-2b2d33?style=flat-square)](#install)
-[![Stack](https://img.shields.io/badge/electron%2041%20%C2%B7%20react%2019%20%C2%B7%20sqlite-2b2d33?style=flat-square)](#tech-stack)
+**Local video library and player. Index folders, browse a catalogue, play multi-gigabyte files with instant seeking — no server, no account, no telemetry.**
 
-</div>
+Kanso watches your directories, extracts metadata with `ffprobe`, caches posters, and streams files to the renderer over a privileged `video://` protocol with HTTP range requests. MPEG-TS (`.ts`) is remuxed to MP4 on the fly via bundled `ffmpeg` and served from cache afterwards.
 
-Kanso is a local-first desktop media player for people with large video libraries. Point it at your folders and it builds a searchable library on its own: it watches for changes, extracts metadata and poster frames, and gives you boards to sort videos into. It never moves, renames, or uploads a file.
+---
 
-The name comes from *kanso* (簡素), the Zen principle of simplicity — remove the non-essential until only what matters remains. The interface follows the same rule.
-
-> [!NOTE]
-> Kanso is under active development. Expect rough edges; bug reports and product ideas are welcome.
-
-## Features
-
-<table>
-<tr>
-<td width="50%" valign="top">
-<p><b>Local-first, no accounts</b></p>
-<p>Your files stay exactly where they are. Kanso indexes in place, keeps metadata in a local SQLite database, and works fully offline. No telemetry, no cloud, no sign-in.</p>
-</td>
-<td width="50%" valign="top">
-<p><b>Boards, not folders</b></p>
-<p>Organize videos into nested boards with icons and captions. Drag a card straight onto a board, and keep everything unassigned in the Unsorted inbox.</p>
-</td>
-</tr>
-<tr>
-<td width="50%" valign="top">
-<p><b>An index that maintains itself</b></p>
-<p>A chokidar watcher catches added, changed, and removed files. <code>ffprobe</code> reads duration, resolution, codecs, and bitrate; <code>ffmpeg</code> renders a poster frame for every video.</p>
-</td>
-<td width="50%" valign="top">
-<p><b>Built for the keyboard</b></p>
-<p>A command palette jumps to any board, video, or action. Playback runs on hotkeys, and the sidebar reveals on hover or pins into the layout.</p>
-</td>
-</tr>
-<tr>
-<td width="50%" valign="top">
-<p><b>Playback with depth</b></p>
-<p>Byte-range streaming, resume from where you stopped, hover frame previews on the timeline, a 6-band equalizer, and playback-speed presets you can fine-tune by scrolling.</p>
-</td>
-<td width="50%" valign="top">
-<p><b>Native where it counts</b></p>
-<p>A frameless titlebar that adapts per OS, video file associations, a Windows Explorer thumbnail provider, a macOS QuickLook provider, and single-instance file opening.</p>
-</td>
-</tr>
-</table>
-
-## How it works
+## Architecture
 
 ```mermaid
 flowchart LR
-  subgraph Indexing["Indexing · main process"]
-    direction LR
-    FOLDERS[("Your folders")] --> WATCH["chokidar watcher"]
-    WATCH --> INDEX["Library indexer"]
-    INDEX --> PROBE["ffprobe · metadata"]
-    INDEX --> POSTER["ffmpeg · poster frame"]
-    PROBE --> DB[("SQLite · WAL")]
-    POSTER --> CACHE[("Poster cache")]
-  end
-
-  subgraph Playback["Playback"]
-    direction LR
-    UI["React renderer"] -->|"video:// URL"| PROTOCOL["Custom protocol"]
-    PROTOCOL -->|"HTTP byte ranges"| VIDEO["video element"]
-    TS[".ts input"] --> REMUX["ffmpeg remux"] --> PROTOCOL
-  end
-
-  DB --> UI
-  CACHE --> UI
+    D[Disk folders] --> W[chokidar file watch]
+    W --> I[LibraryIndexerService]
+    I --> M[ffprobe metadata]
+    I --> P[Poster cache]
+    I --> S[(better-sqlite3)]
+    V[video file] --> G[video:// protocol gate]
+    G --> T{*.ts?}
+    T -->|yes| R[ffmpeg remux → transmux cache]
+    T -->|no| H[range-request stream 206]
+    R --> H
+    H --> PL[React player]
+    S --> PL
+    P --> PL
 ```
 
-The renderer never touches the filesystem directly. Every operation crosses a typed IPC bridge, and playback streams through a custom `video://` protocol that serves HTTP range requests — so seeking is instant even on multi-gigabyte files. MPEG-TS input is remuxed to MP4 by the bundled `ffmpeg` before it reaches the player.
-
-## Install
-
-Prebuilt packages for every platform live on the [Releases](https://github.com/psychosomat/Kanso/releases/latest) page.
-
-| Platform | Package |
-| :--- | :--- |
-| Windows | `.exe` (NSIS installer) |
-| macOS (Apple silicon) | `.dmg`, `.zip` |
-| macOS (Intel) | `.dmg`, `.zip` |
-| Linux · Debian/Ubuntu | `.deb` |
-| Linux · Arch | [`kanso-bin`](https://aur.archlinux.org/packages/kanso-bin) — `yay -S kanso-bin` |
-| Linux · other | `.AppImage`, `.tar.gz`, `.pacman` |
+| Layer | Implementation | Notes |
+|---|---|---|
+| Indexing | `electron/services/library-indexer.ts` + `file-watch.ts` | Full scan + live watch, configurable roots |
+| Metadata | `electron/services/media-metadata.ts` (`ffprobe-static`) | Duration, streams, thumbnails source |
+| Storage | `electron/services/db.ts` (`better-sqlite3`) | Library, categories, settings, playback state |
+| Delivery | `video://` handler in `electron/main.ts` | `Accept-Ranges`, `206 Partial Content`, security gate on library roots |
+| Compat | `electron/services/transmuxer.ts` (`ffmpeg-static`) | `.ts` → cached `.mp4`, deduplicated per source |
+| OS | File associations, single instance, `open-file` | `mp4 · mkv · webm · mov · avi · m4v · ts` |
+| Shell | macOS QuickLook, Windows thumbnail provider | `build-resources/macos-quicklook`, `build-resources/windows-thumbnail-provider` |
 
 > [!NOTE]
-> macOS builds are unsigned. On first launch, allow the app in **System Settings → Privacy & Security**.
+> Decoding runs without GPU video decode by design (`disable-gpu-video-decoder`) to avoid 4K HEVC driver crashes. Compositing stays on GPU; only video decode falls back.
 
-## Build from source
+---
 
-Requirements: [Bun](https://bun.sh) `>= 1.22.5`, [Node.js](https://nodejs.org) `>= 20.19`, Git, and a C++ toolchain for rebuilding native modules.
+## Quick start
+
+**Run from source — 3 commands:**
 
 ```bash
-git clone https://github.com/psychosomat/Kanso.git
-cd Kanso
 bun install
 bun run dev
 ```
 
-`bun run dev` starts the Vite dev server, watches the Electron main and preload bundles, and launches the app when both are ready.
-
-To produce installers:
+**Ship a binary:**
 
 ```bash
-bun run build        # compile renderer + main process
-bun run dist         # package for the current platform
-bun run dist:linux   # deb, pacman, tar.gz, AppImage
-bun run dist:win     # NSIS (also builds the Explorer thumbnail provider)
-bun run dist:mac     # dmg + zip (also builds the QuickLook provider)
+bun run build
+bun run dist:win    # NSIS installer
+bun run dist:linux  # deb / pacman / tar.gz / AppImage
+bun run dist:mac    # dmg / zip
 ```
 
-## Keyboard shortcuts
+> [!TIP]
+> `bun run dev` boots Vite + `tsup` watchers + Electron with `VITE_DEV_SERVER_URL` automatically (`scripts/dev.mjs`). No manual port juggling.
 
-| Shortcut | Action |
-| :--- | :--- |
+---
+
+## Capabilities
+
+<table border="0">
+  <tr>
+    <td width="50%" valign="top">
+      <h3>Library, not file list</h3>
+      <p>Watched roots, full rescan, categories and feeds. SQLite index keeps browsing instant while files change on disk.</p>
+    </td>
+    <td width="50%" valign="top">
+      <h3>Instant seeking on large files</h3>
+      <p>Privileged <code>video://</code> protocol serves byte ranges (<code>206</code>) straight from disk. Scrub a multi-GB file without buffering the whole asset.</p>
+    </td>
+  </tr>
+  <tr>
+    <td width="50%" valign="top">
+      <h3>Broadcast files play anywhere</h3>
+      <p>MPEG-TS recordings are remuxed once to cached MP4 and reused on every later open. No manual conversion step.</p>
+    </td>
+    <td width="50%" valign="top">
+      <h3>Player built for long sessions</h3>
+      <p>Speed 0.2×–4.0× with presets, A/B-free loop, 10-band EQ, fit modes, volume persistence, full keyboard transport.</p>
+    </td>
+  </tr>
+</table>
+
+---
+
+## Player
+
+| Input | Action |
+|---|---|
 | `Space` / `K` | Play / pause |
-| `J` / `L` | Seek back / forward 5s |
-| `←` / `→` | Seek back / forward 5s |
-| `↑` / `↓` | Volume up / down |
+| `J` / `L`, `←` / `→` | Seek ∓ / ± |
+| `Shift` + `J` / `L`, `Shift` + `←` / `→` | Long seek |
+| `0`–`9` | Seek to 10% steps |
+| `Home` / `End` | Start / end |
+| `↑` / `↓` | Volume |
 | `M` | Mute |
+| `S`, `-` / `=` | Cycle speed, slower / faster |
+| `R` | Loop |
 | `F` | Fullscreen |
-| `R` | Toggle loop |
-| Double-click | Fullscreen |
-| Scroll on the gauge | Change speed by 0.2× |
-| `Ctrl` / `⌘` + `P` | Command palette |
-| `Ctrl` / `⌘` + `S` | Pin / unpin sidebar |
+| `C` / `I` | Categories / details |
+| `Esc` | Exit player |
 
-## Formats
+Defaults from `src/lib/constants.ts`: volume `0.9`, rate `1.0×`, presets `1.0×` / `2.2×`, accent `#F76F53` (user-configurable in Settings).
 
-Kanso indexes these extensions: `.mp4`, `.mkv`, `.webm`, `.mov`, `.avi`, `.m4v`, `.ts`.
+<details>
+<summary><b>Playback contract</b></summary>
 
-MPEG-TS (`.ts`) files are remuxed to MP4 on the fly by the bundled `ffmpeg`, so they stream without re-encoding. Playback of other containers depends on the codecs supported by Electron's media stack.
+- Rate range clamped to `0.2–4.0` (`normalizePlaybackRate`, `src/lib/player-playback.ts`).
+- Repeatable keys (`J/L`, arrows, `-/=`) support key repeat; transport keys ignore `Ctrl/Meta/Alt` and editable targets.
+- `Esc` unwinds topmost layer first (dialog → overlay → player), never skips a level.
 
-## Where your data lives
+</details>
 
-Kanso keeps everything inside Electron's per-user application data directory:
+---
 
-- `data/player.db` — the SQLite library (WAL mode)
-- `cache/posters` — generated poster frames
-- `cache/transmux` — remuxed MP4 files for `.ts` sources
+## Formats and OS integration
 
-Source videos are never modified. Removing an entry from the library deletes the index record and its board posts, not the file on disk.
+| Area | Detail |
+|---|---|
+| Containers | `.mp4` `.mkv` `.webm` `.mov` `.avi` `.m4v` `.ts` |
+| Open path | Double-click association, `second-instance` args, macOS `open-file` events |
+| Window | Frameless, `hidden` / `hiddenInset` titlebar, 1480×960 adaptive to 85% of work area |
+| Identity | `com.dark.kanso`, `public/favicon.ico` + `public/icon.png`, mark `public/logo.svg` (`#F76F53`) |
+| Design tokens | `--background-deep #121316`, `--background #1A1B1E`, `--foreground #F2EFE6`, `--accent #F76F53`, `--accent-2 #6F8CF5`, Geist + Geist Mono |
 
-## Tech stack
+<details>
+<summary><b>Local data layout</b></summary>
 
-| Layer | Choice |
-| :--- | :--- |
-| Shell | Electron 41 |
-| UI | React 19, TanStack Router, Tailwind CSS 4, Radix UI, GSAP |
-| State & data | better-sqlite3 (WAL), typed IPC contracts |
-| Media | ffmpeg-static, ffprobe-static, custom `video://` protocol |
-| File watching | chokidar |
-| Tooling | Vite 7, TypeScript, Biome, Vitest, Bun |
+Resolved from Electron `userData`:
 
-## Project layout
+- Database — `<userData>/data/player.db`
+- Posters — `<userData>/cache/posters`
+- Transmux cache — `<userData>/cache/transmux` (`<sha1(source)>.mp4`)
+
+No network calls for library operation. Everything stays on disk.
+
+</details>
+
+---
+
+## Develop
+
+```bash
+bun install --frozen-lockfile
+bun run lint     # biome lint ./src ./electron
+bun run check    # biome check --write
+bun run test     # vitest run
+bun run fmt      # biome format --write
+```
+
+| Script | Purpose |
+|---|---|
+| `bun run dev` | Vite + tsup watch + Electron (`scripts/dev.mjs`) |
+| `bun run build` | `vite build` + `tsup` main (`esm`) and preload (`cjs`) |
+| `bun run dist` | Build + `electron-builder` for current OS |
+
+Stack: Electron 41 · React 19 · Vite 7 · TanStack Router · Tailwind 4 · Radix · GSAP · better-sqlite3 · ffmpeg/ffprobe-static · Bun 1.22 · Biome.
 
 ```
-electron/            Main process
-  ipc/               Typed IPC bridge
-  services/          db, indexer, file watcher, metadata, posters, transmuxer
-src/                 Renderer
-  routes/            TanStack Router file routes (dump, boards, player, settings)
-  components/        UI, layout, player, categories
-  lib/               Shared contracts, equalizer, utils
-build-resources/     Windows (.NET) and macOS (QuickLook) thumbnail providers
-packaging/aur/       Arch Linux PKGBUILD
-scripts/dev.mjs      Development orchestrator
+electron/          main, preload, ipc, services (db, indexer, transmuxer, posters)
+src/routes/        index, dump, categories.$categorySlug, player.$videoId, settings
+src/lib/           contracts, constants, player-playback, equalizer, settings-appearance
+src/components/    layout (app-shell), player, categories, shared, ui (Radix)
+src/hooks/         player hotkeys, escape layer, media queries
+build-resources/   installer art, QuickLook, Windows thumbnail provider
 ```
 
-## Development
-
-| Command | Description |
-| :--- | :--- |
-| `bun run dev` | Run the app in development |
-| `bun run build` | Compile the renderer and main process |
-| `bun run dist` | Package installers for the current platform |
-| `bun run lint` | Lint `src` and `electron` with Biome |
-| `bun run check` | Lint and format with Biome |
-| `bun run fmt` | Format with Biome |
-| `bun run test` | Run the Vitest suite |
+---
 
 ## Contributing
 
-Issues are more valuable than pull requests here. Open an issue for bugs, UX problems, regressions, or ideas, and discuss larger changes before sending code. See [CONTRIBUTING.md](CONTRIBUTING.md).
+Bug reports and concrete product ideas are valued above pull requests. Open an issue for bugs, UX problems, or regressions first; discuss larger changes before a PR. See `CONTRIBUTING.md`.
 
 ## License
 
-[MIT](LICENSE) © 2026 Dmitrii Dark (psychosomat)
+MIT — see `LICENSE`. Copyright (c) 2026 psychosomat (Dmitrii Dark).
