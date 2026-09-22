@@ -1,13 +1,13 @@
 import { createFileRoute } from "@tanstack/react-router";
 import {
 	startTransition,
+	useCallback,
 	useDeferredValue,
 	useEffect,
-	useRef,
 	useState,
 } from "react";
 import { AssignVideoDialog } from "@/components/categories/assign-video-dialog";
-import { CategoryFormDialog } from "@/components/categories/category-form-dialog";
+import { FolderPlaylistDialog } from "@/components/categories/folder-playlist-dialog";
 import { useAppState } from "@/components/layout/app-state";
 import { EmptyLibraryState } from "@/components/shared/empty-library-state";
 import { LibraryRails } from "@/components/shared/library-rails";
@@ -28,8 +28,16 @@ import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { useFolderPlaylistPrompt } from "@/hooks/use-folder-playlist-prompt";
 import { useScrollRestore } from "@/hooks/use-scroll-restore";
 import { DEFAULT_DUMP_QUERY } from "@/lib/constants";
+import { buildDumpQuery, hasActiveDumpFilters } from "@/lib/dump-query";
+import {
+	chooseFoldersAndPromptNew,
+	collectPreviousFolderPaths,
+	submitFolderPlaylistRequest,
+	type FolderPlaylistInput,
+} from "@/lib/folder-playlist";
 import type {
-	CategoryIconName,
+	DuplicateGroupDto,
+	DumpQueryDto,
 	DurationBucketName,
 	PaginatedVideosDto,
 	PlayerPreferencesDto,
@@ -38,7 +46,6 @@ import type {
 	WatchedFilter,
 } from "@/lib/contracts";
 import { getPlayerApi } from "@/lib/player-api";
-import { folderDisplayName } from "@/lib/utils";
 import IconRefresh from "~icons/tabler/refresh";
 
 export const Route = createFileRoute("/dump")({
@@ -50,6 +57,10 @@ async function runVideoAction(
 	action: "open-folder" | "reveal-file" | "copy-path",
 ) {
 	await getPlayerApi().library.runVideoAction(videoId, action);
+}
+
+function toDuplicateIdSet(groups: DuplicateGroupDto[]): Set<string> {
+	return new Set(groups.flatMap((group) => group.memberIds));
 }
 
 function DumpPage() {
@@ -72,7 +83,6 @@ function DumpPage() {
 	const [codec, setCodec] = useState("");
 	const [duplicateIds, setDuplicateIds] = useState<Set<string>>(new Set());
 	const [loading, setLoading] = useState(false);
-	const [_currentPage, _setCurrentPage] = useState(1);
 	useScrollRestore("/dump", !loading);
 	const [folderPending, setFolderPending] = useState(false);
 	const { promptFolder, promptForFolders, dismissCurrent } =
@@ -84,13 +94,13 @@ function DumpPage() {
 	const [electronReady, setElectronReady] = useState(false);
 	const deferredSearch = useDeferredValue(search);
 	const deferredCodec = useDeferredValue(codec);
-	const gridRef = useRef<HTMLDivElement>(null);
-	const filtersActive =
-		deferredSearch.trim() !== "" ||
-		watched !== "all" ||
-		resolution !== "all" ||
-		durationBucket !== "all" ||
-		deferredCodec.trim() !== "";
+	const filtersActive = hasActiveDumpFilters({
+		search: deferredSearch,
+		watched,
+		resolution,
+		durationBucket,
+		codec: deferredCodec,
+	});
 
 	useEffect(() => {
 		if (!window.playerApi) return;
@@ -104,6 +114,27 @@ function DumpPage() {
 			});
 	}, []);
 
+	const buildCurrentDumpQuery = useCallback((): DumpQueryDto => {
+		return buildDumpQuery({
+			search: deferredSearch,
+			sort,
+			order,
+			pageSize: DEFAULT_DUMP_QUERY.pageSize,
+			watched,
+			resolution,
+			codec: deferredCodec,
+			durationBucket,
+		});
+	}, [
+		deferredSearch,
+		sort,
+		order,
+		watched,
+		resolution,
+		deferredCodec,
+		durationBucket,
+	]);
+
 	useEffect(() => {
 		if (!library?.sourcePaths.length || !window.playerApi) {
 			setLoading(false);
@@ -114,19 +145,7 @@ function DumpPage() {
 		let cancelled = false;
 		setLoading(true);
 		void api.library
-			.getDumpPage({
-				search: deferredSearch,
-				sort,
-				order,
-				page: 1,
-				pageSize: DEFAULT_DUMP_QUERY.pageSize,
-				unsortedOnly: true,
-				watched,
-				resolutions: resolution === "all" ? undefined : [resolution],
-				codecVideo: deferredCodec.trim() || undefined,
-				durationBuckets:
-					durationBucket === "all" ? undefined : [durationBucket],
-			})
+			.getDumpPage(buildCurrentDumpQuery())
 			.then((response) => {
 				if (cancelled) {
 					return;
@@ -142,16 +161,7 @@ function DumpPage() {
 		return () => {
 			cancelled = true;
 		};
-	}, [
-		deferredSearch,
-		deferredCodec,
-		durationBucket,
-		library?.sourcePaths,
-		order,
-		resolution,
-		sort,
-		watched,
-	]);
+	}, [buildCurrentDumpQuery, library?.sourcePaths]);
 
 	useEffect(() => {
 		if (!library?.sourcePaths.length || !window.playerApi) {
@@ -165,7 +175,7 @@ function DumpPage() {
 				if (cancelled) {
 					return;
 				}
-				setDuplicateIds(new Set(groups.flatMap((group) => group.memberIds)));
+				setDuplicateIds(toDuplicateIdSet(groups));
 			});
 		return () => {
 			cancelled = true;
@@ -183,35 +193,23 @@ function DumpPage() {
 	}, [sort, view]);
 
 	async function chooseFolder() {
-		const previousPaths =
-			library?.sourcePaths.map((source) => source.path) ?? [];
-		const previous = new Set(previousPaths);
-		setFolderPending(true);
-		try {
-			const next = await getPlayerApi().settings.chooseLibraryFolders();
-			await refreshAll();
-			promptForFolders(
-				(next?.sourcePaths ?? [])
-					.map((source) => source.path)
-					.filter((sourcePath) => !previous.has(sourcePath)),
-			);
-		} finally {
-			setFolderPending(false);
-		}
+		await chooseFoldersAndPromptNew({
+			previousPaths: collectPreviousFolderPaths(library?.sourcePaths),
+			choose: () => getPlayerApi().settings.chooseLibraryFolders(),
+			refreshAll,
+			promptForFolders,
+			setPending: setFolderPending,
+		});
 	}
 
-	async function submitFolderPlaylist(input: {
-		name: string;
-		description?: string;
-		parentCategoryId?: string | null;
-		icon?: CategoryIconName;
-	}) {
-		if (!promptFolder) return;
-		await getPlayerApi().categories.createFromFolder({
-			...input,
-			folderPath: promptFolder,
+	async function submitFolderPlaylist(input: FolderPlaylistInput) {
+		await submitFolderPlaylistRequest({
+			promptFolder,
+			input,
+			createFromFolder: (request) =>
+				getPlayerApi().categories.createFromFolder(request),
+			refreshAll,
 		});
-		await refreshAll();
 	}
 
 	async function openAssign(videoId: string) {
@@ -241,28 +239,16 @@ function DumpPage() {
 		}
 		await refreshAll();
 		const api = getPlayerApi();
-		setData(
-			await api.library.getDumpPage({
-				search: deferredSearch,
-				sort,
-				order,
-				page: 1,
-				pageSize: DEFAULT_DUMP_QUERY.pageSize,
-				unsortedOnly: true,
-				watched,
-				resolutions: resolution === "all" ? undefined : [resolution],
-				codecVideo: deferredCodec.trim() || undefined,
-				durationBuckets:
-					durationBucket === "all" ? undefined : [durationBucket],
-			}),
-		);
-		setDuplicateIds(
-			new Set(
-				(await api.library.getDuplicateGroups()).flatMap(
-					(group) => group.memberIds,
-				),
-			),
-		);
+		setData(await api.library.getDumpPage(buildCurrentDumpQuery()));
+		setDuplicateIds(toDuplicateIdSet(await api.library.getDuplicateGroups()));
+	}
+
+	function clearFilters() {
+		setSearch("");
+		setWatched("all");
+		setResolution("all");
+		setDurationBucket("all");
+		setCodec("");
 	}
 
 	// Show empty state only if library is loaded and has no paths
@@ -414,7 +400,6 @@ function DumpPage() {
 
 				{data && data.items.length > 0 ? (
 					<div
-						ref={gridRef}
 						className={
 							view === "comfortable"
 								? "grid grid-cols-2 gap-x-5 gap-y-7 md:grid-cols-3 xl:grid-cols-4 2xl:grid-cols-5"
@@ -457,16 +442,7 @@ function DumpPage() {
 								: "No unsorted videos. All videos have been organized into categories."}
 						</p>
 						{filtersActive ? (
-							<Button
-								variant="secondary"
-								onClick={() => {
-									setSearch("");
-									setWatched("all");
-									setResolution("all");
-									setDurationBucket("all");
-									setCodec("");
-								}}
-							>
+							<Button variant="secondary" onClick={clearFilters}>
 								Clear filters
 							</Button>
 						) : null}
@@ -481,19 +457,12 @@ function DumpPage() {
 				video={selectedVideo}
 				onSubmit={submitAssignments}
 			/>
-			{promptFolder ? (
-				<CategoryFormDialog
-					key={promptFolder}
-					open
-					onOpenChange={(value) => {
-						if (!value) dismissCurrent();
-					}}
-					categories={categories}
-					initialName={folderDisplayName(promptFolder)}
-					initialDescription={promptFolder}
-					onSubmit={submitFolderPlaylist}
-				/>
-			) : null}
+			<FolderPlaylistDialog
+				promptFolder={promptFolder}
+				categories={categories}
+				onDismiss={dismissCurrent}
+				onSubmit={submitFolderPlaylist}
+			/>
 		</>
 	);
 }

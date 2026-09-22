@@ -7,6 +7,17 @@ export const DialogTrigger = DialogPrimitive.Trigger;
 export const DialogPortal = DialogPrimitive.Portal;
 export const DialogClose = DialogPrimitive.Close;
 
+function DialogCloseButton() {
+	return (
+		<DialogPrimitive.Close
+			aria-label="Close dialog"
+			className="absolute right-4 top-4 rounded-full p-1.5 text-(--muted-foreground) transition-[background-color,color,transform] duration-150 hover:bg-white/8 hover:text-(--foreground) active:scale-95"
+		>
+			<IconX size={16} />
+		</DialogPrimitive.Close>
+	);
+}
+
 export function DialogOverlay({
 	className,
 	...props
@@ -39,12 +50,7 @@ export function DialogContent({
 				{...props}
 			>
 				{children}
-				<DialogPrimitive.Close
-					aria-label="Close dialog"
-					className="absolute right-4 top-4 rounded-full p-1.5 text-(--muted-foreground) transition-[background-color,color,transform] duration-150 hover:bg-white/8 hover:text-(--foreground) active:scale-95"
-				>
-					<IconX size={16} />
-				</DialogPrimitive.Close>
+				<DialogCloseButton />
 			</DialogPrimitive.Content>
 		</DialogPortal>
 	);
@@ -110,27 +116,20 @@ export function SheetContent({
 }: React.ComponentProps<typeof DialogPrimitive.Content> & {
 	side?: "left" | "right";
 }) {
-	const sideClasses = SHEET_SIDE_CLASSES;
-
 	return (
 		<DialogPortal>
 			<DialogOverlay />
 			<DialogPrimitive.Content
 				className={cn(
 					"island-strong fixed top-0 z-50 flex h-full w-[min(92vw,24rem)] flex-col gap-4 p-6",
-					sideClasses[side],
+					SHEET_SIDE_CLASSES[side],
 					"transition-[transform,opacity] duration-200",
 					className,
 				)}
 				{...props}
 			>
 				{children}
-				<DialogPrimitive.Close
-					aria-label="Close dialog"
-					className="absolute right-4 top-4 rounded-full p-1.5 text-(--muted-foreground) transition-[background-color,color,transform] duration-150 hover:bg-white/8 hover:text-(--foreground) active:scale-95"
-				>
-					<IconX size={16} />
-				</DialogPrimitive.Close>
+				<DialogCloseButton />
 			</DialogPrimitive.Content>
 		</DialogPortal>
 	);

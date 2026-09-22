@@ -1,6 +1,8 @@
+import { DEFAULT_PLAYER_PREFERENCES } from "./constants";
+
 export const NOISE_STORAGE_KEY = "player:noiseOpacity";
 export const ACCENT_STORAGE_KEY = "player:accentColor";
-export const DEFAULT_ACCENT = "#f76f53";
+export const DEFAULT_ACCENT = DEFAULT_PLAYER_PREFERENCES.accentColor;
 export const NOISE_OPACITY_DEFAULT = 0.09;
 export const LEGACY_ACCENTS = new Set([
 	"#c8883a",

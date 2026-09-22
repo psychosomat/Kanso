@@ -19,6 +19,11 @@ import {
 	parseRangeHeader,
 	shouldServeStaticAsset,
 } from "./lib/http-utils";
+import {
+	decodeVideoRequestPath,
+	extractVideoErrorMessage,
+	resolveVideoErrorStatus,
+} from "./lib/video-protocol";
 import { DatabaseService } from "./services/db";
 import {
 	LibraryIndexerService,
@@ -544,41 +549,51 @@ function registerFileOpenHandlers() {
 	});
 }
 
+function logVideoProtocolRequest(filePath: string) {
+	if (process.platform === "darwin") {
+		console.log("[VIDEO PROTOCOL] macOS request:", filePath);
+	}
+}
+
+function logVideoProtocolSuccess() {
+	if (process.platform === "darwin") {
+		console.log("[VIDEO PROTOCOL] macOS response created successfully");
+	}
+}
+
+function logVideoProtocolError(
+	filePath: string,
+	message: string,
+	error: unknown,
+) {
+	if (process.platform !== "darwin") {
+		return;
+	}
+
+	console.error("[VIDEO PROTOCOL] macOS error:", error);
+	console.error("[VIDEO PROTOCOL] filePath:", filePath);
+	console.error("[VIDEO PROTOCOL] error message:", message);
+}
+
 function registerVideoProtocolHandler() {
 	protocol.handle("video", async (request) => {
-		const url = new URL(request.url);
-		const filePath = decodeURIComponent(url.pathname.replace(/^\/+/, ""));
+		const filePath = decodeVideoRequestPath(request.url);
 		try {
-			// Additional logging for macOS debugging
-			if (process.platform === "darwin") {
-				console.log("[VIDEO PROTOCOL] macOS request:", filePath);
-			}
+			logVideoProtocolRequest(filePath);
 
 			const response = await createMediaResponse(filePath, request);
 
-			// Log success on macOS
-			if (process.platform === "darwin") {
-				console.log("[VIDEO PROTOCOL] macOS response created successfully");
-			}
+			logVideoProtocolSuccess();
 
 			return response;
 		} catch (error) {
-			const message =
-				error instanceof Error ? error.message : "Failed to read local media";
-			const status = message.includes("outside the library")
-				? 403
-				: message.includes("not found")
-					? 404
-					: 500;
+			const message = extractVideoErrorMessage(error);
 
-			// Enhanced error logging for macOS
-			if (process.platform === "darwin") {
-				console.error("[VIDEO PROTOCOL] macOS error:", error);
-				console.error("[VIDEO PROTOCOL] filePath:", filePath);
-				console.error("[VIDEO PROTOCOL] error message:", message);
-			}
+			logVideoProtocolError(filePath, message, error);
 
-			return new Response(message, { status });
+			return new Response(message, {
+				status: resolveVideoErrorStatus(message),
+			});
 		}
 	});
 }

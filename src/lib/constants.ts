@@ -1,3 +1,4 @@
+import type { DumpQueryDto, PlayerPreferencesDto } from "./contracts";
 import { DEFAULT_EQ_GAINS } from "./equalizer";
 
 export const APP_NAME = "Kanso";
@@ -7,10 +8,10 @@ export const DEFAULT_DUMP_QUERY = {
 	order: "desc",
 	page: 1,
 	pageSize: 24,
-} as const;
+} as const satisfies Pick<DumpQueryDto, "sort" | "order" | "page" | "pageSize">;
 
 export const DEFAULT_PLAYER_PREFERENCES = {
-	dumpSort: "recent",
+	dumpSort: DEFAULT_DUMP_QUERY.sort,
 	dumpView: "comfortable",
 	sidebarCollapsed: false,
 	titlebarMode: "auto",
@@ -23,8 +24,8 @@ export const DEFAULT_PLAYER_PREFERENCES = {
 	speedPresetSecondary: 2.2,
 	accentColor: "#f76f53",
 	playerEqEnabled: false,
-	playerEqGains: DEFAULT_EQ_GAINS,
-} as const;
+	playerEqGains: [...DEFAULT_EQ_GAINS],
+} as const satisfies PlayerPreferencesDto;
 
 export const SUPPORTED_VIDEO_EXTENSIONS = [
 	".mp4",
