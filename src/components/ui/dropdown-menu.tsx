@@ -31,7 +31,7 @@ export function DropdownMenuItem({
 		<DropdownMenuPrimitive.Item
 			className={cn(
 				menuItemBaseClass,
-				"relative data-[highlighted]:bg-white/8",
+				"relative data-highlighted:bg-white/8",
 				inset && "pl-8",
 				className,
 			)}

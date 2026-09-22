@@ -1,6 +1,10 @@
 import { describe, expect, it } from "vitest";
 import { DEFAULT_DUMP_QUERY } from "./constants";
-import { buildDumpQuery, hasActiveDumpFilters } from "./dump-query";
+import {
+	buildDumpQuery,
+	hasActiveDumpFilters,
+	toDuplicateIdSet,
+} from "./dump-query";
 
 describe("buildDumpQuery", () => {
 	it("builds the default unsorted-only page query", () => {
@@ -96,5 +100,30 @@ describe("hasActiveDumpFilters", () => {
 			true,
 		);
 		expect(hasActiveDumpFilters({ ...base, codec: "hevc" })).toBe(true);
+	});
+});
+
+describe("toDuplicateIdSet", () => {
+	it("collects member ids across groups", () => {
+		expect(
+			toDuplicateIdSet([
+				{
+					fileSize: 10,
+					durationBucket: 1,
+					memberCount: 2,
+					memberIds: ["a", "b"],
+				},
+				{
+					fileSize: 10,
+					durationBucket: 1,
+					memberCount: 2,
+					memberIds: ["b", "c"],
+				},
+			]),
+		).toEqual(new Set(["a", "b", "c"]));
+	});
+
+	it("returns an empty set without groups", () => {
+		expect(toDuplicateIdSet([])).toEqual(new Set());
 	});
 });

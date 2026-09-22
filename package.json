@@ -10,7 +10,7 @@
     "#/*": "./src/*"
   },
   "scripts": {
-    "postinstall": "electron-builder install-app-deps && node node_modules/electron/install.js",
+    "postinstall": "node node_modules/electron/install.js",
     "fmt": "biome format . --write",
     "lint": "biome lint ./src ./electron",
     "check": "biome check . --write",
@@ -39,7 +39,6 @@
     "@radix-ui/react-tooltip": "^1.2.8",
     "@tanstack/react-hotkeys": "^0.9.1",
     "@tanstack/react-router": "latest",
-    "better-sqlite3": "^12.8.0",
     "chokidar": "^5.0.0",
     "class-variance-authority": "^0.7.1",
     "clsx": "^2.1.1",
@@ -62,7 +61,6 @@
     "@tanstack/router-plugin": "^1.132.0",
     "@testing-library/dom": "^10.4.1",
     "@testing-library/react": "^16.3.0",
-    "@types/better-sqlite3": "^7.6.13",
     "@types/node": "^22.10.2",
     "@types/react": "^19.2.0",
     "@types/react-dom": "^19.2.0",
@@ -122,12 +120,6 @@
       "!node_modules/ffprobe-static/bin/darwin/**/*",
       "!node_modules/ffprobe-static/bin/win32/**/*",
       "!node_modules/ffprobe-static/bin/**/ia32/**/*",
-      "!node_modules/better-sqlite3/deps/**/*",
-      "!node_modules/better-sqlite3/src/**/*",
-      "!node_modules/better-sqlite3/build/Release/*.a",
-      "!node_modules/better-sqlite3/build/Release/test_extension.node",
-      "!node_modules/better-sqlite3/build/Release/obj*/**/*",
-      "!node_modules/better-sqlite3/bin/**/*",
       "!node_modules/**/*.md",
       "!node_modules/**/README*",
       "!node_modules/**/CHANGELOG*",
@@ -136,7 +128,6 @@
     ],
     "asar": true,
     "asarUnpack": [
-      "node_modules/better-sqlite3/**/*",
       "node_modules/ffmpeg-static/**/*",
       "node_modules/ffprobe-static/**/*",
       "build-resources/**/*"

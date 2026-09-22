@@ -28,7 +28,11 @@ import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { useFolderPlaylistPrompt } from "@/hooks/use-folder-playlist-prompt";
 import { useScrollRestore } from "@/hooks/use-scroll-restore";
 import { DEFAULT_DUMP_QUERY } from "@/lib/constants";
-import { buildDumpQuery, hasActiveDumpFilters } from "@/lib/dump-query";
+import {
+	buildDumpQuery,
+	hasActiveDumpFilters,
+	toDuplicateIdSet,
+} from "@/lib/dump-query";
 import {
 	chooseFoldersAndPromptNew,
 	collectPreviousFolderPaths,
@@ -36,7 +40,6 @@ import {
 	type FolderPlaylistInput,
 } from "@/lib/folder-playlist";
 import type {
-	DuplicateGroupDto,
 	DumpQueryDto,
 	DurationBucketName,
 	PaginatedVideosDto,
@@ -57,10 +60,6 @@ async function runVideoAction(
 	action: "open-folder" | "reveal-file" | "copy-path",
 ) {
 	await getPlayerApi().library.runVideoAction(videoId, action);
-}
-
-function toDuplicateIdSet(groups: DuplicateGroupDto[]): Set<string> {
-	return new Set(groups.flatMap((group) => group.memberIds));
 }
 
 function DumpPage() {

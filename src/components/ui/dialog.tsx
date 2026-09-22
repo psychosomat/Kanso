@@ -33,7 +33,7 @@ export function DialogOverlay({
 	);
 }
 
-export function DialogContent({
+function DialogPanel({
 	className,
 	children,
 	...props
@@ -41,18 +41,30 @@ export function DialogContent({
 	return (
 		<DialogPortal>
 			<DialogOverlay />
-			<DialogPrimitive.Content
-				className={cn(
-					"island-strong fixed left-1/2 top-1/2 z-50 grid w-[min(92vw,36rem)] -translate-x-1/2 -translate-y-1/2 gap-4 rounded-(--radius-xl) p-6",
-					"data-[state=open]:animate-scale-in data-[state=closed]:animate-fade-out transition-[transform,opacity] duration-200",
-					className,
-				)}
-				{...props}
-			>
+			<DialogPrimitive.Content className={className} {...props}>
 				{children}
 				<DialogCloseButton />
 			</DialogPrimitive.Content>
 		</DialogPortal>
+	);
+}
+
+export function DialogContent({
+	className,
+	children,
+	...props
+}: React.ComponentProps<typeof DialogPrimitive.Content>) {
+	return (
+		<DialogPanel
+			className={cn(
+				"island-strong fixed left-1/2 top-1/2 z-50 grid w-[min(92vw,36rem)] -translate-x-1/2 -translate-y-1/2 gap-4 rounded-(--radius-xl) p-6",
+				"data-[state=open]:animate-scale-in data-[state=closed]:animate-fade-out transition-[transform,opacity] duration-200",
+				className,
+			)}
+			{...props}
+		>
+			{children}
+		</DialogPanel>
 	);
 }
 
@@ -117,20 +129,16 @@ export function SheetContent({
 	side?: "left" | "right";
 }) {
 	return (
-		<DialogPortal>
-			<DialogOverlay />
-			<DialogPrimitive.Content
-				className={cn(
-					"island-strong fixed top-0 z-50 flex h-full w-[min(92vw,24rem)] flex-col gap-4 p-6",
-					SHEET_SIDE_CLASSES[side],
-					"transition-[transform,opacity] duration-200",
-					className,
-				)}
-				{...props}
-			>
-				{children}
-				<DialogCloseButton />
-			</DialogPrimitive.Content>
-		</DialogPortal>
+		<DialogPanel
+			className={cn(
+				"island-strong fixed top-0 z-50 flex h-full w-[min(92vw,24rem)] flex-col gap-4 p-6",
+				SHEET_SIDE_CLASSES[side],
+				"transition-[transform,opacity] duration-200",
+				className,
+			)}
+			{...props}
+		>
+			{children}
+		</DialogPanel>
 	);
 }

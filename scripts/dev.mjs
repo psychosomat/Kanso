@@ -42,9 +42,22 @@ async function waitForHttpOk(url) {
 const children = new Set();
 
 function run(name, command, args, env = {}) {
+	const finalEnv = { ...process.env, ...env };
+	for (const key of Object.keys(env)) {
+		if (env[key] === undefined) {
+			delete finalEnv[key];
+		}
+	}
+	// Electron binary behaves as plain Node when ELECTRON_RUN_AS_NODE=1,
+	// which breaks `import { app, BrowserWindow } from "electron"` in
+	// dist-electron/main.js. Some harnesses export this variable globally,
+	// so never leak it into the Electron child process.
+	if (name === "electron") {
+		delete finalEnv.ELECTRON_RUN_AS_NODE;
+	}
 	const child = spawn(command, args, {
 		stdio: "inherit",
-		env: { ...process.env, ...env },
+		env: finalEnv,
 	});
 	children.add(child);
 	child.on("exit", (code, signal) => {
@@ -117,4 +130,5 @@ await waitFor(
 
 run("electron", "bunx", ["electron", "dist-electron/main.js"], {
 	VITE_DEV_SERVER_URL: devServerUrl,
+	ELECTRON_RUN_AS_NODE: undefined,
 });

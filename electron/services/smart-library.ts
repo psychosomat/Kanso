@@ -9,7 +9,7 @@ import type {
 } from "../../src/lib/contracts";
 
 // Shared Smart Library helpers (plan B-v1).
-// Kept free of better-sqlite3 so the pure parts stay unit-testable and
+// Kept free of sqlite imports so the pure parts stay unit-testable and
 // DatabaseService stays a thin wrapper instead of growing into a god-file.
 
 export const IN_PROGRESS_SECONDS_START = 5;

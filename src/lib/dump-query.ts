@@ -1,4 +1,5 @@
 import type {
+	DuplicateGroupDto,
 	DumpQueryDto,
 	DumpSort,
 	DurationBucketName,
@@ -49,4 +50,8 @@ export function hasActiveDumpFilters(filters: {
 		filters.durationBucket !== "all" ||
 		filters.codec.trim() !== ""
 	);
+}
+
+export function toDuplicateIdSet(groups: DuplicateGroupDto[]): Set<string> {
+	return new Set(groups.flatMap((group) => group.memberIds));
 }

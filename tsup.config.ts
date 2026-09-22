@@ -5,7 +5,7 @@ export default defineConfig({
   format: ['esm', 'cjs'],
   dts: false,
   clean: false,
-  external: ['electron', 'ffmpeg-static', 'ffprobe-static', 'better-sqlite3'],
+  external: ['electron', 'ffmpeg-static', 'ffprobe-static'],
   sourcemap: true,
   splitting: false,
   onSuccess: 'echo "Build complete"',

@@ -1,8 +1,14 @@
 import { randomUUID } from "node:crypto";
 import fs from "node:fs";
 import path from "node:path";
-import type { Database as DatabaseType } from "better-sqlite3";
-import Database from "better-sqlite3";
+import type { DatabaseSync } from "node:sqlite";
+
+// A static `import ... from "node:sqlite"` breaks the Electron bundle:
+// tsup strips the `node:` protocol from output specifiers and bare
+// `sqlite` does not resolve. Load the builtin by id instead.
+const { DatabaseSync: SqliteDatabase } = process.getBuiltinModule(
+	"node:sqlite",
+) as typeof import("node:sqlite");
 import { DEFAULT_PLAYER_PREFERENCES } from "../../src/lib/constants";
 import type {
 	AddVideoToCategoriesDto,
@@ -93,15 +99,26 @@ function getDefaultTitlebarMode(): TitlebarMode {
 }
 
 export class DatabaseService {
-	private db: DatabaseType;
+	private db: DatabaseSync;
 
 	constructor(dbPath: string) {
 		fs.mkdirSync(path.dirname(dbPath), { recursive: true });
-		this.db = new Database(dbPath);
-		this.db.pragma("journal_mode = WAL");
-		this.db.pragma("foreign_keys = ON");
+		this.db = new SqliteDatabase(dbPath);
+		this.db.exec("PRAGMA journal_mode = WAL");
+		this.db.exec("PRAGMA foreign_keys = ON");
 		this.migrate();
 		this.ensureSingletons();
+	}
+
+	private withTransaction(fn: () => void) {
+		this.db.exec("BEGIN IMMEDIATE");
+		try {
+			fn();
+			this.db.exec("COMMIT");
+		} catch (error) {
+			this.db.exec("ROLLBACK");
+			throw error;
+		}
 	}
 
 	private migrate() {
@@ -637,14 +654,13 @@ export class DatabaseService {
 			"UPDATE videos SET is_missing = 1, updated_at = ? WHERE source_path = ?",
 		);
 		const now = new Date().toISOString();
-		const transaction = this.db.transaction(() => {
+		this.withTransaction(() => {
 			for (const row of rows) {
 				if (!existingPaths.has(row.source_path)) {
 					markMissing.run(now, row.source_path);
 				}
 			}
 		});
-		transaction();
 	}
 
 	markVideoMissingByPath(sourcePath: string) {
@@ -974,14 +990,13 @@ export class DatabaseService {
        VALUES (?, ?, ?, NULL, ?, ?)
        ON CONFLICT(category_id, video_id) DO NOTHING`,
 		);
-		const transaction = this.db.transaction(() => {
+		this.withTransaction(() => {
 			let position = maxRow.max;
 			for (const row of videoRows) {
 				position += 1;
 				insert.run(randomUUID(), id, row.id, position, now);
 			}
 		});
-		transaction();
 		// biome-ignore lint/style/noNonNullAssertion: category just created, must exist
 		return this.getCategoryById(id)!;
 	}
@@ -1066,7 +1081,7 @@ export class DatabaseService {
 			"SELECT COALESCE(MAX(position), 0) as max FROM category_posts WHERE category_id = ?",
 		);
 		const now = new Date().toISOString();
-		const transaction = this.db.transaction(() => {
+		this.withTransaction(() => {
 			let cursor = 0;
 			for (const item of input.categories) {
 				const existing = this.db
@@ -1103,19 +1118,17 @@ export class DatabaseService {
 				);
 			}
 		});
-		transaction();
 	}
 
 	reorderCategoryPosts(input: { categoryId: string; postIds: string[] }) {
 		const update = this.db.prepare(
 			"UPDATE category_posts SET position = ? WHERE id = ? AND category_id = ?",
 		);
-		const transaction = this.db.transaction(() => {
+		this.withTransaction(() => {
 			for (let index = 0; index < input.postIds.length; index += 1) {
 				update.run(index + 1, input.postIds[index], input.categoryId);
 			}
 		});
-		transaction();
 	}
 
 	removeVideoFromCategory(videoId: string, categoryId: string) {
