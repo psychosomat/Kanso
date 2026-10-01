@@ -20,6 +20,25 @@ Kanso watches your directories, extracts metadata with `ffprobe`, caches posters
 
 ---
 
+## Preview
+
+<img alt="Kanso player — frameless playback with transport bar" src="./assets/screenshots/2.png" width="100%">
+
+<table border="0">
+  <tr>
+    <td width="50%" valign="top">
+      <img alt="Kanso library — category grid with posters" src="./assets/screenshots/1.png" width="100%">
+      <p><b>Library.</b> Watched folders as poster grid, sort and metadata at a glance.</p>
+    </td>
+    <td width="50%" valign="top">
+      <img alt="Kanso settings — playback presets and equalizer" src="./assets/screenshots/3.png" width="100%">
+      <p><b>Tuning.</b> Speed presets and 6-band EQ applied to video audio.</p>
+    </td>
+  </tr>
+</table>
+
+---
+
 ## Architecture
 
 ```mermaid
