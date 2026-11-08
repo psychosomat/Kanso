@@ -14,7 +14,7 @@ import IconSettings from "~icons/tabler/settings";
 
 type ActionId = "unsorted" | "settings" | "rescan";
 
-type Entry =
+export type Entry =
 	| {
 			kind: "board";
 			id: string;
@@ -30,6 +30,42 @@ const ACTIONS: Array<{ id: ActionId; name: string }> = [
 	{ id: "settings", name: "Open Settings" },
 	{ id: "rescan", name: "Rescan library now" },
 ];
+
+export function buildPaletteEntries(
+	categories: CategoryDto[],
+	videos: VideoCardDto[],
+	query: string,
+): Entry[] {
+	const q = query.trim().toLowerCase();
+	const boards: Entry[] = categories
+		.filter((c) => !q || c.name.toLowerCase().includes(q))
+		.slice(0, 5)
+		.map((c) => ({
+			kind: "board" as const,
+			id: c.id,
+			slug: c.slug,
+			name: c.name,
+			icon: c.icon,
+		}));
+	const videoEntries: Entry[] = videos.map((v) => ({
+		kind: "video" as const,
+		id: v.id,
+		name: v.fileName,
+		duration: v.durationSec,
+	}));
+	const actions: Entry[] = ACTIONS.filter(
+		(a) => !q || a.name.toLowerCase().includes(q),
+	).map((a) => ({ kind: "action" as const, ...a }));
+	return [...boards, ...videoEntries, ...actions];
+}
+
+export function nextActiveIndex(
+	current: number,
+	delta: number,
+	length: number,
+): number {
+	return Math.max(0, Math.min(current + delta, length - 1));
+}
 
 function Hint({ keys, label }: { keys: string[]; label: string }) {
 	return (
@@ -107,29 +143,10 @@ export function CommandPalette({
 		};
 	}, [query, open]);
 
-	const entries = useMemo<Entry[]>(() => {
-		const q = query.trim().toLowerCase();
-		const boards: Entry[] = categories
-			.filter((c) => !q || c.name.toLowerCase().includes(q))
-			.slice(0, 5)
-			.map((c) => ({
-				kind: "board" as const,
-				id: c.id,
-				slug: c.slug,
-				name: c.name,
-				icon: c.icon,
-			}));
-		const videoEntries: Entry[] = videos.map((v) => ({
-			kind: "video" as const,
-			id: v.id,
-			name: v.fileName,
-			duration: v.durationSec,
-		}));
-		const actions: Entry[] = ACTIONS.filter(
-			(a) => !q || a.name.toLowerCase().includes(q),
-		).map((a) => ({ kind: "action" as const, ...a }));
-		return [...boards, ...videoEntries, ...actions];
-	}, [categories, videos, query]);
+	const entries = useMemo<Entry[]>(
+		() => buildPaletteEntries(categories, videos, query),
+		[categories, videos, query],
+	);
 
 	// biome-ignore lint/correctness/useExhaustiveDependencies: reset selection whenever the result list identity changes
 	useEffect(() => {
@@ -177,10 +194,10 @@ export function CommandPalette({
 				onOpenChange(false);
 			} else if (e.key === "ArrowDown") {
 				e.preventDefault();
-				setActiveIndex((i) => Math.min(i + 1, entriesRef.current.length - 1));
+				setActiveIndex((i) => nextActiveIndex(i, 1, entriesRef.current.length));
 			} else if (e.key === "ArrowUp") {
 				e.preventDefault();
-				setActiveIndex((i) => Math.max(i - 1, 0));
+				setActiveIndex((i) => nextActiveIndex(i, -1, entriesRef.current.length));
 			} else if (e.key === "Enter") {
 				const entry = entriesRef.current[activeIndexRef.current];
 				if (entry) runEntryRef.current(entry);

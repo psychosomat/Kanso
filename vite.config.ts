@@ -64,7 +64,11 @@ const config = defineConfig({
   },
 	plugins: [
 		...(process.env.NODE_ENV === 'development' ? [devtools()] : []),
-		TanStackRouterVite({ target: 'react', autoCodeSplitting: true }),
+		TanStackRouterVite({
+			target: 'react',
+			autoCodeSplitting: true,
+			routeFileIgnorePattern: '\\.test\\.tsx?$',
+		}),
 		tsconfigPaths({ projects: ['./tsconfig.json'] }),
 		tailwindcss(),
 		Icons({ compiler: 'jsx', jsx: 'react' }),

@@ -5,6 +5,13 @@ import { AppStateProvider } from "@/components/layout/app-state";
 import type { PlayerPreferencesDto } from "@/lib/contracts";
 import { getPlayerApi } from "@/lib/player-api";
 
+export function shouldSuppressMiddleClick(
+	button: number,
+	target: { closest: (selector: string) => unknown } | null,
+): boolean {
+	return button === 1 && Boolean(target?.closest("a"));
+}
+
 export const Route = createRootRoute({
 	component: RootDocument,
 });
@@ -12,14 +19,11 @@ export const Route = createRootRoute({
 function RootDocument() {
 	useEffect(() => {
 		const handleAuxClick = (e: MouseEvent) => {
-			if (e.button === 1) {
-				const target = e.target as HTMLElement;
-				const anchor = target.closest("a");
-				if (anchor) {
-					e.preventDefault();
-					e.stopPropagation();
-				}
+			if (!shouldSuppressMiddleClick(e.button, e.target as HTMLElement | null)) {
+				return;
 			}
+			e.preventDefault();
+			e.stopPropagation();
 		};
 		document.addEventListener("auxclick", handleAuxClick, true);
 		return () => document.removeEventListener("auxclick", handleAuxClick, true);

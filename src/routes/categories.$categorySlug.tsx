@@ -41,7 +41,7 @@ const FEED_SORTS: CategoryFeedSort[] = [
 	"manual",
 ];
 
-function feedSortStorageKey(slug: string) {
+export function feedSortStorageKey(slug: string) {
 	return `kanso:feed-sort:${slug}`;
 }
 
@@ -52,7 +52,7 @@ async function runVideoAction(
 	await getPlayerApi().library.runVideoAction(videoId, action);
 }
 
-function readStoredSort(slug: string): CategoryFeedSort {
+export function readStoredSort(slug: string): CategoryFeedSort {
 	try {
 		const value = localStorage.getItem(feedSortStorageKey(slug));
 		return FEED_SORTS.includes(value as CategoryFeedSort)
@@ -326,6 +326,39 @@ function CategoryFeedPage() {
 
 type DropIndicator = { postId: string; edge: "before" | "after" } | null;
 
+export function computeDropEdge(
+	clientY: number,
+	rect: { top: number; height: number },
+): "before" | "after" {
+	return clientY - rect.top < rect.height / 2 ? "before" : "after";
+}
+
+export function computeReorderedIds(
+	orderedIds: string[],
+	sourceId: string,
+	targetId: string,
+	edge: "before" | "after",
+): string[] | null {
+	const fromIndex = orderedIds.indexOf(sourceId);
+	if (fromIndex < 0) return null;
+	const reordered = orderedIds.slice();
+	const [moved] = reordered.splice(fromIndex, 1);
+	if (!moved) return null;
+	const toIndex = reordered.indexOf(targetId);
+	if (toIndex < 0) {
+		reordered.push(moved);
+	} else {
+		reordered.splice(edge === "after" ? toIndex + 1 : toIndex, 0, moved);
+	}
+	if (
+		reordered.length === orderedIds.length &&
+		reordered.every((id, i) => id === orderedIds[i])
+	) {
+		return null;
+	}
+	return reordered;
+}
+
 function DraggablePost({
 	post,
 	enabled,
@@ -361,8 +394,7 @@ function DraggablePost({
 			e.preventDefault();
 			e.dataTransfer.dropEffect = "move";
 			const rect = e.currentTarget.getBoundingClientRect();
-			const edge: "before" | "after" =
-				e.clientY - rect.top < rect.height / 2 ? "before" : "after";
+			const edge = computeDropEdge(e.clientY, rect);
 			setIndicator((current) =>
 				current?.postId === post.id && current.edge === edge
 					? current
@@ -399,27 +431,13 @@ function DraggablePost({
 			const orderedIds = Array.from(
 				grid.querySelectorAll<HTMLElement>("[data-post-id]"),
 			).map((el) => el.dataset.postId ?? "");
-			const fromIndex = orderedIds.indexOf(sourceId);
-			if (fromIndex < 0) return;
-			const reordered = orderedIds.slice();
-			const [moved] = reordered.splice(fromIndex, 1);
-			let toIndex = reordered.indexOf(post.id);
-			if (toIndex < 0) {
-				reordered.push(moved);
-			} else if (edge === "after") {
-				toIndex += 1;
-				reordered.splice(toIndex, 0, moved);
-			} else {
-				reordered.splice(toIndex, 0, moved);
-			}
-			if (
-				!moved ||
-				(reordered.length === orderedIds.length &&
-					reordered.every((id, i) => id === orderedIds[i]))
-			) {
-				return;
-			}
-			onDropPosition(reordered);
+			const reordered = computeReorderedIds(
+				orderedIds,
+				sourceId,
+				post.id,
+				edge,
+			);
+			if (reordered) onDropPosition(reordered);
 		},
 		[
 			indicator,

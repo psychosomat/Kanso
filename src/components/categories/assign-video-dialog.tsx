@@ -23,7 +23,7 @@ import IconFolderPlus from "~icons/tabler/folder-plus";
 import { Button } from "../ui/button";
 import { CategoryFormDialog } from "./category-form-dialog";
 
-type AssignPayload = Array<{ categoryId: string; caption?: string }>;
+export type AssignPayload = Array<{ categoryId: string; caption?: string }>;
 
 type AssignDialogProps = {
 	open: boolean;
@@ -34,7 +34,7 @@ type AssignDialogProps = {
 	onCategoryCreated?: () => Promise<void>;
 };
 
-function buildInitialSelected(
+export function buildInitialSelected(
 	video: VideoDetailDto | null,
 ): Record<string, boolean> {
 	const next: Record<string, boolean> = {};
@@ -43,6 +43,22 @@ function buildInitialSelected(
 		next[category.id] = category.assigned;
 	}
 	return next;
+}
+
+export function buildAssignPayload(
+	categories: Array<{ id: string }>,
+	selected: Record<string, boolean>,
+	captions: Record<string, string>,
+): AssignPayload {
+	const payload: AssignPayload = [];
+	for (const category of categories) {
+		if (!selected[category.id]) continue;
+		payload.push({
+			categoryId: category.id,
+			caption: captions[category.id]?.trim() || undefined,
+		});
+	}
+	return payload;
 }
 
 export function AssignVideoDialog(props: AssignDialogProps) {
@@ -83,14 +99,7 @@ function AssignVideoBody({
 	async function handleSave() {
 		setSaving(true);
 		try {
-			const payload: AssignPayload = [];
-			for (const category of categories) {
-				if (!selected[category.id]) continue;
-				payload.push({
-					categoryId: category.id,
-					caption: captions[category.id]?.trim() || undefined,
-				});
-			}
+			const payload = buildAssignPayload(categories, selected, captions);
 			await onSubmit(payload);
 			onOpenChange(false);
 		} finally {

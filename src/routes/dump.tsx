@@ -51,6 +51,20 @@ import type {
 import { getPlayerApi } from "@/lib/player-api";
 import IconRefresh from "~icons/tabler/refresh";
 
+export function getDumpEmptyMessage(filtersActive: boolean): string {
+	return filtersActive
+		? "No videos match these filters. Try widening the search."
+		: "No unsorted videos. All videos have been organized into categories.";
+}
+
+export function getDumpGridClassName(
+	view: "compact" | "comfortable",
+): string {
+	return view === "comfortable"
+		? "grid grid-cols-2 gap-x-5 gap-y-7 md:grid-cols-3 xl:grid-cols-4 2xl:grid-cols-5"
+		: "grid gap-1 lg:grid-cols-2";
+}
+
 export const Route = createFileRoute("/dump")({
 	component: DumpPage,
 });
@@ -398,13 +412,7 @@ function DumpPage() {
 				)}
 
 				{data && data.items.length > 0 ? (
-					<div
-						className={
-							view === "comfortable"
-								? "grid grid-cols-2 gap-x-5 gap-y-7 md:grid-cols-3 xl:grid-cols-4 2xl:grid-cols-5"
-								: "grid gap-1 lg:grid-cols-2"
-						}
-					>
+					<div className={getDumpGridClassName(view)}>
 						{data.items.map((video, index) => (
 							<div key={video.id} data-video-card data-index={index}>
 								<VideoCard
@@ -436,9 +444,7 @@ function DumpPage() {
 				) : (
 					<div className="flex flex-col items-center justify-center gap-4 rounded-(--radius-lg) border border-dashed border-(--border) p-12 text-center">
 						<p className="text-(--muted-foreground)">
-							{filtersActive
-								? "No videos match these filters. Try widening the search."
-								: "No unsorted videos. All videos have been organized into categories."}
+							{getDumpEmptyMessage(filtersActive)}
 						</p>
 						{filtersActive ? (
 							<Button variant="secondary" onClick={clearFilters}>

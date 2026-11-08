@@ -30,6 +30,7 @@ import {
 	yToGain as eqYToGain,
 } from "@/lib/eq-graph";
 import { clampEqGain, EQ_BANDS, normalizeEqGains } from "@/lib/equalizer";
+import { PLAYBACK_RATE_MAX, PLAYBACK_RATE_MIN } from "@/lib/player-playback";
 import { getPlayerApi } from "@/lib/player-api";
 import {
 	chooseFoldersAndPromptNew,
@@ -63,6 +64,22 @@ const GITHUB_URL = "https://github.com/psychosomat/Kanso";
 export const Route = createFileRoute("/settings")({
 	component: SettingsPage,
 });
+
+export function parseSpeedPreset(value: string): number | null {
+	const parsed = Number(value);
+	if (Number.isNaN(parsed)) return null;
+	return Math.max(
+		PLAYBACK_RATE_MIN,
+		Math.min(PLAYBACK_RATE_MAX, Number(parsed.toFixed(1))),
+	);
+}
+
+export function getScanProgress(
+	status: { scannedFiles: number; totalFiles: number } | null | undefined,
+): number | null {
+	if (!status || status.totalFiles <= 0) return null;
+	return Math.round((status.scannedFiles / status.totalFiles) * 100);
+}
 
 function SettingsPage() {
 	useScrollRestore("/settings");
@@ -265,16 +282,12 @@ function SettingsPage() {
 		key: "speedPresetPrimary" | "speedPresetSecondary",
 		value: string,
 	) {
-		const parsed = Number(value);
-		if (Number.isNaN(parsed)) return;
-		const clamped = Math.max(0.2, Math.min(4, Number(parsed.toFixed(1))));
+		const clamped = parseSpeedPreset(value);
+		if (clamped === null) return;
 		await savePreferences({ [key]: clamped });
 	}
 
-	const scanProgress =
-		scanStatus && scanStatus.totalFiles > 0
-			? Math.round((scanStatus.scannedFiles / scanStatus.totalFiles) * 100)
-			: null;
+	const scanProgress = getScanProgress(scanStatus);
 
 	const hasSourcePaths = library && library.sourcePaths.length > 0;
 	const anyWatchEnabled =

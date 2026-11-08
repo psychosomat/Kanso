@@ -76,6 +76,22 @@ import IconTrash from "~icons/tabler/trash";
 import IconVolume from "~icons/tabler/volume";
 import IconVolumeOff from "~icons/tabler/volume-off";
 
+export function getVolumePercent(prefs: PlayerPreferencesDto | null): number {
+	return Math.round(
+		(prefs?.playerMuted ? 0 : (prefs?.playerVolume ?? 1)) * 100,
+	);
+}
+
+export function buildSpeedPresets(
+	primary: number | undefined,
+	secondary: number | undefined,
+): number[] {
+	const raw = [primary ?? 1, secondary ?? 2.2, 1];
+	return [...new Set(raw.map((value) => normalizePlaybackRate(value)))].sort(
+		(a, b) => a - b,
+	);
+}
+
 export const Route = createFileRoute("/player/$videoId")({
 	component: LibraryPlayerRoute,
 });
@@ -834,20 +850,16 @@ export function PlayerPage({
 		}
 	}
 
-	const volumePercent = Math.round(
-		(prefs?.playerMuted ? 0 : (prefs?.playerVolume ?? 1)) * 100,
-	);
+	const volumePercent = getVolumePercent(prefs);
 
-	const speedPresets = useMemo(() => {
-		const raw = [
-			prefs?.speedPresetPrimary ?? 1,
-			prefs?.speedPresetSecondary ?? 2.2,
-			1,
-		];
-		return [...new Set(raw.map((value) => normalizePlaybackRate(value)))].sort(
-			(a, b) => a - b,
-		);
-	}, [prefs?.speedPresetPrimary, prefs?.speedPresetSecondary]);
+	const speedPresets = useMemo(
+		() =>
+			buildSpeedPresets(
+				prefs?.speedPresetPrimary,
+				prefs?.speedPresetSecondary,
+			),
+		[prefs?.speedPresetPrimary, prefs?.speedPresetSecondary],
+	);
 
 	// Page entrance animation
 	useGSAP(
