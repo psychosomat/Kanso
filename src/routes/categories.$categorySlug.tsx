@@ -1,10 +1,12 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { type DragEvent, useCallback, useEffect, useState } from "react";
 import { AssignVideoDialog } from "@/components/categories/assign-video-dialog";
+import { DeleteCategoryDialog } from "@/components/categories/delete-category-dialog";
 import { useAppState } from "@/components/layout/app-state";
 import { PageFrame } from "@/components/shared/page-frame";
 import { VideoCard } from "@/components/shared/video-card";
 import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
 import {
 	Select,
 	SelectContent,
@@ -26,6 +28,7 @@ import {
 	hasDraggedPost,
 	setDraggedPostId,
 } from "@/lib/video-drag";
+import IconTrash from "~icons/tabler/trash";
 
 export const Route = createFileRoute("/categories/$categorySlug")({
 	component: CategoryFeedPage,
@@ -73,6 +76,7 @@ function CategoryFeedPage() {
 		null,
 	);
 	const [assignOpen, setAssignOpen] = useState(false);
+	const [deleteOpen, setDeleteOpen] = useState(false);
 	const [reorderError, setReorderError] = useState<string | null>(null);
 	const [reordering, setReordering] = useState(false);
 
@@ -243,11 +247,25 @@ function CategoryFeedPage() {
 								<SelectItem value="manual">Manual</SelectItem>
 							</SelectContent>
 						</Select>
+						{data?.category && (
+							<Button
+								variant="destructive"
+								size="icon"
+								aria-label="Delete board"
+								title="Delete board"
+								onClick={() => setDeleteOpen(true)}
+							>
+								<IconTrash size={16} />
+							</Button>
+						)}
 					</>
 				}
 			>
 				{reorderError ? (
-					<p role="alert" className="mb-3 rounded-(--radius) border border-(--destructive)/30 bg-(--destructive)/10 px-3 py-2 text-xs text-(--destructive)">
+					<p
+						role="alert"
+						className="mb-3 rounded-(--radius) border border-(--destructive)/30 bg-(--destructive)/10 px-3 py-2 text-xs text-(--destructive)"
+					>
 						{reorderError}
 					</p>
 				) : null}
@@ -296,6 +314,11 @@ function CategoryFeedPage() {
 				categories={categories}
 				video={selectedVideo}
 				onSubmit={submitAssignments}
+			/>
+			<DeleteCategoryDialog
+				open={deleteOpen}
+				onOpenChange={setDeleteOpen}
+				category={data?.category ?? null}
 			/>
 		</>
 	);

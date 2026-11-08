@@ -23,7 +23,9 @@ import IconPin from "~icons/tabler/pin";
 import IconPinFilled from "~icons/tabler/pin-filled";
 import IconSearch from "~icons/tabler/search";
 import IconSettings from "~icons/tabler/settings";
+import IconTrash from "~icons/tabler/trash";
 import { CategoryFormDialog } from "../categories/category-form-dialog";
+import { DeleteCategoryDialog } from "../categories/delete-category-dialog";
 import { CommandPalette } from "../shared/command-palette";
 import { Button } from "../ui/button";
 import {
@@ -214,6 +216,9 @@ function SidebarContent({ onOpenPalette }: { onOpenPalette: () => void }) {
 	const [editingCategory, setEditingCategory] = useState<CategoryDto | null>(
 		null,
 	);
+	const [deletingCategory, setDeletingCategory] = useState<CategoryDto | null>(
+		null,
+	);
 
 	async function handleCreateCategory(input: {
 		name: string;
@@ -349,6 +354,7 @@ function SidebarContent({ onOpenPalette }: { onOpenPalette: () => void }) {
 									setCreateDialogOpen(true);
 								}}
 								onEdit={(nextCategory) => setEditingCategory(nextCategory)}
+								onDelete={(nextCategory) => setDeletingCategory(nextCategory)}
 								onToggleCollapsed={toggleCategoryCollapsed}
 								isCollapsed={isCategoryCollapsed}
 								onDropVideo={handleDropVideo}
@@ -436,6 +442,13 @@ function SidebarContent({ onOpenPalette }: { onOpenPalette: () => void }) {
 				categories={categories}
 				onSubmit={handleEditCategory}
 			/>
+			<DeleteCategoryDialog
+				open={deletingCategory !== null}
+				onOpenChange={(open) => {
+					if (!open) setDeletingCategory(null);
+				}}
+				category={deletingCategory}
+			/>
 		</div>
 	);
 }
@@ -445,6 +458,7 @@ function CategoryTreeItem({
 	pathname,
 	onCreateChild,
 	onEdit,
+	onDelete,
 	onToggleCollapsed,
 	isCollapsed,
 	onDropVideo,
@@ -453,6 +467,7 @@ function CategoryTreeItem({
 	pathname: string;
 	onCreateChild: (parentCategoryId: string) => void;
 	onEdit: (category: CategoryDto) => void;
+	onDelete: (category: CategoryDto) => void;
 	onToggleCollapsed: (categoryId: string) => void;
 	isCollapsed: (categoryId: string) => boolean;
 	onDropVideo: (videoId: string, categoryId: string) => Promise<void>;
@@ -571,6 +586,13 @@ function CategoryTreeItem({
 						<IconPencil size={16} />
 						Edit board
 					</ContextMenuItem>
+					<ContextMenuItem
+						onClick={() => onDelete(category)}
+						className="text-(--destructive)"
+					>
+						<IconTrash size={16} />
+						Delete board
+					</ContextMenuItem>
 				</ContextMenuContent>
 			</ContextMenu>
 			{!collapsed &&
@@ -581,6 +603,7 @@ function CategoryTreeItem({
 						pathname={pathname}
 						onCreateChild={onCreateChild}
 						onEdit={onEdit}
+						onDelete={onDelete}
 						onToggleCollapsed={onToggleCollapsed}
 						isCollapsed={isCollapsed}
 						onDropVideo={onDropVideo}

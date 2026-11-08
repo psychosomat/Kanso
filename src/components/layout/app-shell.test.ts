@@ -1,5 +1,5 @@
 // @vitest-environment jsdom
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import {
 	getAppShellShortcut,
 	isPlayerPath,
@@ -166,9 +166,20 @@ describe("isTypingTarget", () => {
 
 describe("sidebar pinned storage", () => {
 	it("round-trips through localStorage", () => {
-		storeSidebarPinned(true);
-		expect(loadSidebarPinned()).toBe(true);
-		storeSidebarPinned(false);
-		expect(loadSidebarPinned()).toBe(false);
+		const store = new Map<string, string>();
+		vi.stubGlobal("localStorage", {
+			getItem: (key: string) => store.get(key) ?? null,
+			setItem: (key: string, value: string) => {
+				store.set(key, value);
+			},
+		});
+		try {
+			storeSidebarPinned(true);
+			expect(loadSidebarPinned()).toBe(true);
+			storeSidebarPinned(false);
+			expect(loadSidebarPinned()).toBe(false);
+		} finally {
+			vi.unstubAllGlobals();
+		}
 	});
 });

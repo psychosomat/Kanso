@@ -70,6 +70,67 @@ describe("DatabaseService", () => {
 		expect(second.slug).toBe("highlights-2");
 	});
 
+	it("removes a category and its posts while promoting children and keeping videos", () => {
+		const videoId = db.upsertVideo({
+			sourcePath: "C:\\library\\clip.mp4",
+			fileName: "clip.mp4",
+			folderPath: "C:\\library",
+			fileSize: 100,
+			modifiedAt: "2026-04-05T00:00:00.000Z",
+			durationSec: 10,
+			width: 1920,
+			height: 1080,
+			fps: 30,
+			codecVideo: "h264",
+			codecAudio: "aac",
+			bitrate: 1000,
+			posterPath: null,
+		});
+		const parent = db.createCategory({ name: "Parent" });
+		const child = db.createCategory({
+			name: "Child",
+			parentCategoryId: parent.id,
+		});
+		const survivor = db.createCategory({ name: "Survivor" });
+		db.addVideoToCategories({
+			videoId,
+			categories: [{ categoryId: parent.id }, { categoryId: survivor.id }],
+		});
+
+		db.removeCategory(parent.id);
+
+		const remaining = db.listCategories();
+		expect(remaining.map((category) => category.id)).toEqual([
+			child.id,
+			survivor.id,
+		]);
+		expect(
+			remaining.find((category) => category.id === child.id)?.parentCategoryId,
+		).toBeNull();
+		expect(
+			remaining.find((category) => category.id === survivor.id)?.postCount,
+		).toBe(1);
+		expect(db.getVideoById(videoId)?.assignedCategoryCount).toBe(1);
+		expect(
+			db
+				.getDumpPage({
+					sort: "recent",
+					order: "desc",
+					page: 1,
+					pageSize: 10,
+				})
+				.items.find((item) => item.id === videoId)?.categoryCount,
+		).toBe(1);
+		expect(() =>
+			db.getCategoryFeed({
+				categoryId: parent.id,
+				page: 1,
+				pageSize: 10,
+				sort: "newestPost",
+			}),
+		).toThrow("Category not found.");
+	});
+
 	it("returns the existing source path row when adding a duplicate library folder", () => {
 		const first = db.addLibrarySourcePath("C:\\library");
 		const second = db.addLibrarySourcePath("C:\\library");
