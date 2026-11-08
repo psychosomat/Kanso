@@ -10,9 +10,9 @@ name: Release
 # Производительность:
 # - Веб-сборка (vite + tsup) платформо-независима и выполняется ОДИН раз
 #   в build-web; упаковочные джобы забирают готовые dist/ через артефакт.
-# - macOS собирается целиком на одном macos-14: electron-builder делает
+# - macOS собирается целиком на одном arm64-раннере macos-15: electron-builder делает
 #   оба арха (--arm64 --x64), QuickLook-плагин в Release и так universal.
-#   Отдельный macos-15-intel убран — Intel-раннеры дают многочасовые очереди.
+#   Intel-раннеры (macos-15-intel) дают многочасовые очереди, поэтому не используются.
 
 on:
   release:
@@ -233,7 +233,7 @@ jobs:
     needs:
       - resolve
       - build-web
-    runs-on: macos-14
+    runs-on: macos-15
     timeout-minutes: 30
     env:
       CSC_IDENTITY_AUTO_DISCOVERY: false
