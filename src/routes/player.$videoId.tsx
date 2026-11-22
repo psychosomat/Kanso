@@ -14,7 +14,6 @@ import { useAppState } from "@/components/layout/app-state";
 import { RemoveVideoDialog } from "@/components/shared/remove-video-dialog";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { Slider } from "@/components/ui/slider";
 import {
 	Select,
 	SelectContent,
@@ -30,17 +29,14 @@ import {
 	SheetTitle,
 	SheetTrigger,
 } from "@/components/ui/sheet";
+import { Slider } from "@/components/ui/slider";
 import { useEscapeLayer } from "@/hooks/use-escape-layer";
 import { usePlayerHotkeys } from "@/hooks/use-player-hotkeys";
 import { usePlayerUiVisibility } from "@/hooks/use-player-ui-visibility";
 import { CategoryIcon } from "@/lib/category-icons";
 import type { PlayableVideoDto, PlayerPreferencesDto } from "@/lib/contracts";
 import { getPlayerApi } from "@/lib/player-api";
-import {
-	applyEqGains,
-	connectEqGraph,
-	ensureEqNodes,
-} from "@/lib/player-eq-graph";
+import { syncVideoEqGraph } from "@/lib/player-eq-graph";
 import {
 	clampSeekTarget,
 	clampVolume,
@@ -51,13 +47,15 @@ import {
 	PLAYBACK_RATE_MIN,
 	resolveCurrentVolume,
 } from "@/lib/player-playback";
-import { getPlayerReturnTarget } from "@/lib/player-return";
+import {
+	getPlayerReturnTarget,
+	resolveSafeReturnPathname,
+} from "@/lib/player-return";
 import { averagePosterColor } from "@/lib/poster-glow";
 import {
 	cn,
 	formatBytes,
 	formatDateTime,
-	formatDuration,
 	formatResolution,
 	resolveTitlebarMode,
 	shouldResume,
@@ -75,6 +73,24 @@ import IconRepeat from "~icons/tabler/repeat";
 import IconTrash from "~icons/tabler/trash";
 import IconVolume from "~icons/tabler/volume";
 import IconVolumeOff from "~icons/tabler/volume-off";
+
+export function formatClock(seconds: number | null | undefined): string {
+	if (
+		seconds === null ||
+		seconds === undefined ||
+		!Number.isFinite(seconds) ||
+		seconds < 0
+	) {
+		return "Unknown";
+	}
+	const total = Math.floor(seconds);
+	const hours = Math.floor(total / 3600);
+	const minutes = Math.floor((total % 3600) / 60);
+	const secs = total % 60;
+	return hours > 0
+		? `${hours}:${String(minutes).padStart(2, "0")}:${String(secs).padStart(2, "0")}`
+		: `${minutes}:${String(secs).padStart(2, "0")}`;
+}
 
 export function getVolumePercent(prefs: PlayerPreferencesDto | null): number {
 	return Math.round(
@@ -146,6 +162,7 @@ export function PlayerPage({
 	const [ambient, setAmbient] = useState<string | null>(null);
 	const [paletteOpen, setPaletteOpen] = useState(false);
 	const [speedOpen, setSpeedOpen] = useState(false);
+	const [hudHovered, setHudHovered] = useState(false);
 
 	const videoRef = useRef<HTMLVideoElement | null>(null);
 	const previewVideoRef = useRef<HTMLVideoElement | null>(null);
@@ -158,6 +175,8 @@ export function PlayerPage({
 	const bottomBarRef = useRef<HTMLDivElement | null>(null);
 	const previewSeekBusyRef = useRef(false);
 	const previewSeekQueuedRef = useRef<number | null>(null);
+	const previewWaitingMetadataRef = useRef(false);
+	const previewSrcRef = useRef<string | null>(null);
 	const wasPlayingBeforeScrubRef = useRef(false);
 	const audioContextRef = useRef<AudioContext | null>(null);
 	const sourceNodeRef = useRef<MediaElementAudioSourceNode | null>(null);
@@ -165,9 +184,24 @@ export function PlayerPage({
 		WeakMap<HTMLVideoElement, MediaElementAudioSourceNode>
 	>(new WeakMap());
 	const eqNodesRef = useRef<BiquadFilterNode[]>([]);
+	const connectedEqModeRef = useRef<boolean | null>(null);
+	const connectedSourceRef = useRef<MediaElementAudioSourceNode | null>(null);
+
+	const videoStateRef = useRef(video);
+	const prefsRef = useRef(prefs);
+	const isScrubbingRef = useRef(isScrubbing);
+	const isLoopingRef = useRef(isLooping);
+	const playbackRateRef = useRef(playbackRate);
 
 	const { isVisible, resetTimer } = usePlayerUiVisibility({
-		suspended: speedOpen,
+		suspended:
+			speedOpen ||
+			detailsOpen ||
+			assignOpen ||
+			removeDialogOpen ||
+			isScrubbing ||
+			!playing ||
+			hudHovered,
 	});
 
 	const applyEq = useCallback(
@@ -175,32 +209,48 @@ export function PlayerPage({
 			const videoElement = videoRef.current;
 			if (!videoElement) return;
 
-			if (!audioContextRef.current) {
-				audioContextRef.current = new AudioContext();
-			}
-			const ctx = audioContextRef.current;
+			const nextState = syncVideoEqGraph({
+				videoElement,
+				enabled,
+				gains,
+				sourceNodes: __sourceNodeMapRef.current,
+				state: {
+					audioContext: audioContextRef.current,
+					sourceNode: sourceNodeRef.current,
+					eqNodes: eqNodesRef.current,
+					connectedMode: connectedEqModeRef.current,
+					connectedSource: connectedSourceRef.current,
+				},
+			});
 
-			if (ctx.state === "suspended") {
-				void ctx.resume();
-			}
-
-			// Get or create source node for this video element (can only create once per element)
-			let sourceNode = __sourceNodeMapRef.current.get(videoElement);
-			if (!sourceNode) {
-				sourceNode = ctx.createMediaElementSource(videoElement);
-				__sourceNodeMapRef.current.set(videoElement, sourceNode);
-			}
-			sourceNodeRef.current = sourceNode;
-
-			eqNodesRef.current = ensureEqNodes(ctx, eqNodesRef.current);
-			applyEqGains(eqNodesRef.current, enabled, gains);
-			connectEqGraph(sourceNode, eqNodesRef.current, ctx.destination, enabled);
+			audioContextRef.current = nextState.audioContext;
+			sourceNodeRef.current = nextState.sourceNode;
+			eqNodesRef.current = nextState.eqNodes;
+			connectedEqModeRef.current = nextState.connectedMode;
+			connectedSourceRef.current = nextState.connectedSource;
 		},
 		[],
 	);
 
+	const applyEqRef = useRef(applyEq);
+
+	useEffect(() => {
+		return () => {
+			const ctx = audioContextRef.current;
+			audioContextRef.current = null;
+			sourceNodeRef.current = null;
+			connectedEqModeRef.current = null;
+			connectedSourceRef.current = null;
+			eqNodesRef.current = [];
+			if (ctx && ctx.state !== "closed") {
+				void ctx.close().catch(() => {});
+			}
+		};
+	}, []);
+
 	useEffect(() => {
 		if (!window.playerApi) return;
+		let cancelled = false;
 		const api = getPlayerApi();
 		const videoPromise =
 			mode === "library" && videoId
@@ -211,7 +261,11 @@ export function PlayerPage({
 
 		void Promise.all([videoPromise, api.player.getPreferences()]).then(
 			([videoDetail, preferences]) => {
+				if (cancelled) return;
 				completedMarkedRef.current = false;
+				setPlaying(false);
+				setCurrentTime(0);
+				setDuration(videoDetail?.durationSec ?? 0);
 				setVideo(videoDetail);
 				setPrefs(preferences);
 				setPlaybackRate(
@@ -222,29 +276,63 @@ export function PlayerPage({
 					),
 				);
 				setIsLooping(preferences.playerLoop ?? false);
-				applyEq(preferences.playerEqEnabled, preferences.playerEqGains);
 			},
 		);
-	}, [applyEq, mode, sourcePath, videoId]);
+
+		return () => {
+			cancelled = true;
+		};
+	}, [mode, sourcePath, videoId]);
 
 	useEffect(() => {
+		const currentVideo = videoStateRef.current;
 		if (
-			!isLibraryVideo(video) ||
+			!isLibraryVideo(currentVideo) ||
 			!scanStatus ||
-			scanStatus.stage !== "watch" ||
-			scanStatus.currentPath !== video.sourcePath
+			scanStatus.stage !== "watch"
 		) {
 			return;
 		}
 
+		const isWin32 =
+			typeof window !== "undefined" &&
+			window.playerApi?.app.getPlatform() === "win32";
+		const pathMatches =
+			scanStatus.currentPath === null ||
+			(isWin32
+				? scanStatus.currentPath.toLowerCase() ===
+					currentVideo.sourcePath.toLowerCase()
+				: scanStatus.currentPath === currentVideo.sourcePath);
+		if (!pathMatches) {
+			return;
+		}
+
+		const targetVideoId = currentVideo.id;
+		let cancelled = false;
+
 		void getPlayerApi()
-			.library.getVideo(video.id)
+			.library.getVideo(targetVideoId)
 			.then((nextVideo) => {
+				if (cancelled) return;
+				if (!nextVideo) {
+					videoRef.current?.pause();
+					setVideo((current) =>
+						current && current.id === targetVideoId
+							? { ...current, exists: false }
+							: current,
+					);
+					return;
+				}
 				setVideo(nextVideo);
-				if (nextVideo?.exists !== false) return;
-				videoRef.current?.pause();
+				if (nextVideo.exists === false) {
+					videoRef.current?.pause();
+				}
 			});
-	}, [scanStatus, video]);
+
+		return () => {
+			cancelled = true;
+		};
+	}, [scanStatus]);
 
 	const setRate = useCallback((value: number) => {
 		const normalized = normalizePlaybackRate(value);
@@ -262,56 +350,105 @@ export function PlayerPage({
 		});
 	}, []);
 
-	const syncPreviewFrame = useCallback((time: number) => {
+	const ensurePreviewVideoSrc = useCallback(() => {
 		const previewVideo = previewVideoRef.current;
-		if (!previewVideo || Number.isNaN(time)) return;
-
-		if (previewSeekBusyRef.current) {
-			previewSeekQueuedRef.current = time;
-			return;
+		const streamUrl = videoStateRef.current?.streamUrl;
+		if (!previewVideo || !streamUrl) return false;
+		if (previewSrcRef.current !== streamUrl) {
+			previewSrcRef.current = streamUrl;
+			previewWaitingMetadataRef.current = false;
+			previewVideo.src = streamUrl;
+			previewVideo.load();
 		}
-
-		previewSeekBusyRef.current = true;
-		const onSeeked = () => {
-			const canvas = previewCanvasRef.current;
-			if (
-				canvas &&
-				previewVideo.videoWidth > 0 &&
-				previewVideo.videoHeight > 0
-			) {
-				const context = canvas.getContext("2d");
-				if (context) {
-					canvas.width = 240;
-					canvas.height = Math.max(
-						135,
-						Math.round(
-							(previewVideo.videoHeight / previewVideo.videoWidth) * 240,
-						),
-					);
-					context.drawImage(previewVideo, 0, 0, canvas.width, canvas.height);
-					setTimelinePreview((current) => ({
-						...current,
-						frameUrl: canvas.toDataURL("image/jpeg", 0.72),
-					}));
-				}
-			}
-
-			previewSeekBusyRef.current = false;
-			previewVideo.removeEventListener("seeked", onSeeked);
-
-			const queued = previewSeekQueuedRef.current;
-			previewSeekQueuedRef.current = null;
-			if (
-				queued !== null &&
-				Math.abs(queued - previewVideo.currentTime) > 0.1
-			) {
-				syncPreviewFrame(queued);
-			}
-		};
-
-		previewVideo.addEventListener("seeked", onSeeked, { once: true });
-		previewVideo.currentTime = time;
+		return true;
 	}, []);
+
+	const syncPreviewFrame = useCallback(
+		(time: number) => {
+			const previewVideo = previewVideoRef.current;
+			if (!previewVideo || Number.isNaN(time)) return;
+			if (!ensurePreviewVideoSrc()) return;
+
+			if (previewVideo.readyState < 1) {
+				previewSeekQueuedRef.current = time;
+				if (!previewWaitingMetadataRef.current) {
+					previewWaitingMetadataRef.current = true;
+					const onMetadata = () => {
+						previewWaitingMetadataRef.current = false;
+						const queued = previewSeekQueuedRef.current;
+						previewSeekQueuedRef.current = null;
+						if (queued !== null) {
+							syncPreviewFrame(queued);
+						}
+					};
+					const onError = () => {
+						previewWaitingMetadataRef.current = false;
+					};
+					previewVideo.addEventListener("loadedmetadata", onMetadata, {
+						once: true,
+					});
+					previewVideo.addEventListener("error", onError, { once: true });
+				}
+				return;
+			}
+
+			if (previewSeekBusyRef.current) {
+				previewSeekQueuedRef.current = time;
+				return;
+			}
+
+			const capturePreviewFrame = () => {
+				const canvas = previewCanvasRef.current;
+				if (
+					canvas &&
+					previewVideo.videoWidth > 0 &&
+					previewVideo.videoHeight > 0
+				) {
+					const context = canvas.getContext("2d");
+					if (context) {
+						canvas.width = 240;
+						canvas.height = Math.max(
+							135,
+							Math.round(
+								(previewVideo.videoHeight / previewVideo.videoWidth) * 240,
+							),
+						);
+						context.drawImage(previewVideo, 0, 0, canvas.width, canvas.height);
+						setTimelinePreview((current) => ({
+							...current,
+							frameUrl: canvas.toDataURL("image/jpeg", 0.72),
+						}));
+					}
+				}
+
+				previewSeekBusyRef.current = false;
+
+				const queued = previewSeekQueuedRef.current;
+				previewSeekQueuedRef.current = null;
+				if (
+					queued !== null &&
+					Math.abs(queued - previewVideo.currentTime) > 0.1
+				) {
+					syncPreviewFrame(queued);
+				}
+			};
+
+			if (
+				Math.abs(previewVideo.currentTime - time) < 0.01 &&
+				previewVideo.readyState >= 2
+			) {
+				capturePreviewFrame();
+				return;
+			}
+
+			previewSeekBusyRef.current = true;
+			previewVideo.addEventListener("seeked", capturePreviewFrame, {
+				once: true,
+			});
+			previewVideo.currentTime = time;
+		},
+		[ensurePreviewVideoSrc],
+	);
 
 	const togglePlay = useCallback(async () => {
 		const element = videoRef.current;
@@ -422,19 +559,31 @@ export function PlayerPage({
 		[playbackRate, setRate],
 	);
 
-	const handleBack = useCallback(() => {
-		const returnTarget = getPlayerReturnTarget();
-		if (returnTarget?.pathname) {
-			void router.navigate({ to: returnTarget.pathname as never });
-			return;
-		}
+	const handleBack = useCallback(
+		async (options?: { skipSaveProgress?: boolean }) => {
+			if (document.fullscreenElement) {
+				await document.exitFullscreen().catch(() => {});
+			}
 
-		if (window.history.length > 1) {
-			router.history.back();
-			return;
-		}
-		void router.navigate({ to: "/dump" });
-	}, [router]);
+			const element = videoRef.current;
+			if (element) {
+				element.pause();
+				const currentVideo = videoStateRef.current;
+				if (!options?.skipSaveProgress && isLibraryVideo(currentVideo)) {
+					void getPlayerApi()
+						.player.saveProgress({
+							videoId: currentVideo.id,
+							resumeSec: element.currentTime,
+						})
+						.catch(() => {});
+				}
+			}
+
+			const safeReturnPath = resolveSafeReturnPathname(getPlayerReturnTarget());
+			await router.navigate({ to: (safeReturnPath ?? "/dump") as never });
+		},
+		[router],
+	);
 
 	const cycleSpeed = useCallback(() => {
 		const next = nextSpeedPreset(
@@ -490,7 +639,9 @@ export function PlayerPage({
 			if (isLibraryVideo(video)) setAssignOpen((open) => !open);
 		},
 		onToggleDetails: () => setDetailsOpen((open) => !open),
-		onExit: handleBack,
+		onExit: () => {
+			void handleBack();
+		},
 		onVolumeUp: () => adjustVolumeBy(VOLUME_STEP),
 		onVolumeDown: () => adjustVolumeBy(-VOLUME_STEP),
 	});
@@ -498,8 +649,14 @@ export function PlayerPage({
 	const updateTimelinePreview = useCallback(
 		(clientX: number) => {
 			const track = timelineTrackRef.current;
-			const mediaDuration = videoRef.current?.duration || duration;
+			const mediaDuration =
+				Number.isFinite(videoRef.current?.duration) &&
+				(videoRef.current?.duration ?? 0) > 0
+					? (videoRef.current?.duration as number)
+					: duration;
 			if (!track || !mediaDuration) return;
+
+			ensurePreviewVideoSrc();
 
 			const rect = track.getBoundingClientRect();
 			const ratio = Math.max(
@@ -516,7 +673,7 @@ export function PlayerPage({
 			}));
 			syncPreviewFrame(nextTime);
 		},
-		[duration, syncPreviewFrame],
+		[duration, ensurePreviewVideoSrc, syncPreviewFrame],
 	);
 
 	const startScrub = useCallback(
@@ -567,37 +724,111 @@ export function PlayerPage({
 	);
 
 	useEffect(() => {
+		videoStateRef.current = video;
+		prefsRef.current = prefs;
+		isScrubbingRef.current = isScrubbing;
+		isLoopingRef.current = isLooping;
+		playbackRateRef.current = playbackRate;
+		applyEqRef.current = applyEq;
+	}, [applyEq, isLooping, isScrubbing, playbackRate, prefs, video]);
+
+	const activeVideoId = video?.id;
+	const activeStreamUrl = video?.streamUrl;
+
+	useEffect(() => {
 		const element = videoRef.current;
-		if (!element || !video) return;
+		if (!element || !activeStreamUrl || activeVideoId === undefined) return;
 
 		const onLoadedMetadata = () => {
-			setDuration(element.duration || video.durationSec || 0);
-			if (shouldResume(video.resumeSec, video.durationSec)) {
-				element.currentTime = video.resumeSec;
-				setCurrentTime(video.resumeSec);
+			const currentVideo = videoStateRef.current;
+			if (!currentVideo) return;
+
+			const elementDuration =
+				Number.isFinite(element.duration) && element.duration > 0
+					? element.duration
+					: null;
+			const resolvedDuration = elementDuration ?? currentVideo.durationSec ?? 0;
+			setDuration(resolvedDuration);
+
+			if (
+				shouldResume(
+					currentVideo.resumeSec,
+					elementDuration ?? currentVideo.durationSec,
+				)
+			) {
+				element.currentTime = currentVideo.resumeSec;
+				setCurrentTime(currentVideo.resumeSec);
 			}
-			if (prefs) {
-				element.volume = prefs.playerVolume;
-				element.muted = prefs.playerMuted;
+
+			const currentPrefs = prefsRef.current;
+			if (currentPrefs) {
+				element.volume = currentPrefs.playerVolume;
+				element.muted = currentPrefs.playerMuted;
 			}
-			element.playbackRate = playbackRate;
-			applyEq(prefs?.playerEqEnabled ?? false, prefs?.playerEqGains);
+			element.playbackRate = playbackRateRef.current;
+			applyEqRef.current(
+				currentPrefs?.playerEqEnabled ?? false,
+				currentPrefs?.playerEqGains,
+			);
+
+			if (
+				isLibraryVideo(currentVideo) &&
+				(!currentVideo.durationSec ||
+					!currentVideo.width ||
+					!currentVideo.height) &&
+				elementDuration !== null
+			) {
+				const nextWidth = element.videoWidth || null;
+				const nextHeight = element.videoHeight || null;
+				void (
+					getPlayerApi().library as {
+						updateVideoMetadata?: (input: {
+							videoId: string;
+							durationSec?: number | null;
+							width?: number | null;
+							height?: number | null;
+						}) => Promise<void>;
+					}
+				).updateVideoMetadata?.({
+					videoId: currentVideo.id,
+					durationSec: elementDuration,
+					width: nextWidth,
+					height: nextHeight,
+				});
+				setVideo((prev) =>
+					prev && prev.id === currentVideo.id
+						? {
+								...prev,
+								durationSec: prev.durationSec ?? elementDuration,
+								width: prev.width ?? nextWidth,
+								height: prev.height ?? nextHeight,
+							}
+						: prev,
+				);
+			}
 		};
 
 		const onTimeUpdate = () => {
-			if (!isScrubbing) {
+			const currentVideo = videoStateRef.current;
+			if (!currentVideo) return;
+			if (!isScrubbingRef.current) {
 				setCurrentTime(element.currentTime);
 			}
-			setDuration(element.duration || video.durationSec || 0);
+			const nextDuration =
+				Number.isFinite(element.duration) && element.duration > 0
+					? element.duration
+					: (currentVideo.durationSec ?? 0);
+			setDuration(nextDuration);
 			if (
-				isLibraryVideo(video) &&
+				isLibraryVideo(currentVideo) &&
 				!completedMarkedRef.current &&
-				element.duration &&
+				Number.isFinite(element.duration) &&
+				element.duration > 0 &&
 				element.currentTime / element.duration >= 0.9
 			) {
 				completedMarkedRef.current = true;
 				void getPlayerApi().player.markPlayed({
-					videoId: video.id,
+					videoId: currentVideo.id,
 					completed: true,
 				});
 			}
@@ -606,26 +837,28 @@ export function PlayerPage({
 		const onPlay = () => setPlaying(true);
 		const onPause = () => {
 			setPlaying(false);
-			if (!isLibraryVideo(video)) return;
+			const currentVideo = videoStateRef.current;
+			if (!isLibraryVideo(currentVideo)) return;
 			void getPlayerApi().player.saveProgress({
-				videoId: video.id,
+				videoId: currentVideo.id,
 				resumeSec: element.currentTime,
 			});
 		};
 
 		const onEnded = () => {
-			if (isLooping && videoRef.current) {
+			if (isLoopingRef.current && videoRef.current) {
 				videoRef.current.currentTime = 0;
 				void videoRef.current.play();
 				completedMarkedRef.current = false;
 				return;
 			}
 			setPlaying(false);
-			if (!isLibraryVideo(video)) return;
+			const currentVideo = videoStateRef.current;
+			if (!isLibraryVideo(currentVideo)) return;
 			if (completedMarkedRef.current) return;
 			completedMarkedRef.current = true;
 			void getPlayerApi().player.markPlayed({
-				videoId: video.id,
+				videoId: currentVideo.id,
 				completed: true,
 			});
 		};
@@ -637,9 +870,10 @@ export function PlayerPage({
 		element.addEventListener("ended", onEnded);
 
 		const interval = window.setInterval(() => {
-			if (!element.paused && isLibraryVideo(video)) {
+			const currentVideo = videoStateRef.current;
+			if (!element.paused && isLibraryVideo(currentVideo)) {
 				void getPlayerApi().player.saveProgress({
-					videoId: video.id,
+					videoId: currentVideo.id,
 					resumeSec: element.currentTime,
 				});
 			}
@@ -653,14 +887,32 @@ export function PlayerPage({
 			element.removeEventListener("pause", onPause);
 			element.removeEventListener("ended", onEnded);
 		};
-	}, [applyEq, isLooping, isScrubbing, playbackRate, prefs, video]);
+	}, [activeVideoId, activeStreamUrl]);
 
 	useEffect(() => {
 		const previewVideo = previewVideoRef.current;
-		if (!previewVideo || !video?.streamUrl) return;
-		previewVideo.src = video.streamUrl;
-		previewVideo.load();
-	}, [video?.streamUrl]);
+		previewSeekBusyRef.current = false;
+		previewSeekQueuedRef.current = null;
+		previewWaitingMetadataRef.current = false;
+		previewSrcRef.current = null;
+		setTimelinePreview((current) =>
+			current.frameUrl === null && !current.visible
+				? current
+				: { ...current, visible: false, frameUrl: null },
+		);
+		if (previewVideo && activeStreamUrl !== undefined) {
+			previewVideo.removeAttribute("src");
+			previewVideo.load();
+		}
+		return () => {
+			previewSrcRef.current = null;
+			previewWaitingMetadataRef.current = false;
+			if (previewVideo) {
+				previewVideo.removeAttribute("src");
+				previewVideo.load();
+			}
+		};
+	}, [activeStreamUrl]);
 
 	useEffect(() => {
 		if (!video?.posterUrl) {
@@ -697,11 +949,12 @@ export function PlayerPage({
 		element.playbackRate = playbackRate;
 	}, [playbackRate]);
 
+	const playerEqEnabled = prefs?.playerEqEnabled ?? false;
+	const playerEqGains = prefs?.playerEqGains;
+
 	useEffect(() => {
-		if (prefs) {
-			applyEq(prefs.playerEqEnabled ?? false, prefs.playerEqGains);
-		}
-	}, [applyEq, prefs?.playerEqEnabled, prefs?.playerEqGains, prefs]);
+		applyEq(playerEqEnabled, playerEqGains);
+	}, [applyEq, playerEqEnabled, playerEqGains]);
 
 	const adjustRateFromWheelRef = useRef(adjustRateFromWheel);
 	useEffect(() => {
@@ -769,37 +1022,41 @@ export function PlayerPage({
 		{ dependencies: [isVisible] },
 	);
 
-	// Reset visibility timer on user interaction
+	// Reset visibility timer on user interaction anywhere in the window
 	useEffect(() => {
-		const container = playerContainerRef.current;
-		if (!container) return;
-
 		const handleInteraction = () => {
 			resetTimer();
 		};
 
-		container.addEventListener("mousemove", handleInteraction);
-		container.addEventListener("mousedown", handleInteraction);
-		container.addEventListener("touchstart", handleInteraction, {
+		window.addEventListener("mousemove", handleInteraction);
+		window.addEventListener("mousedown", handleInteraction);
+		window.addEventListener("touchstart", handleInteraction, {
 			passive: true,
 		});
+		window.addEventListener("keydown", handleInteraction);
 
 		return () => {
-			container.removeEventListener("mousemove", handleInteraction);
-			container.removeEventListener("mousedown", handleInteraction);
-			container.removeEventListener("touchstart", handleInteraction);
+			window.removeEventListener("mousemove", handleInteraction);
+			window.removeEventListener("mousedown", handleInteraction);
+			window.removeEventListener("touchstart", handleInteraction);
+			window.removeEventListener("keydown", handleInteraction);
 		};
 	}, [resetTimer]);
 
-	// Reset timer on keyboard events
+	// Keep the non-blocking WindowTitlebar synced with the player HUD visibility
 	useEffect(() => {
-		const handleKeyDown = () => {
-			resetTimer();
-		};
+		window.dispatchEvent(
+			new CustomEvent("kanso:player-hud", { detail: { visible: isVisible } }),
+		);
+	}, [isVisible]);
 
-		window.addEventListener("keydown", handleKeyDown);
-		return () => window.removeEventListener("keydown", handleKeyDown);
-	}, [resetTimer]);
+	useEffect(() => {
+		return () => {
+			window.dispatchEvent(
+				new CustomEvent("kanso:player-hud", { detail: { visible: false } }),
+			);
+		};
+	}, []);
 
 	const fitClass = useMemo(() => {
 		if (!prefs) return "object-contain";
@@ -844,40 +1101,21 @@ export function PlayerPage({
 		try {
 			await getPlayerApi().library.removeVideo(video.id);
 			setRemoveDialogOpen(false);
-			handleBack();
+			await handleBack({ skipSaveProgress: true });
 		} finally {
 			setRemoving(false);
 		}
 	}
 
 	const volumePercent = getVolumePercent(prefs);
+	const displayDuration =
+		duration > 0 ? duration : (video?.durationSec ?? null);
+	const sliderMax = displayDuration ?? 0;
 
 	const speedPresets = useMemo(
 		() =>
-			buildSpeedPresets(
-				prefs?.speedPresetPrimary,
-				prefs?.speedPresetSecondary,
-			),
+			buildSpeedPresets(prefs?.speedPresetPrimary, prefs?.speedPresetSecondary),
 		[prefs?.speedPresetPrimary, prefs?.speedPresetSecondary],
-	);
-
-	// Page entrance animation
-	useGSAP(
-		() => {
-			if (!playerContainerRef.current) return;
-
-			gsap.fromTo(
-				playerContainerRef.current,
-				{ opacity: 0, scale: 0.98 },
-				{
-					opacity: 1,
-					scale: 1,
-					duration: 0.3,
-					ease: "power2.out",
-				},
-			);
-		},
-		{ dependencies: [video] },
 	);
 
 	return (
@@ -887,18 +1125,29 @@ export function PlayerPage({
 				className="ambient-stage relative h-full w-full overflow-hidden bg-black"
 				style={{ "--ambient": ambient ?? undefined } as React.CSSProperties}
 			>
+				{/* biome-ignore lint/a11y/noStaticElementInteractions: tracks pointer hover over player HUD controls to suspend auto-hide */}
 				<div
 					ref={topBarRef}
+					onMouseEnter={() => setHudHovered(true)}
+					onMouseLeave={() => setHudHovered(false)}
 					className={cn(
-						"window-drag absolute inset-x-0 top-0 z-20 flex items-center gap-2 bg-linear-to-b from-black/55 to-transparent px-4 pb-10 pt-3",
-						titlebarMode === "macos" ? "pl-20" : "pr-28",
+						"absolute inset-x-0 top-0 z-20 flex items-center gap-2 bg-linear-to-b from-black/55 to-transparent px-4 pb-10 pt-3",
+						titlebarMode === "macos"
+							? "pl-32"
+							: titlebarMode === "windows"
+								? "pr-32"
+								: "",
+						isVisible ? "pointer-events-auto" : "pointer-events-none",
 					)}
 				>
 					<Button
 						variant="ghost"
 						size="icon"
-						className="glass window-no-drag h-9 w-9 rounded-full text-white/85 ring-1 ring-white/10 hover:bg-white/15 hover:text-white"
-						onClick={handleBack}
+						className="glass window-no-drag h-9 w-9 shrink-0 rounded-full text-white/85 ring-1 ring-white/10 hover:bg-white/15 hover:text-white"
+						onClick={(event) => {
+							event.stopPropagation();
+							void handleBack();
+						}}
 						aria-label="Back to library"
 						title="Back to library (Esc)"
 					>
@@ -935,9 +1184,7 @@ export function PlayerPage({
 													video?.height ?? null,
 												)}
 											</Badge>
-											<Badge>
-												{formatDuration(video?.durationSec ?? null)}
-											</Badge>
+											<Badge>{formatClock(video?.durationSec ?? null)}</Badge>
 											{video?.codecVideo ? (
 												<Badge>{video.codecVideo}</Badge>
 											) : null}
@@ -1067,6 +1314,11 @@ export function PlayerPage({
 							</SheetContent>
 						</Sheet>
 					</div>
+
+					<div
+						className={cn("h-9 min-w-8 flex-1", isVisible && "window-drag")}
+						aria-hidden="true"
+					/>
 				</div>
 
 				<button
@@ -1101,7 +1353,7 @@ export function PlayerPage({
 						ref={previewVideoRef}
 						className="hidden"
 						muted
-						preload="auto"
+						preload="metadata"
 						playsInline
 						crossOrigin="anonymous"
 					/>
@@ -1129,9 +1381,15 @@ export function PlayerPage({
 					) : null}
 				</button>
 
+				{/* biome-ignore lint/a11y/noStaticElementInteractions: tracks pointer hover over player HUD controls to suspend auto-hide */}
 				<div
 					ref={bottomBarRef}
-					className="absolute inset-x-0 bottom-0 z-20 px-4 pb-4 select-none"
+					onMouseEnter={() => setHudHovered(true)}
+					onMouseLeave={() => setHudHovered(false)}
+					className={cn(
+						"absolute inset-x-0 bottom-0 z-20 px-4 pb-4 select-none",
+						isVisible ? "pointer-events-auto" : "pointer-events-none",
+					)}
 				>
 					<div className="island-strong mx-auto w-full max-w-3xl rounded-(--radius-xl) px-4 pb-3 pt-3">
 						<div className="mb-1.5 flex items-center gap-3">
@@ -1160,11 +1418,9 @@ export function PlayerPage({
 								</p>
 							</div>
 							<span className="tnum shrink-0 text-xs text-white/70">
-								{formatDuration(
-									isScrubbing ? timelinePreview.time : currentTime,
-								)}{" "}
+								{formatClock(isScrubbing ? timelinePreview.time : currentTime)}{" "}
 								<span className="text-white/35">
-									/ {formatDuration(duration || 0)}
+									/ {formatClock(displayDuration)}
 								</span>
 							</span>
 						</div>
@@ -1204,7 +1460,7 @@ export function PlayerPage({
 										)}
 									</div>
 									<div className="font-data bg-black/90 px-2 py-1 text-center text-[11px] tabular-nums text-white/70">
-										{formatDuration(timelinePreview.time)}
+										{formatClock(timelinePreview.time)}
 									</div>
 								</div>
 							) : null}
@@ -1213,7 +1469,7 @@ export function PlayerPage({
 								type="range"
 								aria-label="Seek position"
 								min={0}
-								max={duration || 0}
+								max={sliderMax}
 								step={0.1}
 								value={isScrubbing ? timelinePreview.time : currentTime}
 								onChange={(event) => {
@@ -1232,7 +1488,7 @@ export function PlayerPage({
 								className="lamp-range block w-full"
 								style={
 									{
-										"--lamp-fill": `${duration ? ((isScrubbing ? timelinePreview.time : currentTime) / duration) * 100 : 0}%`,
+										"--lamp-fill": `${sliderMax > 0 ? ((isScrubbing ? timelinePreview.time : currentTime) / sliderMax) * 100 : 0}%`,
 									} as React.CSSProperties
 								}
 							/>

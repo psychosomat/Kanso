@@ -35,12 +35,12 @@ export function getTitlebarShellClass(
 ): string {
 	if (nonBlocking) {
 		return cn(
-			"pointer-events-none fixed top-0 z-40 flex h-11 w-auto items-center px-3",
+			"pointer-events-none fixed top-0 z-50 flex h-11 w-auto items-center",
 			align === "start" ? "left-0" : "right-0",
 		);
 	}
 	return cn(
-		"window-drag fixed inset-x-0 top-0 z-40 flex h-11 items-center justify-end px-3",
+		"window-drag fixed inset-x-0 top-0 z-50 flex h-11 items-center justify-end px-3",
 	);
 }
 
@@ -68,19 +68,18 @@ export function toggleMaximizeWindow(): void {
 function useEdgeReveal() {
 	const [revealed, setRevealed] = useState(false);
 	const revealedRef = useRef(false);
+	const setRef = useRef((next: boolean) => {
+		if (revealedRef.current === next) return;
+		revealedRef.current = next;
+		setRevealed(next);
+	});
 
 	useEffect(() => {
-		const set = (next: boolean) => {
-			if (revealedRef.current === next) return;
-			revealedRef.current = next;
-			setRevealed(next);
-		};
-
 		const onMove = (event: MouseEvent) => {
 			if (shouldRevealTitlebar(event.clientY)) {
-				set(true);
+				setRef.current(true);
 			} else if (shouldHideTitlebar(event.clientY)) {
-				set(false);
+				setRef.current(false);
 			}
 		};
 
@@ -88,7 +87,7 @@ function useEdgeReveal() {
 		return () => window.removeEventListener("mousemove", onMove);
 	}, []);
 
-	return { revealed, reveal: () => setRevealed(true) };
+	return { revealed, reveal: () => setRef.current(true) };
 }
 
 function WindowButton({
@@ -123,21 +122,38 @@ function TitlebarShell({
 	reveal,
 	nonBlocking,
 	align,
+	onCornerHoverChange,
 	children,
 }: {
 	reveal: () => void;
 	nonBlocking?: boolean;
 	align: "start" | "end";
+	onCornerHoverChange: (hovered: boolean) => void;
 	children: React.ReactNode;
 }) {
 	return (
 		// biome-ignore lint/a11y/noStaticElementInteractions: reveals the HUD on hover/focus
 		<header
 			className={getTitlebarShellClass(nonBlocking, align)}
-			onMouseEnter={reveal}
+			onMouseEnter={nonBlocking ? undefined : reveal}
 			onFocus={reveal}
 		>
-			{children}
+			{nonBlocking ? (
+				// biome-ignore lint/a11y/noStaticElementInteractions: compact corner hover zone keeps window controls accessible even when player HUD hides
+				<div
+					data-testid="titlebar-hover-zone"
+					className={cn(
+						"window-no-drag pointer-events-auto flex h-11 w-32 items-center px-3",
+						align === "start" ? "left-0 justify-start" : "right-0 justify-end",
+					)}
+					onMouseEnter={() => onCornerHoverChange(true)}
+					onMouseLeave={() => onCornerHoverChange(false)}
+				>
+					{children}
+				</div>
+			) : (
+				children
+			)}
 		</header>
 	);
 }
@@ -195,22 +211,57 @@ function WindowsCaptionButtons({ revealed }: { revealed: boolean }) {
 
 export function WindowTitlebar({ mode, nonBlocking }: WindowTitlebarProps) {
 	const { revealed, reveal } = useEdgeReveal();
+	const [hudVisible, setHudVisible] = useState(false);
+	const [cornerHovered, setCornerHovered] = useState(false);
+
+	useEffect(() => {
+		const onPlayerHud = (event: Event) => {
+			const detail = (event as CustomEvent<{ visible?: boolean }>).detail;
+			setHudVisible(Boolean(detail?.visible));
+		};
+
+		window.addEventListener("kanso:player-hud", onPlayerHud);
+		return () => {
+			window.removeEventListener("kanso:player-hud", onPlayerHud);
+		};
+	}, []);
+
+	useEffect(() => {
+		if (!nonBlocking) {
+			setHudVisible(false);
+			setCornerHovered(false);
+		}
+	}, [nonBlocking]);
 
 	if (mode === "hidden") {
 		return null;
 	}
 
+	const effectiveRevealed = nonBlocking
+		? revealed || hudVisible || cornerHovered
+		: revealed;
+
 	if (mode === "macos") {
 		return (
-			<TitlebarShell reveal={reveal} nonBlocking={nonBlocking} align="start">
-				<MacOSTrafficLights revealed={revealed} />
+			<TitlebarShell
+				reveal={reveal}
+				nonBlocking={nonBlocking}
+				align="start"
+				onCornerHoverChange={setCornerHovered}
+			>
+				<MacOSTrafficLights revealed={effectiveRevealed} />
 			</TitlebarShell>
 		);
 	}
 
 	return (
-		<TitlebarShell reveal={reveal} nonBlocking={nonBlocking} align="end">
-			<WindowsCaptionButtons revealed={revealed} />
+		<TitlebarShell
+			reveal={reveal}
+			nonBlocking={nonBlocking}
+			align="end"
+			onCornerHoverChange={setCornerHovered}
+		>
+			<WindowsCaptionButtons revealed={effectiveRevealed} />
 		</TitlebarShell>
 	);
 }

@@ -45,12 +45,27 @@ describe("parseRangeHeader", () => {
 		});
 	});
 
-	it("rejects missing, foreign-unit, and unsatisfiable ranges", () => {
+	it("clamps end positions past EOF to fileSize - 1 per RFC 9110", () => {
+		expect(parseRangeHeader("bytes=0-1000", 1000)).toEqual({
+			start: 0,
+			end: 999,
+		});
+		expect(parseRangeHeader("bytes=500-5000", 1000)).toEqual({
+			start: 500,
+			end: 999,
+		});
+	});
+
+	it("rejects missing, foreign-unit, malformed, and unsatisfiable ranges", () => {
 		expect(parseRangeHeader(null, 1000)).toBeNull();
 		expect(parseRangeHeader("items=0-99", 1000)).toBeNull();
 		expect(parseRangeHeader("bytes=200-100", 1000)).toBeNull();
-		expect(parseRangeHeader("bytes=0-1000", 1000)).toBeNull();
+		expect(parseRangeHeader("bytes=1000-1200", 1000)).toBeNull();
+		expect(parseRangeHeader("bytes=1000-", 1000)).toBeNull();
+		expect(parseRangeHeader("bytes=0-0", 0)).toBeNull();
 		expect(parseRangeHeader("bytes=-", 1000)).toBeNull();
+		expect(parseRangeHeader("bytes=-500", 1000)).toBeNull();
+		expect(parseRangeHeader("bytes=0-abc", 1000)).toBeNull();
 	});
 });
 

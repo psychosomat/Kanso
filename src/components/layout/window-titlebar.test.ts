@@ -1,5 +1,14 @@
 // @vitest-environment jsdom
+import {
+	act,
+	cleanup,
+	fireEvent,
+	render,
+	screen,
+} from "@testing-library/react";
+import { createElement } from "react";
 import { afterEach, describe, expect, it, vi } from "vitest";
+import type { PlayerApi } from "@/lib/contracts";
 import {
 	closeWindow,
 	getTitlebarRevealClass,
@@ -8,6 +17,7 @@ import {
 	shouldHideTitlebar,
 	shouldRevealTitlebar,
 	toggleMaximizeWindow,
+	WindowTitlebar,
 } from "./window-titlebar";
 
 describe("shouldRevealTitlebar", () => {
@@ -27,12 +37,66 @@ describe("shouldHideTitlebar", () => {
 });
 
 describe("getTitlebarShellClass", () => {
-	it("applies pointer-events-none only in non-blocking mode", () => {
+	it("applies pointer-events-none only in non-blocking mode and stays at z-50", () => {
 		expect(getTitlebarShellClass(true)).toContain("pointer-events-none");
+		expect(getTitlebarShellClass(true)).toContain("z-50");
+		expect(getTitlebarShellClass(true, "start")).toContain("left-0");
+		expect(getTitlebarShellClass(true, "end")).toContain("right-0");
 		expect(getTitlebarShellClass(false)).not.toContain("pointer-events-none");
+		expect(getTitlebarShellClass(false)).toContain("z-50");
 		expect(getTitlebarShellClass(undefined)).not.toContain(
 			"pointer-events-none",
 		);
+	});
+});
+
+describe("WindowTitlebar nonBlocking HUD sync", () => {
+	afterEach(() => {
+		cleanup();
+	});
+
+	it("syncs caption button visibility with kanso:player-hud in nonBlocking mode", () => {
+		render(
+			createElement(WindowTitlebar, { mode: "windows", nonBlocking: true }),
+		);
+		const closeButton = screen.getByRole("button", { name: "Close window" });
+		const controls = closeButton.parentElement;
+		expect(controls?.className).toContain("opacity-0");
+
+		act(() => {
+			window.dispatchEvent(
+				new CustomEvent("kanso:player-hud", { detail: { visible: true } }),
+			);
+		});
+		expect(controls?.className).toContain("opacity-100");
+		expect(controls?.className).toContain("pointer-events-auto");
+
+		act(() => {
+			window.dispatchEvent(
+				new CustomEvent("kanso:player-hud", { detail: { visible: false } }),
+			);
+		});
+		expect(controls?.className).toContain("opacity-0");
+	});
+
+	it("keeps a compact pointer-events-auto corner hover zone when nonBlocking", () => {
+		render(createElement(WindowTitlebar, { mode: "macos", nonBlocking: true }));
+		const hoverZone = screen.getByTestId("titlebar-hover-zone");
+		const closeButton = screen.getByRole("button", { name: "Close window" });
+		const controls = closeButton.parentElement;
+
+		expect(hoverZone.className).toContain("pointer-events-auto");
+		expect(hoverZone.className).toContain("window-no-drag");
+		expect(hoverZone.className).toContain("w-32");
+		expect(hoverZone.className).toContain("h-11");
+		expect(hoverZone.className).toContain("left-0");
+		expect(controls?.className).toContain("opacity-0");
+
+		fireEvent.mouseEnter(hoverZone);
+		expect(controls?.className).toContain("opacity-100");
+
+		fireEvent.mouseLeave(hoverZone);
+		expect(controls?.className).toContain("opacity-0");
 	});
 });
 
@@ -48,7 +112,6 @@ describe("getTitlebarRevealClass", () => {
 describe("window actions", () => {
 	afterEach(() => {
 		vi.unstubAllGlobals();
-		// @ts-expect-error jsdom has no playerApi by default
 		delete window.playerApi;
 	});
 
@@ -64,11 +127,10 @@ describe("window actions", () => {
 		const close = vi.fn();
 		const minimize = vi.fn();
 		const toggleMaximize = vi.fn();
-		// @ts-expect-error stubbed preload bridge
 		window.playerApi = {
 			app: { isElectron: true },
 			window: { close, minimize, toggleMaximize },
-		};
+		} as unknown as PlayerApi;
 
 		closeWindow();
 		minimizeWindow();

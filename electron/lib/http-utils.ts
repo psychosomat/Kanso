@@ -60,10 +60,27 @@ export function parseRangeHeader(
 		return null;
 	}
 
-	const [startText, endText] = rangeHeader.replace("bytes=", "").split("-");
-	const start = Number.parseInt(startText, 10);
-	const end = endText ? Number.parseInt(endText, 10) : fileSize - 1;
+	const spec = rangeHeader.slice("bytes=".length).trim();
+	const parts = spec.split("-");
+	if (parts.length !== 2) {
+		return null;
+	}
 
+	const startText = parts[0].trim();
+	const endText = parts[1].trim();
+	if (!/^\d+$/.test(startText) || (endText !== "" && !/^\d+$/.test(endText))) {
+		return null;
+	}
+
+	const start = Number(startText);
+	const parsedEnd = endText ? Number(endText) : fileSize - 1;
+
+	// Clamp open-ended or past-EOF end positions per RFC 9110 §14.1.2
+	if (start < 0 || start >= fileSize || start > parsedEnd) {
+		return null;
+	}
+
+	const end = Math.min(parsedEnd, fileSize - 1);
 	if (!isValidByteRange(start, end, fileSize)) {
 		return null;
 	}

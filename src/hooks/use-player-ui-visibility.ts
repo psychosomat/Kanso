@@ -1,33 +1,34 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 
-const HIDE_DELAY_MS = 3000;
+export const HIDE_DELAY_MS = 3000;
 
 export function usePlayerUiVisibility(options?: { suspended?: boolean }) {
 	const suspended = options?.suspended ?? false;
 	const [isVisible, setIsVisible] = useState(true);
-	const timeoutRef = useRef<NodeJS.Timeout | null>(null);
+	const timeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 	const suspendedRef = useRef(suspended);
 
-	const showUi = useCallback(() => {
-		setIsVisible(true);
+	const clearHideTimeout = useCallback(() => {
 		if (timeoutRef.current) {
 			clearTimeout(timeoutRef.current);
 			timeoutRef.current = null;
 		}
+	}, []);
+
+	const showUi = useCallback(() => {
+		setIsVisible(true);
+		clearHideTimeout();
 		if (suspendedRef.current) return;
 		timeoutRef.current = setTimeout(() => {
 			setIsVisible(false);
 		}, HIDE_DELAY_MS);
-	}, []);
+	}, [clearHideTimeout]);
 
 	const hideUi = useCallback(() => {
 		if (suspendedRef.current) return;
-		if (timeoutRef.current) {
-			clearTimeout(timeoutRef.current);
-			timeoutRef.current = null;
-		}
+		clearHideTimeout();
 		setIsVisible(false);
-	}, []);
+	}, [clearHideTimeout]);
 
 	const resetTimer = useCallback(() => {
 		showUi();
@@ -36,13 +37,8 @@ export function usePlayerUiVisibility(options?: { suspended?: boolean }) {
 	useEffect(() => {
 		suspendedRef.current = suspended;
 		showUi();
-		return () => {
-			if (timeoutRef.current) {
-				clearTimeout(timeoutRef.current);
-				timeoutRef.current = null;
-			}
-		};
-	}, [showUi, suspended]);
+		return clearHideTimeout;
+	}, [clearHideTimeout, showUi, suspended]);
 
 	return { isVisible, showUi, hideUi, resetTimer };
 }
