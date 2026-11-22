@@ -10,7 +10,11 @@ import { AssignVideoDialog } from "@/components/categories/assign-video-dialog";
 import { FolderPlaylistDialog } from "@/components/categories/folder-playlist-dialog";
 import { useAppState } from "@/components/layout/app-state";
 import { EmptyLibraryState } from "@/components/shared/empty-library-state";
-import { LibraryRails } from "@/components/shared/library-rails";
+import {
+	getIdleScanRefreshKey,
+	getSourcePathsFingerprint,
+	LibraryRails,
+} from "@/components/shared/library-rails";
 import { PageFrame } from "@/components/shared/page-frame";
 import { VideoCard } from "@/components/shared/video-card";
 import { Badge } from "@/components/ui/badge";
@@ -28,17 +32,6 @@ import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { useFolderPlaylistPrompt } from "@/hooks/use-folder-playlist-prompt";
 import { useScrollRestore } from "@/hooks/use-scroll-restore";
 import { DEFAULT_DUMP_QUERY } from "@/lib/constants";
-import {
-	buildDumpQuery,
-	hasActiveDumpFilters,
-	toDuplicateIdSet,
-} from "@/lib/dump-query";
-import {
-	chooseFoldersAndPromptNew,
-	collectPreviousFolderPaths,
-	submitFolderPlaylistRequest,
-	type FolderPlaylistInput,
-} from "@/lib/folder-playlist";
 import type {
 	DumpQueryDto,
 	DurationBucketName,
@@ -48,8 +41,34 @@ import type {
 	VideoDetailDto,
 	WatchedFilter,
 } from "@/lib/contracts";
+import {
+	buildDumpQuery,
+	type DumpFilterState,
+	hasActiveDumpFilters,
+	toDuplicateIdSet,
+} from "@/lib/dump-query";
+import {
+	chooseFoldersAndPromptNew,
+	collectPreviousFolderPaths,
+	type FolderPlaylistInput,
+	submitFolderPlaylistRequest,
+} from "@/lib/folder-playlist";
 import { getPlayerApi } from "@/lib/player-api";
 import IconRefresh from "~icons/tabler/refresh";
+
+export function buildHomeDumpQuery(filters: DumpFilterState): DumpQueryDto {
+	return {
+		...buildDumpQuery(filters),
+		excludeHiddenFromHome: true,
+	};
+}
+
+export function getDumpRefreshKey(
+	sourcePaths: Parameters<typeof getSourcePathsFingerprint>[0],
+	scanStatus: Parameters<typeof getIdleScanRefreshKey>[0],
+): string {
+	return `${getSourcePathsFingerprint(sourcePaths)}::${getIdleScanRefreshKey(scanStatus) ?? ""}`;
+}
 
 export function getDumpEmptyMessage(filtersActive: boolean): string {
 	return filtersActive
@@ -57,9 +76,7 @@ export function getDumpEmptyMessage(filtersActive: boolean): string {
 		: "No unsorted videos. All videos have been organized into categories.";
 }
 
-export function getDumpGridClassName(
-	view: "compact" | "comfortable",
-): string {
+export function getDumpGridClassName(view: "compact" | "comfortable"): string {
 	return view === "comfortable"
 		? "grid grid-cols-2 gap-x-5 gap-y-7 md:grid-cols-3 xl:grid-cols-4 2xl:grid-cols-5"
 		: "grid gap-1 lg:grid-cols-2";
@@ -77,8 +94,9 @@ async function runVideoAction(
 }
 
 function DumpPage() {
-	const { library, categories, refreshAll } = useAppState();
+	const { library, categories, scanStatus, refreshAll } = useAppState();
 	const [data, setData] = useState<PaginatedVideosDto | null>(null);
+	const [railRefreshKey, setRailRefreshKey] = useState(0);
 	const [search, setSearch] = useState("");
 	const [sort, setSort] = useState<PlayerPreferencesDto["dumpSort"]>(
 		DEFAULT_DUMP_QUERY.sort,
@@ -128,7 +146,7 @@ function DumpPage() {
 	}, []);
 
 	const buildCurrentDumpQuery = useCallback((): DumpQueryDto => {
-		return buildDumpQuery({
+		return buildHomeDumpQuery({
 			search: deferredSearch,
 			sort,
 			order,
@@ -148,8 +166,12 @@ function DumpPage() {
 		durationBucket,
 	]);
 
+	const sourcePathsKey = getSourcePathsFingerprint(library?.sourcePaths);
+	const dumpRefreshKey = getDumpRefreshKey(library?.sourcePaths, scanStatus);
+
+	// biome-ignore lint/correctness/useExhaustiveDependencies: dumpRefreshKey captures sourcePaths changes and idle scan completions
 	useEffect(() => {
-		if (!library?.sourcePaths.length || !window.playerApi) {
+		if (!sourcePathsKey || !window.playerApi) {
 			setLoading(false);
 			setData(null);
 			return;
@@ -174,10 +196,11 @@ function DumpPage() {
 		return () => {
 			cancelled = true;
 		};
-	}, [buildCurrentDumpQuery, library?.sourcePaths]);
+	}, [buildCurrentDumpQuery, sourcePathsKey, dumpRefreshKey]);
 
+	// biome-ignore lint/correctness/useExhaustiveDependencies: dumpRefreshKey captures sourcePaths changes and idle scan completions
 	useEffect(() => {
-		if (!library?.sourcePaths.length || !window.playerApi) {
+		if (!sourcePathsKey || !window.playerApi) {
 			setDuplicateIds(new Set());
 			return;
 		}
@@ -193,7 +216,7 @@ function DumpPage() {
 		return () => {
 			cancelled = true;
 		};
-	}, [library?.sourcePaths]);
+	}, [sourcePathsKey, dumpRefreshKey]);
 
 	useEffect(() => {
 		if (!window.playerApi) return;
@@ -254,6 +277,7 @@ function DumpPage() {
 		const api = getPlayerApi();
 		setData(await api.library.getDumpPage(buildCurrentDumpQuery()));
 		setDuplicateIds(toDuplicateIdSet(await api.library.getDuplicateGroups()));
+		setRailRefreshKey((k) => k + 1);
 	}
 
 	function clearFilters() {
@@ -408,6 +432,8 @@ function DumpPage() {
 						duplicateIds={duplicateIds}
 						onAssign={(videoId) => void openAssign(videoId)}
 						onAction={(videoId, action) => void runVideoAction(videoId, action)}
+						onRemove={removeVideo}
+						refreshKey={railRefreshKey}
 					/>
 				)}
 
