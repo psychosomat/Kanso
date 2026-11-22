@@ -1,5 +1,5 @@
+import { type Dirent, existsSync } from "node:fs";
 import fs from "node:fs/promises";
-import type { Dirent } from "node:fs";
 import path from "node:path";
 import { SUPPORTED_VIDEO_EXTENSIONS } from "../../src/lib/constants";
 import type { ScanStatusDto } from "../../src/lib/contracts";
@@ -242,7 +242,10 @@ export class LibraryIndexerService {
 	) {
 		const finishedAt = new Date().toISOString();
 		for (const sourcePath of sourcePaths) {
-			this.db.markMissingUnderRoot(sourcePath, seen);
+			// Skip missing roots so temporarily disconnected drives do not purge indexed entries.
+			if (existsSync(sourcePath)) {
+				this.db.removeMissingUnderRoot(sourcePath, seen);
+			}
 		}
 		this.db.updateScanState({
 			scanStatus: "idle",
@@ -274,7 +277,15 @@ export class LibraryIndexerService {
 		}
 	}
 
-	private publishIdle(currentPath: string, message: string, scannedFiles = 0) {
+	publishLibraryChanged(message: string) {
+		this.publishIdle(null, message);
+	}
+
+	private publishIdle(
+		currentPath: string | null,
+		message: string,
+		scannedFiles = 0,
+	) {
 		this.publish({
 			status: "idle",
 			stage: "watch",
@@ -316,7 +327,7 @@ export class LibraryIndexerService {
 	private enqueueMissing(filePath: string) {
 		if (!isSupportedVideo(filePath)) return;
 		this.enqueue(async () => {
-			this.db.markVideoMissingByPath(filePath);
+			this.db.removeVideoByPath(filePath);
 			this.publishIdle(filePath, "Removed file detected");
 		});
 	}
@@ -370,7 +381,7 @@ export class LibraryIndexerService {
 	}
 
 	private markFileMissing(filePath: string) {
-		this.db.markVideoMissingByPath(filePath);
+		this.db.removeVideoByPath(filePath);
 		this.publishIdle(filePath, "File moved or removed");
 	}
 

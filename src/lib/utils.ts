@@ -72,9 +72,16 @@ export function formatDateTime(value: string | null) {
 	return dateTimeFormatter.format(new Date(value));
 }
 
-export function formatDuration(seconds: number | null) {
-	if (!seconds || Number.isNaN(seconds)) return "Unknown";
-	const total = Math.max(0, Math.floor(seconds));
+export function formatDuration(seconds: number | null | undefined) {
+	if (
+		seconds === null ||
+		seconds === undefined ||
+		!Number.isFinite(seconds) ||
+		seconds < 0
+	) {
+		return "Unknown";
+	}
+	const total = Math.floor(seconds);
 	const hours = Math.floor(total / 3600);
 	const minutes = Math.floor((total % 3600) / 60);
 	const secs = total % 60;

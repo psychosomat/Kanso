@@ -66,9 +66,45 @@ const VIDEO_DURATION_BUCKETS = {
 
 export type DurationBucket = DurationBucketName;
 
+// Excludes videos assigned to any category marked hidden_from_home = 1 or any
+// of its recursive descendant categories.
+export const EXCLUDE_HIDDEN_CATEGORY_VIDEOS_SQL = `NOT EXISTS (
+  WITH RECURSIVE hidden_cats(id) AS (
+    SELECT id FROM categories WHERE hidden_from_home = 1
+    UNION
+    SELECT c.id FROM categories c
+    INNER JOIN hidden_cats hc ON c.parent_id = hc.id
+  )
+  SELECT 1 FROM category_posts cp
+  INNER JOIN hidden_cats hc ON cp.category_id = hc.id
+  WHERE cp.video_id = videos.id
+)`;
+
+export function isPathWithinRoot(
+	filePath: string,
+	rootPath: string,
+	caseInsensitive = process.platform === "win32",
+): boolean {
+	const resolvedFile = path.resolve(filePath);
+	const resolvedRoot = path.resolve(rootPath);
+	const target = caseInsensitive ? resolvedFile.toLowerCase() : resolvedFile;
+	const root = caseInsensitive ? resolvedRoot.toLowerCase() : resolvedRoot;
+	const relative = path.relative(root, target);
+	return (
+		relative === "" ||
+		(relative !== ".." &&
+			!relative.startsWith(`..${path.sep}`) &&
+			!path.isAbsolute(relative))
+	);
+}
+
 export function buildDumpFilter(input: DumpQueryDto): DumpFilter {
-	const conditions: string[] = [];
+	const conditions: string[] = ["is_missing = 0"];
 	const params: Record<string, string | number> = {};
+
+	if (input.excludeHiddenFromHome) {
+		conditions.push(EXCLUDE_HIDDEN_CATEGORY_VIDEOS_SQL);
+	}
 
 	const search = input.search?.trim();
 	if (search) {
@@ -124,7 +160,7 @@ export function buildDumpFilter(input: DumpQueryDto): DumpFilter {
 	}
 
 	return {
-		where: conditions.length > 0 ? `WHERE ${conditions.join(" AND ")}` : "",
+		where: `WHERE ${conditions.join(" AND ")}`,
 		params,
 	};
 }
@@ -185,14 +221,6 @@ export type MediaAccessGate = {
 	isAllowedExternalPath: (candidate: string) => boolean;
 };
 
-function isWithinDir(candidate: string, dir: string): boolean {
-	const relative = path.relative(dir, candidate);
-	return (
-		relative === "" ||
-		(!relative.startsWith("..") && !path.isAbsolute(relative))
-	);
-}
-
 function canonicalizeDir(dir: string): string | null {
 	try {
 		return realpathSync(path.resolve(dir));
@@ -246,13 +274,13 @@ export function resolveMediaPath(
 
 	if (gate.transmuxDir) {
 		const cacheDir = canonicalizeDir(gate.transmuxDir);
-		if (cacheDir && isWithinDir(real, cacheDir)) {
+		if (cacheDir && isPathWithinRoot(real, cacheDir)) {
 			return real;
 		}
 	}
 	for (const root of gate.libraryRoots) {
 		const canonicalRoot = canonicalizeDir(root);
-		if (canonicalRoot && isWithinDir(real, canonicalRoot)) {
+		if (canonicalRoot && isPathWithinRoot(real, canonicalRoot)) {
 			return real;
 		}
 	}
