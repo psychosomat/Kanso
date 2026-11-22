@@ -12,8 +12,16 @@ describe("utils", () => {
 	});
 
 	it("formats durations in player-friendly notation", () => {
+		expect(formatDuration(0)).toBe("0:00");
+		expect(formatDuration(0.8)).toBe("0:00");
 		expect(formatDuration(65)).toBe("1:05");
 		expect(formatDuration(3665)).toBe("1:01:05");
+		expect(formatDuration(null)).toBe("Unknown");
+		expect(formatDuration(undefined)).toBe("Unknown");
+		expect(formatDuration(Number.NaN)).toBe("Unknown");
+		expect(formatDuration(Number.POSITIVE_INFINITY)).toBe("Unknown");
+		expect(formatDuration(Number.NEGATIVE_INFINITY)).toBe("Unknown");
+		expect(formatDuration(-1)).toBe("Unknown");
 	});
 
 	it("applies resume threshold rules", () => {

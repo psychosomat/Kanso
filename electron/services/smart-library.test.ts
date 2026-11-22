@@ -7,6 +7,7 @@ import {
 	buildDumpFilter,
 	escapeLike,
 	isAllowedExternalMediaPath,
+	isPathWithinRoot,
 	resolveMediaPath,
 	sha1Name,
 } from "./smart-library";
@@ -46,7 +47,7 @@ describe("buildDumpFilter", () => {
 		);
 	});
 
-	it("returns an empty filter for a bare query", () => {
+	it("always excludes missing videos on a bare query", () => {
 		const filter = buildDumpFilter({
 			search: "   ",
 			sort: "recent",
@@ -54,8 +55,49 @@ describe("buildDumpFilter", () => {
 			page: 1,
 			pageSize: 24,
 		});
-		expect(filter.where).toBe("");
+		expect(filter.where).toBe("WHERE is_missing = 0");
 		expect(filter.params).toEqual({});
+	});
+
+	it("adds a recursive hidden-category exclusion when excludeHiddenFromHome is true", () => {
+		const filter = buildDumpFilter({
+			sort: "recent",
+			order: "desc",
+			page: 1,
+			pageSize: 24,
+			excludeHiddenFromHome: true,
+		});
+		expect(filter.where).toContain("is_missing = 0");
+		expect(filter.where).toContain("WITH RECURSIVE hidden_cats");
+		expect(filter.where).toContain("hidden_from_home = 1");
+	});
+});
+
+describe("isPathWithinRoot", () => {
+	it("enforces path boundaries instead of raw string prefixes", () => {
+		const root = path.join(os.tmpdir(), "kanso-root");
+		expect(isPathWithinRoot(root, root)).toBe(true);
+		expect(isPathWithinRoot(path.join(root, "sub", "clip.mp4"), root)).toBe(
+			true,
+		);
+		expect(
+			isPathWithinRoot(
+				path.join(os.tmpdir(), "kanso-root-2", "clip.mp4"),
+				root,
+			),
+		).toBe(false);
+		expect(isPathWithinRoot(path.join(root, "..", "other.mp4"), root)).toBe(
+			false,
+		);
+	});
+
+	it("supports explicit case-insensitive vs case-sensitive matching", () => {
+		const root = path.join(os.tmpdir(), "CaseRoot");
+		const mixed = path.join(os.tmpdir(), "caseroot", "clip.mp4");
+		expect(isPathWithinRoot(mixed, root, true)).toBe(true);
+		if (process.platform !== "win32") {
+			expect(isPathWithinRoot(mixed, root, false)).toBe(false);
+		}
 	});
 });
 

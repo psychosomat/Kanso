@@ -9,12 +9,15 @@ import type { DatabaseSync } from "node:sqlite";
 const { DatabaseSync: SqliteDatabase } = process.getBuiltinModule(
 	"node:sqlite",
 ) as typeof import("node:sqlite");
+
 import { DEFAULT_PLAYER_PREFERENCES } from "../../src/lib/constants";
 import type {
 	AddVideoToCategoriesDto,
 	CategoryDto,
 	CategoryFeedSort,
 	CategoryIconName,
+	CreateCategoryDto,
+	CreateCategoryFromFolderDto,
 	DumpQueryDto,
 	DuplicateGroupDto,
 	LibrarySettingsDto,
@@ -24,17 +27,21 @@ import type {
 	SavePlayerPreferencesDto,
 	SourcePathDto,
 	TitlebarMode,
+	UpdateCategoryDto,
+	UpdateVideoMetadataDto,
 	VideoCardDto,
 	VideoDetailDto,
 } from "../../src/lib/contracts";
 import { normalizeEqGains } from "../../src/lib/equalizer";
 import { slugify } from "../../src/lib/utils";
 import {
+	buildDumpFilter,
 	CONTINUE_WATCHING_DEFAULT_LIMIT,
 	DUPLICATE_GROUPS_SQL,
+	EXCLUDE_HIDDEN_CATEGORY_VIDEOS_SQL,
 	IN_PROGRESS_WHERE,
+	isPathWithinRoot,
 	RECENTLY_ADDED_DEFAULT_LIMIT,
-	buildDumpFilter,
 } from "./smart-library";
 
 // Simple timing helper for performance debugging
@@ -94,6 +101,27 @@ type VideoRow = {
 	category_count?: number;
 };
 
+type SourcePathRow = {
+	id: string;
+	path: string;
+	watch_enabled: number;
+	hidden_from_home: number;
+	created_at: string;
+	updated_at: string;
+};
+
+type CategoryRow = {
+	id: string;
+	slug: string;
+	name: string;
+	description: string | null;
+	parent_id: string | null;
+	icon: string;
+	hidden_from_home: number;
+	created_at: string;
+	updated_at: string;
+};
+
 function getDefaultTitlebarMode(): TitlebarMode {
 	return process.platform === "darwin" ? "macos" : "windows";
 }
@@ -140,6 +168,7 @@ export class DatabaseService {
         id TEXT PRIMARY KEY,
         path TEXT NOT NULL UNIQUE,
         watch_enabled INTEGER NOT NULL DEFAULT 1,
+        hidden_from_home INTEGER NOT NULL DEFAULT 0,
         created_at TEXT NOT NULL,
         updated_at TEXT NOT NULL
       );
@@ -174,6 +203,7 @@ export class DatabaseService {
         description TEXT,
         parent_id TEXT REFERENCES categories(id) ON DELETE SET NULL,
         icon TEXT NOT NULL DEFAULT 'folder',
+        hidden_from_home INTEGER NOT NULL DEFAULT 0,
         created_at TEXT NOT NULL,
         updated_at TEXT NOT NULL
       );
@@ -219,6 +249,8 @@ export class DatabaseService {
         player_playback_rate REAL NOT NULL DEFAULT 1,
         eq_enabled INTEGER NOT NULL DEFAULT 0,
         eq_bands TEXT NOT NULL DEFAULT '${defaultEqBands}',
+        show_continue_watching INTEGER NOT NULL DEFAULT 1,
+        show_recently_added INTEGER NOT NULL DEFAULT 1,
         created_at TEXT NOT NULL,
         updated_at TEXT NOT NULL
       );
@@ -264,13 +296,44 @@ export class DatabaseService {
 			`TEXT NOT NULL DEFAULT '${defaultEqBands}'`,
 		);
 		this.ensureColumn("ui_preferences", "titlebar_mode", "TEXT");
+		this.ensureColumn(
+			"ui_preferences",
+			"show_continue_watching",
+			"INTEGER NOT NULL DEFAULT 1",
+		);
+		this.ensureColumn(
+			"ui_preferences",
+			"show_recently_added",
+			"INTEGER NOT NULL DEFAULT 1",
+		);
 		this.ensureColumn("categories", "parent_id", "TEXT");
 		this.ensureColumn("categories", "icon", "TEXT NOT NULL DEFAULT 'folder'");
+		this.ensureColumn(
+			"categories",
+			"hidden_from_home",
+			"INTEGER NOT NULL DEFAULT 0",
+		);
+		this.ensureColumn(
+			"library_source_paths",
+			"hidden_from_home",
+			"INTEGER NOT NULL DEFAULT 0",
+		);
 		this.ensureColumn("category_posts", "position", "REAL NOT NULL DEFAULT 0");
 		this.db.exec(
 			"CREATE INDEX IF NOT EXISTS idx_category_posts_position ON category_posts(category_id, position)",
 		);
 		this.backfillCategoryPostPositions();
+		this.purgeMissingVideos();
+	}
+
+	private purgeMissingVideos() {
+		const missingRows = this.db
+			.prepare(
+				"SELECT poster_path FROM videos WHERE is_missing = 1 AND poster_path IS NOT NULL",
+			)
+			.all() as Array<{ poster_path: string }>;
+		this.db.prepare("DELETE FROM videos WHERE is_missing = 1").run();
+		this.deletePosterFiles(missingRows.map((row) => row.poster_path));
 	}
 
 	private backfillCategoryPostPositions() {
@@ -324,8 +387,8 @@ export class DatabaseService {
 		this.db
 			.prepare(
 				`INSERT OR IGNORE INTO ui_preferences
-         (id, dump_sort, dump_view, sidebar_collapsed, titlebar_mode, player_volume, player_muted, player_fit_mode, speed_preset_primary, speed_preset_secondary, accent_color, player_loop, player_playback_rate, eq_enabled, eq_bands, created_at, updated_at)
-         VALUES (1, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+         (id, dump_sort, dump_view, sidebar_collapsed, titlebar_mode, player_volume, player_muted, player_fit_mode, speed_preset_primary, speed_preset_secondary, accent_color, player_loop, player_playback_rate, eq_enabled, eq_bands, show_continue_watching, show_recently_added, created_at, updated_at)
+         VALUES (1, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
 			)
 			.run(
 				DEFAULT_PLAYER_PREFERENCES.dumpSort,
@@ -342,6 +405,8 @@ export class DatabaseService {
 				DEFAULT_PLAYER_PREFERENCES.playerPlaybackRate,
 				Number(DEFAULT_PLAYER_PREFERENCES.playerEqEnabled),
 				JSON.stringify(DEFAULT_PLAYER_PREFERENCES.playerEqGains),
+				Number(DEFAULT_PLAYER_PREFERENCES.showContinueWatching),
+				Number(DEFAULT_PLAYER_PREFERENCES.showRecentlyAdded),
 				now,
 				now,
 			);
@@ -357,6 +422,17 @@ export class DatabaseService {
 		this.db.close();
 	}
 
+	private toSourcePathDto(row: SourcePathRow): SourcePathDto {
+		return {
+			id: row.id,
+			path: row.path,
+			watchEnabled: Boolean(row.watch_enabled),
+			hiddenFromHome: Boolean(row.hidden_from_home),
+			createdAt: row.created_at,
+			updatedAt: row.updated_at,
+		};
+	}
+
 	getLibrarySettings(): LibrarySettingsDto {
 		return timeQuery("getLibrarySettings", () => {
 			const row = this.db
@@ -369,21 +445,9 @@ export class DatabaseService {
 			};
 			const sourcePaths = this.db
 				.prepare("SELECT * FROM library_source_paths ORDER BY created_at ASC")
-				.all() as Array<{
-				id: string;
-				path: string;
-				watch_enabled: number;
-				created_at: string;
-				updated_at: string;
-			}>;
+				.all() as SourcePathRow[];
 			return {
-				sourcePaths: sourcePaths.map((sp) => ({
-					id: sp.id,
-					path: sp.path,
-					watchEnabled: Boolean(sp.watch_enabled),
-					createdAt: sp.created_at,
-					updatedAt: sp.updated_at,
-				})),
+				sourcePaths: sourcePaths.map((sp) => this.toSourcePathDto(sp)),
 				watchEnabled: Boolean(row.watch_enabled),
 				lastScanAt: row.last_scan_at,
 				scanStatus: row.scan_status,
@@ -397,75 +461,102 @@ export class DatabaseService {
 		const id = randomUUID();
 		this.db
 			.prepare(
-				`INSERT INTO library_source_paths (id, path, watch_enabled, created_at, updated_at)
-         VALUES (?, ?, 1, ?, ?)
+				`INSERT INTO library_source_paths (id, path, watch_enabled, hidden_from_home, created_at, updated_at)
+         VALUES (?, ?, 1, 0, ?, ?)
          ON CONFLICT(path) DO UPDATE SET updated_at = excluded.updated_at`,
 			)
 			.run(id, path, now, now);
 		const row = this.db
 			.prepare("SELECT * FROM library_source_paths WHERE path = ?")
-			.get(path) as {
-			id: string;
-			path: string;
-			watch_enabled: number;
-			created_at: string;
-			updated_at: string;
-		};
-		return {
-			id: row.id,
-			path: row.path,
-			watchEnabled: Boolean(row.watch_enabled),
-			createdAt: row.created_at,
-			updatedAt: row.updated_at,
-		};
+			.get(path) as SourcePathRow;
+		return this.toSourcePathDto(row);
 	}
 
 	removeLibrarySourcePath(id: string): void {
-		this.db.prepare("DELETE FROM library_source_paths WHERE id = ?").run(id);
+		const removed = this.db
+			.prepare("SELECT path FROM library_source_paths WHERE id = ?")
+			.get(id) as { path: string } | undefined;
+		if (!removed) {
+			return;
+		}
+
+		let posterPathsToDelete: Array<string | null> = [];
+		this.withTransaction(() => {
+			this.db.prepare("DELETE FROM library_source_paths WHERE id = ?").run(id);
+			const remaining = this.db
+				.prepare("SELECT path FROM library_source_paths")
+				.all() as Array<{ path: string }>;
+			const videos = this.db
+				.prepare("SELECT id, source_path, poster_path FROM videos")
+				.all() as Array<{
+				id: string;
+				source_path: string;
+				poster_path: string | null;
+			}>;
+			// Preserve videos still covered by another configured library root (nested folders).
+			const orphaned = videos.filter(
+				(video) =>
+					isPathWithinRoot(video.source_path, removed.path) &&
+					!remaining.some((other) =>
+						isPathWithinRoot(video.source_path, other.path),
+					),
+			);
+			const deleteVideo = this.db.prepare("DELETE FROM videos WHERE id = ?");
+			for (const video of orphaned) {
+				deleteVideo.run(video.id);
+			}
+			posterPathsToDelete = orphaned.map((video) => video.poster_path);
+		});
+		this.deletePosterFiles(posterPathsToDelete);
 	}
 
 	toggleLibrarySourcePathWatch(id: string): SourcePathDto {
 		const row = this.db
 			.prepare("SELECT * FROM library_source_paths WHERE id = ?")
-			.get(id) as {
-			id: string;
-			path: string;
-			watch_enabled: number;
-			created_at: string;
-			updated_at: string;
-		};
+			.get(id) as SourcePathRow | undefined;
+		if (!row) {
+			throw new Error("Library source path not found.");
+		}
 		const newWatchEnabled = row.watch_enabled ? 0 : 1;
+		const updatedAt = new Date().toISOString();
 		this.db
 			.prepare(
 				"UPDATE library_source_paths SET watch_enabled = ?, updated_at = ? WHERE id = ?",
 			)
-			.run(newWatchEnabled, new Date().toISOString(), id);
-		return {
-			id: row.id,
-			path: row.path,
-			watchEnabled: Boolean(newWatchEnabled),
-			createdAt: row.created_at,
-			updatedAt: new Date().toISOString(),
-		};
+			.run(newWatchEnabled, updatedAt, id);
+		return this.toSourcePathDto({
+			...row,
+			watch_enabled: newWatchEnabled,
+			updated_at: updatedAt,
+		});
+	}
+
+	toggleLibrarySourcePathHiddenFromHome(id: string): SourcePathDto {
+		const row = this.db
+			.prepare("SELECT * FROM library_source_paths WHERE id = ?")
+			.get(id) as SourcePathRow | undefined;
+		if (!row) {
+			throw new Error("Library source path not found.");
+		}
+		const nextHidden = row.hidden_from_home ? 0 : 1;
+		const updatedAt = new Date().toISOString();
+		this.db
+			.prepare(
+				"UPDATE library_source_paths SET hidden_from_home = ?, updated_at = ? WHERE id = ?",
+			)
+			.run(nextHidden, updatedAt, id);
+		return this.toSourcePathDto({
+			...row,
+			hidden_from_home: nextHidden,
+			updated_at: updatedAt,
+		});
 	}
 
 	listLibrarySourcePaths(): SourcePathDto[] {
 		const rows = this.db
 			.prepare("SELECT * FROM library_source_paths ORDER BY created_at ASC")
-			.all() as Array<{
-			id: string;
-			path: string;
-			watch_enabled: number;
-			created_at: string;
-			updated_at: string;
-		}>;
-		return rows.map((row) => ({
-			id: row.id,
-			path: row.path,
-			watchEnabled: Boolean(row.watch_enabled),
-			createdAt: row.created_at,
-			updatedAt: row.updated_at,
-		}));
+			.all() as SourcePathRow[];
+		return rows.map((row) => this.toSourcePathDto(row));
 	}
 
 	setLibrarySourcePath(sourcePath: string) {
@@ -510,6 +601,8 @@ export class DatabaseService {
 				player_playback_rate: number | null;
 				eq_enabled: number;
 				eq_bands: string | null;
+				show_continue_watching: number | null;
+				show_recently_added: number | null;
 			};
 			return {
 				dumpSort: row.dump_sort,
@@ -530,6 +623,16 @@ export class DatabaseService {
 						: DEFAULT_PLAYER_PREFERENCES.playerPlaybackRate,
 				playerEqEnabled: Boolean(row.eq_enabled),
 				playerEqGains: this.parseEqGains(row.eq_bands),
+				showContinueWatching:
+					row.show_continue_watching === null ||
+					row.show_continue_watching === undefined
+						? DEFAULT_PLAYER_PREFERENCES.showContinueWatching
+						: Boolean(row.show_continue_watching),
+				showRecentlyAdded:
+					row.show_recently_added === null ||
+					row.show_recently_added === undefined
+						? DEFAULT_PLAYER_PREFERENCES.showRecentlyAdded
+						: Boolean(row.show_recently_added),
 			};
 		});
 	}
@@ -541,7 +644,7 @@ export class DatabaseService {
 		this.db
 			.prepare(
 				`UPDATE ui_preferences
-         SET dump_sort = ?, dump_view = ?, sidebar_collapsed = ?, titlebar_mode = ?, player_volume = ?, player_muted = ?, player_fit_mode = ?, speed_preset_primary = ?, speed_preset_secondary = ?, accent_color = ?, player_loop = ?, player_playback_rate = ?, eq_enabled = ?, eq_bands = ?, updated_at = ?
+         SET dump_sort = ?, dump_view = ?, sidebar_collapsed = ?, titlebar_mode = ?, player_volume = ?, player_muted = ?, player_fit_mode = ?, speed_preset_primary = ?, speed_preset_secondary = ?, accent_color = ?, player_loop = ?, player_playback_rate = ?, eq_enabled = ?, eq_bands = ?, show_continue_watching = ?, show_recently_added = ?, updated_at = ?
          WHERE id = 1`,
 			)
 			.run(
@@ -559,6 +662,8 @@ export class DatabaseService {
 				next.playerPlaybackRate,
 				Number(eqEnabled),
 				JSON.stringify(normalizedGains),
+				Number(Boolean(next.showContinueWatching)),
+				Number(Boolean(next.showRecentlyAdded)),
 				new Date().toISOString(),
 			);
 	}
@@ -643,6 +748,79 @@ export class DatabaseService {
 		return id;
 	}
 
+	private deletePosterFiles(posterPaths: Iterable<string | null>) {
+		for (const posterPath of posterPaths) {
+			if (posterPath) {
+				fs.rmSync(posterPath, { force: true });
+			}
+		}
+	}
+
+	private deleteVideoRows(
+		rows: Array<{ id: string; poster_path: string | null }>,
+	) {
+		if (rows.length === 0) return;
+		const deleteVideo = this.db.prepare("DELETE FROM videos WHERE id = ?");
+		this.withTransaction(() => {
+			for (const row of rows) {
+				deleteVideo.run(row.id);
+			}
+		});
+		this.deletePosterFiles(rows.map((row) => row.poster_path));
+	}
+
+	private normalizeLookupPath(filePath: string): string {
+		const resolved = path.resolve(filePath);
+		return process.platform === "win32" ? resolved.toLowerCase() : resolved;
+	}
+
+	removeMissingUnderRoot(rootPath: string, existingPaths: Set<string>) {
+		const isWin = process.platform === "win32";
+		const normalizedExisting = new Set<string>();
+		for (const existingPath of existingPaths) {
+			normalizedExisting.add(this.normalizeLookupPath(existingPath));
+			normalizedExisting.add(isWin ? existingPath.toLowerCase() : existingPath);
+		}
+		const rows = this.db
+			.prepare("SELECT id, source_path, poster_path FROM videos")
+			.all() as Array<{
+			id: string;
+			source_path: string;
+			poster_path: string | null;
+		}>;
+		const toDelete = rows.filter((row) => {
+			if (!isPathWithinRoot(row.source_path, rootPath)) {
+				return false;
+			}
+			const rawKey = isWin ? row.source_path.toLowerCase() : row.source_path;
+			const normKey = this.normalizeLookupPath(row.source_path);
+			return (
+				!normalizedExisting.has(rawKey) && !normalizedExisting.has(normKey)
+			);
+		});
+		this.deleteVideoRows(toDelete);
+	}
+
+	removeVideoByPath(sourcePath: string) {
+		const rows =
+			process.platform === "win32"
+				? (this.db
+						.prepare(
+							"SELECT id, poster_path FROM videos WHERE source_path = ? OR lower(source_path) = lower(?)",
+						)
+						.all(sourcePath, sourcePath) as Array<{
+						id: string;
+						poster_path: string | null;
+					}>)
+				: (this.db
+						.prepare("SELECT id, poster_path FROM videos WHERE source_path = ?")
+						.all(sourcePath) as Array<{
+						id: string;
+						poster_path: string | null;
+					}>);
+		this.deleteVideoRows(rows);
+	}
+
 	markMissingUnderRoot(rootPath: string, existingPaths: Set<string>) {
 		const prefix = rootPath.endsWith(path.sep)
 			? rootPath
@@ -687,16 +865,12 @@ export class DatabaseService {
 
 	removeVideo(videoId: string) {
 		const row = this.db
-			.prepare("SELECT poster_path FROM videos WHERE id = ?")
-			.get(videoId) as { poster_path: string | null } | undefined;
+			.prepare("SELECT id, poster_path FROM videos WHERE id = ?")
+			.get(videoId) as { id: string; poster_path: string | null } | undefined;
 		if (!row) {
 			return;
 		}
-
-		this.db.prepare("DELETE FROM videos WHERE id = ?").run(videoId);
-		if (row.poster_path) {
-			fs.rmSync(row.poster_path, { force: true });
-		}
+		this.deleteVideoRows([row]);
 	}
 
 	getVideoById(videoId: string): VideoDetailDto | null {
@@ -721,13 +895,7 @@ export class DatabaseService {
 
 		const categories = this.db
 			.prepare("SELECT * FROM categories ORDER BY name COLLATE NOCASE ASC")
-			.all() as Array<{
-			id: string;
-			slug: string;
-			name: string;
-			parent_id: string | null;
-			icon: string;
-		}>;
+			.all() as CategoryRow[];
 
 		return {
 			...this.toVideoCard(row),
@@ -742,9 +910,78 @@ export class DatabaseService {
 				name: item.name,
 				parentCategoryId: item.parent_id,
 				icon: this.normalizeCategoryIcon(item.icon),
+				hiddenFromHome: Boolean(item.hidden_from_home),
 				assigned: assignedIds.has(item.id),
 			})),
 			assignedCategoryCount: categoryCount.count,
+		};
+	}
+
+	private getHiddenSourceRoots(): string[] {
+		const rows = this.db
+			.prepare(
+				"SELECT path FROM library_source_paths WHERE hidden_from_home = 1",
+			)
+			.all() as Array<{ path: string }>;
+		return rows.map((row) => row.path);
+	}
+
+	private isHiddenBySourceRoot(
+		sourcePath: string,
+		hiddenRoots: string[],
+	): boolean {
+		return hiddenRoots.some((root) => isPathWithinRoot(sourcePath, root));
+	}
+
+	/**
+	 * Queries videos while applying hidden-from-home filtering across both
+	 * categories (in SQL) and hidden source folders (via `isPathWithinRoot`).
+	 * When hidden source roots exist, total counts and pagination slices are
+	 * computed after path-boundary filtering so `total` and `LIMIT/OFFSET` stay exact.
+	 */
+	private queryVideosWithVisibility(options: {
+		where: string;
+		params?: Record<string, string | number>;
+		orderBy: string;
+		excludeHiddenFromHome: boolean;
+		limit: number;
+		offset?: number;
+	}): { rows: VideoRow[]; total: number } {
+		const offset = options.offset ?? 0;
+		const params = options.params ?? {};
+		const hiddenRoots = options.excludeHiddenFromHome
+			? this.getHiddenSourceRoots()
+			: [];
+
+		if (hiddenRoots.length === 0) {
+			const rows = this.db
+				.prepare(
+					`SELECT * FROM videos ${options.where}
+					ORDER BY ${options.orderBy}
+					LIMIT @limit OFFSET @offset`,
+				)
+				.all({ ...params, limit: options.limit, offset }) as VideoRow[];
+
+			const countRow = this.db
+				.prepare(`SELECT COUNT(*) as total FROM videos ${options.where}`)
+				.get(params) as { total: number };
+
+			return { rows, total: countRow.total };
+		}
+
+		const allRows = this.db
+			.prepare(
+				`SELECT * FROM videos ${options.where}
+				ORDER BY ${options.orderBy}`,
+			)
+			.all(params) as VideoRow[];
+
+		const visibleRows = allRows.filter(
+			(row) => !this.isHiddenBySourceRoot(row.source_path, hiddenRoots),
+		);
+		return {
+			rows: visibleRows.slice(offset, offset + options.limit),
+			total: visibleRows.length,
 		};
 	}
 
@@ -754,22 +991,18 @@ export class DatabaseService {
 			const pageSize = Math.max(1, Math.min(input.pageSize, 100));
 			const offset = (page - 1) * pageSize;
 			const filter = buildDumpFilter(input);
-
-			const rows = this.db
-				.prepare(
-					`SELECT * FROM videos ${filter.where}
-					ORDER BY ${this.getDumpSort(input.sort, input.order)}
-					LIMIT @limit OFFSET @offset`,
-				)
-				.all({ ...filter.params, limit: pageSize, offset }) as VideoRow[];
-
-			const countRow = this.db
-				.prepare(`SELECT COUNT(*) as total FROM videos ${filter.where}`)
-				.get(filter.params) as { total: number };
+			const { rows, total } = this.queryVideosWithVisibility({
+				where: filter.where,
+				params: filter.params,
+				orderBy: this.getDumpSort(input.sort, input.order),
+				excludeHiddenFromHome: Boolean(input.excludeHiddenFromHome),
+				limit: pageSize,
+				offset,
+			});
 
 			return {
 				items: this.toVideoCards(rows),
-				total: countRow.total,
+				total,
 				page,
 				pageSize,
 			};
@@ -780,14 +1013,12 @@ export class DatabaseService {
 		limit: number = CONTINUE_WATCHING_DEFAULT_LIMIT,
 	): VideoCardDto[] {
 		return timeQuery("getContinueWatching", () => {
-			const rows = this.db
-				.prepare(
-					`SELECT * FROM videos
-					WHERE is_missing = 0 AND ${IN_PROGRESS_WHERE}
-					ORDER BY last_played_at DESC
-					LIMIT ?`,
-				)
-				.all(Math.max(1, Math.min(limit, 100))) as VideoRow[];
+			const { rows } = this.queryVideosWithVisibility({
+				where: `WHERE is_missing = 0 AND ${IN_PROGRESS_WHERE} AND ${EXCLUDE_HIDDEN_CATEGORY_VIDEOS_SQL}`,
+				orderBy: "last_played_at DESC",
+				excludeHiddenFromHome: true,
+				limit: Math.max(1, Math.min(limit, 100)),
+			});
 			return this.toVideoCards(rows);
 		});
 	}
@@ -796,14 +1027,12 @@ export class DatabaseService {
 		limit: number = RECENTLY_ADDED_DEFAULT_LIMIT,
 	): VideoCardDto[] {
 		return timeQuery("getRecentlyAdded", () => {
-			const rows = this.db
-				.prepare(
-					`SELECT * FROM videos
-					WHERE is_missing = 0
-					ORDER BY created_at DESC, modified_at DESC
-					LIMIT ?`,
-				)
-				.all(Math.max(1, Math.min(limit, 100))) as VideoRow[];
+			const { rows } = this.queryVideosWithVisibility({
+				where: `WHERE is_missing = 0 AND ${EXCLUDE_HIDDEN_CATEGORY_VIDEOS_SQL}`,
+				orderBy: "created_at DESC, modified_at DESC",
+				excludeHiddenFromHome: true,
+				limit: Math.max(1, Math.min(limit, 100)),
+			});
 			return this.toVideoCards(rows);
 		});
 	}
@@ -832,123 +1061,77 @@ export class DatabaseService {
 		return Boolean(row);
 	}
 
+	private toCategoryDto(row: CategoryRow, postCount: number): CategoryDto {
+		return {
+			id: row.id,
+			slug: row.slug,
+			name: row.name,
+			description: row.description,
+			parentCategoryId: row.parent_id,
+			icon: this.normalizeCategoryIcon(row.icon),
+			hiddenFromHome: Boolean(row.hidden_from_home),
+			postCount,
+			createdAt: row.created_at,
+			updatedAt: row.updated_at,
+		};
+	}
+
+	private getCategoryPostCount(categoryId: string): number {
+		const row = this.db
+			.prepare(
+				`SELECT COUNT(*) as count
+				 FROM category_posts cp
+				 INNER JOIN videos v ON v.id = cp.video_id
+				 WHERE cp.category_id = ? AND v.is_missing = 0`,
+			)
+			.get(categoryId) as { count: number };
+		return row.count;
+	}
+
 	listCategories(): CategoryDto[] {
 		return timeQuery("listCategories", () => {
 			const rows = this.db
 				.prepare(`SELECT * FROM categories ORDER BY name COLLATE NOCASE ASC`)
-				.all() as Array<{
-				id: string;
-				slug: string;
-				name: string;
-				description: string | null;
-				parent_id: string | null;
-				icon: string;
-				created_at: string;
-				updated_at: string;
-			}>;
+				.all() as CategoryRow[];
 
 			const postCounts = this.db
 				.prepare(
-					`SELECT category_id, COUNT(*) as count FROM category_posts GROUP BY category_id`,
+					`SELECT cp.category_id, COUNT(*) as count
+					 FROM category_posts cp
+					 INNER JOIN videos v ON v.id = cp.video_id
+					 WHERE v.is_missing = 0
+					 GROUP BY cp.category_id`,
 				)
 				.all() as Array<{ category_id: string; count: number }>;
 			const countMap = new Map(
 				postCounts.map((pc) => [pc.category_id, pc.count]),
 			);
 
-			return rows.map((row) => ({
-				id: row.id,
-				slug: row.slug,
-				name: row.name,
-				description: row.description,
-				parentCategoryId: row.parent_id,
-				icon: this.normalizeCategoryIcon(row.icon),
-				postCount: countMap.get(row.id) ?? 0,
-				createdAt: row.created_at,
-				updatedAt: row.updated_at,
-			}));
+			return rows.map((row) =>
+				this.toCategoryDto(row, countMap.get(row.id) ?? 0),
+			);
 		});
 	}
 
 	private getCategoryById(categoryId: string): CategoryDto | null {
 		const row = this.db
 			.prepare("SELECT * FROM categories WHERE id = ?")
-			.get(categoryId) as
-			| {
-					id: string;
-					slug: string;
-					name: string;
-					description: string | null;
-					parent_id: string | null;
-					icon: string;
-					created_at: string;
-					updated_at: string;
-			  }
-			| undefined;
+			.get(categoryId) as CategoryRow | undefined;
 		if (!row) return null;
 
-		const postCount = this.db
-			.prepare(
-				"SELECT COUNT(*) as count FROM category_posts WHERE category_id = ?",
-			)
-			.get(categoryId) as { count: number };
-
-		return {
-			id: row.id,
-			slug: row.slug,
-			name: row.name,
-			description: row.description,
-			parentCategoryId: row.parent_id,
-			icon: this.normalizeCategoryIcon(row.icon),
-			postCount: postCount.count,
-			createdAt: row.created_at,
-			updatedAt: row.updated_at,
-		};
+		return this.toCategoryDto(row, this.getCategoryPostCount(categoryId));
 	}
 
 	getCategoryBySlug(slug: string): CategoryDto | null {
 		const row = this.db
 			.prepare("SELECT * FROM categories WHERE slug = ?")
-			.get(slug) as
-			| {
-					id: string;
-					slug: string;
-					name: string;
-					description: string | null;
-					parent_id: string | null;
-					icon: string;
-					created_at: string;
-					updated_at: string;
-			  }
-			| undefined;
+			.get(slug) as CategoryRow | undefined;
 		if (!row) return null;
 
-		const postCount = this.db
-			.prepare(
-				"SELECT COUNT(*) as count FROM category_posts WHERE category_id = ?",
-			)
-			.get(row.id) as { count: number };
-
-		return {
-			id: row.id,
-			slug: row.slug,
-			name: row.name,
-			description: row.description,
-			parentCategoryId: row.parent_id,
-			icon: this.normalizeCategoryIcon(row.icon),
-			postCount: postCount.count,
-			createdAt: row.created_at,
-			updatedAt: row.updated_at,
-		};
+		return this.toCategoryDto(row, this.getCategoryPostCount(row.id));
 	}
 
-	createCategoryFromFolder(input: {
-		name: string;
-		description?: string;
-		parentCategoryId?: string | null;
-		icon?: CategoryIconName;
-		folderPath: string;
-	}) {
+	createCategoryFromFolder(input: CreateCategoryFromFolderDto) {
 		const now = new Date().toISOString();
 		const id = randomUUID();
 		const slug = this.ensureUniqueSlug(slugify(input.name));
@@ -956,12 +1139,10 @@ export class DatabaseService {
 			input.parentCategoryId ?? null,
 			id,
 		);
-		const root = input.folderPath.replace(/[\\/]+$/, "") || path.sep;
-		const prefix = root.endsWith(path.sep) ? root : `${root}${path.sep}`;
 		this.db
 			.prepare(
-				`INSERT INTO categories (id, slug, name, description, parent_id, icon, created_at, updated_at)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+				`INSERT INTO categories (id, slug, name, description, parent_id, icon, hidden_from_home, created_at, updated_at)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
 			)
 			.run(
 				id,
@@ -970,6 +1151,7 @@ export class DatabaseService {
 				input.description?.trim() || null,
 				parentCategoryId,
 				this.normalizeCategoryIcon(input.icon),
+				Number(Boolean(input.hiddenFromHome)),
 				now,
 				now,
 			);
@@ -978,13 +1160,16 @@ export class DatabaseService {
 				"SELECT COALESCE(MAX(position), 0) as max FROM category_posts WHERE category_id = ?",
 			)
 			.get(id) as { max: number };
-		const videoRows = this.db
+		const candidateVideos = this.db
 			.prepare(
-				`SELECT id FROM videos
-         WHERE is_missing = 0 AND (folder_path = ? OR folder_path LIKE ?)
+				`SELECT id, folder_path FROM videos
+         WHERE is_missing = 0
          ORDER BY file_name COLLATE NOCASE ASC`,
 			)
-			.all(root, `${prefix}%`) as Array<{ id: string }>;
+			.all() as Array<{ id: string; folder_path: string }>;
+		const videoRows = candidateVideos.filter((row) =>
+			isPathWithinRoot(row.folder_path, input.folderPath),
+		);
 		const insert = this.db.prepare(
 			`INSERT INTO category_posts (id, category_id, video_id, caption, position, created_at)
        VALUES (?, ?, ?, NULL, ?, ?)
@@ -1001,12 +1186,7 @@ export class DatabaseService {
 		return this.getCategoryById(id)!;
 	}
 
-	createCategory(input: {
-		name: string;
-		description?: string;
-		parentCategoryId?: string | null;
-		icon?: CategoryIconName;
-	}) {
+	createCategory(input: CreateCategoryDto) {
 		const now = new Date().toISOString();
 		const id = randomUUID();
 		const slug = this.ensureUniqueSlug(slugify(input.name));
@@ -1016,8 +1196,8 @@ export class DatabaseService {
 		);
 		this.db
 			.prepare(
-				`INSERT INTO categories (id, slug, name, description, parent_id, icon, created_at, updated_at)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+				`INSERT INTO categories (id, slug, name, description, parent_id, icon, hidden_from_home, created_at, updated_at)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
 			)
 			.run(
 				id,
@@ -1026,6 +1206,7 @@ export class DatabaseService {
 				input.description?.trim() || null,
 				parentCategoryId,
 				this.normalizeCategoryIcon(input.icon),
+				Number(Boolean(input.hiddenFromHome)),
 				now,
 				now,
 			);
@@ -1033,22 +1214,20 @@ export class DatabaseService {
 		return this.getCategoryById(id)!;
 	}
 
-	updateCategory(input: {
-		id: string;
-		name: string;
-		description?: string;
-		parentCategoryId?: string | null;
-		icon?: CategoryIconName;
-	}) {
+	updateCategory(input: UpdateCategoryDto) {
 		const slug = this.ensureUniqueSlug(slugify(input.name), input.id);
 		const parentCategoryId = this.validateParentCategoryId(
 			input.parentCategoryId ?? null,
 			input.id,
 		);
+		const hiddenFromHome =
+			input.hiddenFromHome === undefined
+				? null
+				: Number(Boolean(input.hiddenFromHome));
 		this.db
 			.prepare(
 				`UPDATE categories
-         SET slug = ?, name = ?, description = ?, parent_id = ?, icon = ?, updated_at = ?
+         SET slug = ?, name = ?, description = ?, parent_id = ?, icon = ?, hidden_from_home = COALESCE(?, hidden_from_home), updated_at = ?
          WHERE id = ?`,
 			)
 			.run(
@@ -1057,6 +1236,7 @@ export class DatabaseService {
 				input.description?.trim() || null,
 				parentCategoryId,
 				this.normalizeCategoryIcon(input.icon),
+				hiddenFromHome,
 				new Date().toISOString(),
 				input.id,
 			);
@@ -1171,7 +1351,7 @@ export class DatabaseService {
 					v.*
 				FROM category_posts cp
 				INNER JOIN videos v ON v.id = cp.video_id
-				WHERE cp.category_id = ?
+				WHERE cp.category_id = ? AND v.is_missing = 0
 				ORDER BY ${orderBy}
 				LIMIT ? OFFSET ?`,
 			)
@@ -1184,7 +1364,10 @@ export class DatabaseService {
 		>;
 		const count = this.db
 			.prepare(
-				"SELECT COUNT(*) as total FROM category_posts WHERE category_id = ?",
+				`SELECT COUNT(*) as total
+				 FROM category_posts cp
+				 INNER JOIN videos v ON v.id = cp.video_id
+				 WHERE cp.category_id = ? AND v.is_missing = 0`,
 			)
 			.get(input.categoryId) as { total: number };
 
@@ -1251,6 +1434,46 @@ export class DatabaseService {
 				new Date().toISOString(),
 				videoId,
 			);
+	}
+
+	dismissContinueWatching(videoId: string) {
+		this.db
+			.prepare("UPDATE videos SET resume_sec = 0, updated_at = ? WHERE id = ?")
+			.run(new Date().toISOString(), videoId);
+	}
+
+	updateVideoMetadata(input: UpdateVideoMetadataDto) {
+		const durationSec =
+			typeof input.durationSec === "number" &&
+			Number.isFinite(input.durationSec) &&
+			input.durationSec > 0
+				? input.durationSec
+				: null;
+		const width =
+			typeof input.width === "number" &&
+			Number.isFinite(input.width) &&
+			input.width > 0
+				? Math.round(input.width)
+				: null;
+		const height =
+			typeof input.height === "number" &&
+			Number.isFinite(input.height) &&
+			input.height > 0
+				? Math.round(input.height)
+				: null;
+		if (durationSec === null && width === null && height === null) {
+			return;
+		}
+		this.db
+			.prepare(
+				`UPDATE videos
+         SET duration_sec = COALESCE(duration_sec, ?),
+             width = COALESCE(width, ?),
+             height = COALESCE(height, ?),
+             updated_at = ?
+         WHERE id = ?`,
+			)
+			.run(durationSec, width, height, new Date().toISOString(), input.videoId);
 	}
 
 	private validateParentCategoryId(

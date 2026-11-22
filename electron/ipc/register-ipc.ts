@@ -11,12 +11,14 @@ import type {
 	AddVideoToCategoriesDto,
 	CreateCategoryDto,
 	CreateCategoryFromFolderDto,
+	LibrarySettingsDto,
 	MarkPlayedDto,
 	RemoveVideoFromCategoryDto,
 	ReorderCategoryPostsDto,
 	SavePlayerPreferencesDto,
 	SaveProgressDto,
 	UpdateCategoryDto,
+	UpdateVideoMetadataDto,
 	VideoNativeAction,
 } from "../../src/lib/contracts";
 import { DatabaseService } from "../services/db";
@@ -25,8 +27,8 @@ import {
 	LibraryIndexerService,
 	selectWatchPaths,
 } from "../services/library-indexer";
-import { allowExternalMediaPath } from "../services/smart-library";
 import { PosterCacheService } from "../services/poster-cache";
+import { allowExternalMediaPath } from "../services/smart-library";
 
 type Services = {
 	db: DatabaseService;
@@ -34,6 +36,20 @@ type Services = {
 	posterCache: PosterCacheService;
 	getMainWindow: () => BrowserWindow | null;
 };
+
+async function syncWatches(
+	indexer: LibraryIndexerService,
+	settings: LibrarySettingsDto,
+) {
+	const pathsToWatch = settings.watchEnabled
+		? selectWatchPaths(settings.sourcePaths)
+		: [];
+	if (pathsToWatch.length > 0) {
+		await indexer.configureWatches(pathsToWatch);
+	} else {
+		await indexer.stopWatch();
+	}
+}
 
 export function registerIpc({
 	db,
@@ -79,10 +95,7 @@ export function registerIpc({
 		const settings = db.getLibrarySettings();
 		const pathsToScan = settings.sourcePaths.map((sp) => sp.path);
 		await indexer.fullScanAll(pathsToScan);
-		if (settings.watchEnabled) {
-			const pathsToWatch = selectWatchPaths(settings.sourcePaths);
-			await indexer.configureWatches(pathsToWatch);
-		}
+		await syncWatches(indexer, settings);
 		return settings;
 	});
 
@@ -104,33 +117,36 @@ export function registerIpc({
 		await indexer.fullScan(sourcePath);
 
 		const settings = db.getLibrarySettings();
-		if (settings.watchEnabled) {
-			const pathsToWatch = selectWatchPaths(settings.sourcePaths);
-			await indexer.configureWatches(pathsToWatch);
-		}
+		await syncWatches(indexer, settings);
 		return settings;
 	});
 
 	ipcMain.handle(
 		"settings:remove-library-folder",
-		(_event, folderId: string) => {
+		async (_event, folderId: string) => {
 			db.removeLibrarySourcePath(folderId);
 			const settings = db.getLibrarySettings();
-			if (settings.watchEnabled && settings.sourcePaths.length > 0) {
-				const pathsToWatch = selectWatchPaths(settings.sourcePaths);
-				void indexer.configureWatches(pathsToWatch);
-			}
+			await syncWatches(indexer, settings);
+			indexer.publishLibraryChanged("Library folder removed");
 			return settings;
 		},
 	);
 
-	ipcMain.handle("settings:toggle-watch-folder", (_event, folderId: string) => {
-		db.toggleLibrarySourcePathWatch(folderId);
+	ipcMain.handle(
+		"settings:toggle-watch-folder",
+		async (_event, folderId: string) => {
+			db.toggleLibrarySourcePathWatch(folderId);
+			const settings = db.getLibrarySettings();
+			await syncWatches(indexer, settings);
+			indexer.publishLibraryChanged("Folder watch updated");
+			return settings;
+		},
+	);
+
+	ipcMain.handle("settings:toggle-hide-folder", (_event, folderId: string) => {
+		db.toggleLibrarySourcePathHiddenFromHome(folderId);
 		const settings = db.getLibrarySettings();
-		if (settings.watchEnabled && settings.sourcePaths.length > 0) {
-			const pathsToWatch = selectWatchPaths(settings.sourcePaths);
-			void indexer.configureWatches(pathsToWatch);
-		}
+		indexer.publishLibraryChanged("Folder visibility updated");
 		return settings;
 	});
 
@@ -156,13 +172,14 @@ export function registerIpc({
 		if (settings.sourcePaths.length === 0) return;
 		const pathsToScan = settings.sourcePaths.map((sp) => sp.path);
 		await indexer.fullScanAll(pathsToScan);
-		if (settings.watchEnabled) {
-			const pathsToWatch = selectWatchPaths(settings.sourcePaths);
-			await indexer.configureWatches(pathsToWatch);
-		}
+		await syncWatches(indexer, settings);
 	});
 	ipcMain.handle("library:remove-video", (_event, videoId: string) =>
 		db.removeVideo(videoId),
+	);
+	ipcMain.handle(
+		"library:update-video-metadata",
+		(_event, input: UpdateVideoMetadataDto) => db.updateVideoMetadata(input),
 	);
 	ipcMain.handle(
 		"library:video-action",
@@ -226,6 +243,10 @@ export function registerIpc({
 	ipcMain.handle("player:mark-played", (_event, input: MarkPlayedDto) =>
 		db.markPlayed(input.videoId, input.completed),
 	);
+	ipcMain.handle(
+		"player:dismiss-continue-watching",
+		(_event, videoId: string) => db.dismissContinueWatching(videoId),
+	);
 
 	const unsubscribe = indexer.subscribe((status) => {
 		const window = getMainWindow();
@@ -241,6 +262,7 @@ export function registerIpc({
 			"settings:add-library-folder",
 			"settings:remove-library-folder",
 			"settings:toggle-watch-folder",
+			"settings:toggle-hide-folder",
 			"window:minimize",
 			"window:toggle-maximize",
 			"window:close",
@@ -252,6 +274,7 @@ export function registerIpc({
 			"library:get-external-video",
 			"library:rescan",
 			"library:remove-video",
+			"library:update-video-metadata",
 			"library:video-action",
 			"categories:list",
 			"categories:get-by-slug",
@@ -267,6 +290,7 @@ export function registerIpc({
 			"player:save-preferences",
 			"player:save-progress",
 			"player:mark-played",
+			"player:dismiss-continue-watching",
 		] as const) {
 			ipcMain.removeHandler(channel);
 		}

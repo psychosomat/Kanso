@@ -35,6 +35,7 @@ export type SourcePathDto = {
 	id: string;
 	path: string;
 	watchEnabled: boolean;
+	hiddenFromHome: boolean;
 	createdAt: string;
 	updatedAt: string;
 };
@@ -69,6 +70,7 @@ export type DumpQueryDto = {
 	page: number;
 	pageSize: number;
 	unsortedOnly?: boolean;
+	excludeHiddenFromHome?: boolean;
 	watched?: WatchedFilter;
 	resolutions?: ResolutionBucketName[];
 	codecVideo?: string;
@@ -117,6 +119,7 @@ export type CategoryDto = {
 	description: string | null;
 	parentCategoryId: string | null;
 	icon: CategoryIconName;
+	hiddenFromHome: boolean;
 	postCount: number;
 	createdAt: string;
 	updatedAt: string;
@@ -128,6 +131,7 @@ export type CategoryOptionDto = {
 	name: string;
 	parentCategoryId: string | null;
 	icon: CategoryIconName;
+	hiddenFromHome: boolean;
 	assigned: boolean;
 };
 
@@ -190,6 +194,7 @@ export type CreateCategoryDto = {
 	description?: string;
 	parentCategoryId?: string | null;
 	icon?: CategoryIconName;
+	hiddenFromHome?: boolean;
 };
 
 export type CreateCategoryFromFolderDto = CreateCategoryDto & {
@@ -202,6 +207,7 @@ export type UpdateCategoryDto = {
 	description?: string;
 	parentCategoryId?: string | null;
 	icon?: CategoryIconName;
+	hiddenFromHome?: boolean;
 };
 
 export type AddVideoToCategoriesDto = {
@@ -237,9 +243,18 @@ export type PlayerPreferencesDto = {
 	accentColor: string;
 	playerEqEnabled: boolean;
 	playerEqGains: number[];
+	showContinueWatching: boolean;
+	showRecentlyAdded: boolean;
 };
 
 export type SavePlayerPreferencesDto = Partial<PlayerPreferencesDto>;
+
+export type UpdateVideoMetadataDto = {
+	videoId: string;
+	durationSec?: number | null;
+	width?: number | null;
+	height?: number | null;
+};
 
 export type SaveProgressDto = {
 	videoId: string;
@@ -271,6 +286,9 @@ export type PlayerApi = {
 		addLibraryFolder(): Promise<LibrarySettingsDto | null>;
 		removeLibraryFolder(folderId: string): Promise<LibrarySettingsDto | null>;
 		toggleWatchFolder(folderId: string): Promise<LibrarySettingsDto | null>;
+		toggleHideFolderFromHome(
+			folderId: string,
+		): Promise<LibrarySettingsDto | null>;
 	};
 	library: {
 		getDumpPage(input: DumpQueryDto): Promise<PaginatedVideosDto>;
@@ -281,6 +299,7 @@ export type PlayerApi = {
 		getDuplicateGroups(): Promise<DuplicateGroupDto[]>;
 		rescanNow(): Promise<void>;
 		removeVideo(videoId: string): Promise<void>;
+		updateVideoMetadata(input: UpdateVideoMetadataDto): Promise<void>;
 		runVideoAction(videoId: string, action: VideoNativeAction): Promise<void>;
 		subscribeScanStatus(cb: (event: ScanStatusDto) => void): () => void;
 	};
@@ -304,6 +323,7 @@ export type PlayerApi = {
 	player: {
 		saveProgress(input: SaveProgressDto): Promise<void>;
 		markPlayed(input: MarkPlayedDto): Promise<void>;
+		dismissContinueWatching(videoId: string): Promise<void>;
 		getPreferences(): Promise<PlayerPreferencesDto>;
 		savePreferences(input: SavePlayerPreferencesDto): Promise<void>;
 	};

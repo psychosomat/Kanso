@@ -25,6 +25,8 @@ export const DEFAULT_PLAYER_PREFERENCES = {
 	accentColor: "#f76f53",
 	playerEqEnabled: false,
 	playerEqGains: [...DEFAULT_EQ_GAINS],
+	showContinueWatching: true,
+	showRecentlyAdded: true,
 } as const satisfies PlayerPreferencesDto;
 
 export const SUPPORTED_VIDEO_EXTENSIONS = [

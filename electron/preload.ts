@@ -62,6 +62,8 @@ const playerApi: PlayerApi = {
 			ipcRenderer.invoke("settings:remove-library-folder", folderId),
 		toggleWatchFolder: (folderId: string) =>
 			ipcRenderer.invoke("settings:toggle-watch-folder", folderId),
+		toggleHideFolderFromHome: (folderId: string) =>
+			ipcRenderer.invoke("settings:toggle-hide-folder", folderId),
 	},
 	library: {
 		getDumpPage: (input) => ipcRenderer.invoke("library:get-dump-page", input),
@@ -77,6 +79,8 @@ const playerApi: PlayerApi = {
 		rescanNow: () => ipcRenderer.invoke("library:rescan"),
 		removeVideo: (videoId) =>
 			ipcRenderer.invoke("library:remove-video", videoId),
+		updateVideoMetadata: (input) =>
+			ipcRenderer.invoke("library:update-video-metadata", input),
 		runVideoAction: (videoId, action) =>
 			ipcRenderer.invoke("library:video-action", videoId, action),
 		subscribeScanStatus: (cb) => {
@@ -104,6 +108,8 @@ const playerApi: PlayerApi = {
 	player: {
 		saveProgress: (input) => ipcRenderer.invoke("player:save-progress", input),
 		markPlayed: (input) => ipcRenderer.invoke("player:mark-played", input),
+		dismissContinueWatching: (videoId) =>
+			ipcRenderer.invoke("player:dismiss-continue-watching", videoId),
 		getPreferences: () => ipcRenderer.invoke("player:get-preferences"),
 		savePreferences: (input) =>
 			ipcRenderer.invoke("player:save-preferences", input),

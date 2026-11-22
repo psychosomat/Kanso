@@ -17,6 +17,7 @@ vi.mock("./media-metadata", () => ({
 }));
 
 import { DatabaseService } from "./db";
+import { FileWatchService } from "./file-watch";
 import { isSupportedVideo, LibraryIndexerService } from "./library-indexer";
 import { probeMedia } from "./media-metadata";
 import type { PosterCacheService } from "./poster-cache";
@@ -126,6 +127,105 @@ describe("LibraryIndexerService.fullScanAll", () => {
 			});
 			expect(page.items.map((item) => item.fileName)).toContain("movie.mkv");
 		} finally {
+			db.close();
+		}
+	});
+
+	it("deletes videos removed from an existing folder during rescan while preserving unplugged folders", async () => {
+		const disconnectedRoot = path.join(tempDir, "usb-drive");
+		fs.mkdirSync(disconnectedRoot, { recursive: true });
+		const localFile = path.join(root, "local.mkv");
+		const goneFile = path.join(root, "deleted.mkv");
+		const usbFile = path.join(disconnectedRoot, "usb.mkv");
+		fs.writeFileSync(localFile, "fake-video");
+		fs.writeFileSync(goneFile, "fake-video");
+		fs.writeFileSync(usbFile, "fake-video");
+
+		const { db, indexer } = makeServices(tempDir);
+		try {
+			await indexer.fullScanAll([root, disconnectedRoot]);
+			expect(
+				db.getDumpPage({
+					sort: "recent",
+					order: "desc",
+					page: 1,
+					pageSize: 24,
+				}).total,
+			).toBe(3);
+
+			// Delete one file from present root, and unplug the entire USB root.
+			fs.rmSync(goneFile);
+			fs.rmSync(disconnectedRoot, { recursive: true, force: true });
+
+			await indexer.fullScanAll([root, disconnectedRoot]);
+			const page = db.getDumpPage({
+				sort: "recent",
+				order: "desc",
+				page: 1,
+				pageSize: 24,
+			});
+			expect(page.total).toBe(2);
+			expect(page.items.map((item) => item.fileName).sort()).toEqual([
+				"local.mkv",
+				"usb.mkv",
+			]);
+		} finally {
+			db.close();
+		}
+	});
+
+	it("removes unlinked files via removeVideoByPath and publishes library change events", async () => {
+		const file = path.join(root, "watched.mkv");
+		fs.writeFileSync(file, "fake-video");
+
+		let capturedOnUnlink: ((filePath: string) => void) | undefined;
+		const startSpy = vi
+			.spyOn(FileWatchService.prototype, "start")
+			.mockImplementation(async (_sourcePath, callbacks) => {
+				capturedOnUnlink = callbacks.onUnlink;
+			});
+		const stopSpy = vi
+			.spyOn(FileWatchService.prototype, "stop")
+			.mockResolvedValue(undefined);
+
+		const { db, indexer } = makeServices(tempDir);
+		const statuses: Array<{ status: string; stage: string; message: string }> =
+			[];
+		const unsubscribe = indexer.subscribe((status) => {
+			statuses.push({
+				status: status.status,
+				stage: status.stage,
+				message: status.message,
+			});
+		});
+
+		try {
+			await indexer.fullScanAll([root]);
+			await indexer.configureWatches([root]);
+			expect(capturedOnUnlink).toBeTypeOf("function");
+
+			capturedOnUnlink?.(file);
+			await vi.waitFor(() => {
+				expect(
+					db.getDumpPage({
+						sort: "recent",
+						order: "desc",
+						page: 1,
+						pageSize: 24,
+					}).total,
+				).toBe(0);
+			});
+
+			indexer.publishLibraryChanged("Folder visibility updated");
+			expect(statuses[statuses.length - 1]).toEqual({
+				status: "idle",
+				stage: "watch",
+				message: "Folder visibility updated",
+			});
+		} finally {
+			unsubscribe();
+			startSpy.mockRestore();
+			stopSpy.mockRestore();
 			db.close();
 		}
 	});

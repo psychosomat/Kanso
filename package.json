@@ -117,8 +117,6 @@
       "!build-resources/windows-thumbnail-provider/*.bat",
       "!build-resources/windows-thumbnail-provider/NuGet.Config",
       "!build-resources/windows-thumbnail-provider/bin/*.pdb",
-      "!node_modules/ffprobe-static/bin/darwin/**/*",
-      "!node_modules/ffprobe-static/bin/win32/**/*",
       "!node_modules/ffprobe-static/bin/**/ia32/**/*",
       "!node_modules/**/*.md",
       "!node_modules/**/README*",
