@@ -91,6 +91,9 @@ export function AppStateProvider({ children }: PropsWithChildren) {
 		unsubscribe = getPlayerApi().library.subscribeScanStatus((event) => {
 			setScanStatus(event);
 			void refreshLibrary();
+			if (event.status === "idle") {
+				void refreshCategories();
+			}
 		});
 
 		return () => {

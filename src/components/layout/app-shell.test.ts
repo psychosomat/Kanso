@@ -1,11 +1,14 @@
 // @vitest-environment jsdom
-import { describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import {
+	createSidebarHoverController,
 	getAppShellShortcut,
 	isPlayerPath,
 	isTypingTarget,
 	loadSidebarPinned,
 	resolveSidebarLayout,
+	SIDEBAR_CLOSE_DELAY_MS,
+	shouldKeepOverlaySidebarOpen,
 	storeSidebarPinned,
 } from "./app-shell";
 
@@ -181,5 +184,154 @@ describe("sidebar pinned storage", () => {
 		} finally {
 			vi.unstubAllGlobals();
 		}
+	});
+});
+
+describe("shouldKeepOverlaySidebarOpen", () => {
+	it("returns false only when pointer, focus, and interaction lock are all inactive", () => {
+		expect(
+			shouldKeepOverlaySidebarOpen({
+				pointerInside: false,
+				focusInside: false,
+				interactionLocked: false,
+			}),
+		).toBe(false);
+	});
+
+	it("returns true when any keeper condition is active", () => {
+		expect(
+			shouldKeepOverlaySidebarOpen({
+				pointerInside: true,
+				focusInside: false,
+				interactionLocked: false,
+			}),
+		).toBe(true);
+		expect(
+			shouldKeepOverlaySidebarOpen({
+				pointerInside: false,
+				focusInside: true,
+				interactionLocked: false,
+			}),
+		).toBe(true);
+		expect(
+			shouldKeepOverlaySidebarOpen({
+				pointerInside: false,
+				focusInside: false,
+				interactionLocked: true,
+			}),
+		).toBe(true);
+	});
+});
+
+describe("createSidebarHoverController", () => {
+	beforeEach(() => {
+		vi.useFakeTimers();
+	});
+
+	afterEach(() => {
+		vi.useRealTimers();
+	});
+
+	it("uses a generous 450ms grace delay before auto-closing", () => {
+		expect(SIDEBAR_CLOSE_DELAY_MS).toBe(450);
+
+		const onOpenChange = vi.fn();
+		const controller = createSidebarHoverController({ onOpenChange });
+
+		controller.pointerEnter();
+		expect(onOpenChange).toHaveBeenCalledTimes(1);
+		expect(onOpenChange).toHaveBeenLastCalledWith(true);
+
+		controller.pointerLeave();
+		vi.advanceTimersByTime(SIDEBAR_CLOSE_DELAY_MS - 1);
+		expect(onOpenChange).toHaveBeenCalledTimes(1);
+
+		vi.advanceTimersByTime(1);
+		expect(onOpenChange).toHaveBeenCalledTimes(2);
+		expect(onOpenChange).toHaveBeenLastCalledWith(false);
+	});
+
+	it("cancels pending auto-close when pointer re-enters before the delay", () => {
+		const onOpenChange = vi.fn();
+		const controller = createSidebarHoverController({ onOpenChange });
+
+		controller.pointerEnter();
+		controller.pointerLeave();
+		vi.advanceTimersByTime(250);
+		controller.pointerEnter();
+
+		vi.advanceTimersByTime(SIDEBAR_CLOSE_DELAY_MS * 2);
+		expect(onOpenChange).toHaveBeenCalledTimes(1);
+		expect(onOpenChange).toHaveBeenLastCalledWith(true);
+	});
+
+	it("keeps sidebar open while focus is inside and closes after blur + delay", () => {
+		const onOpenChange = vi.fn();
+		const controller = createSidebarHoverController({ onOpenChange });
+
+		controller.pointerEnter();
+		controller.setFocusInside(true);
+		controller.pointerLeave();
+
+		vi.advanceTimersByTime(SIDEBAR_CLOSE_DELAY_MS * 2);
+		expect(onOpenChange).toHaveBeenCalledTimes(1);
+
+		controller.setFocusInside(false);
+		vi.advanceTimersByTime(SIDEBAR_CLOSE_DELAY_MS - 1);
+		expect(onOpenChange).toHaveBeenCalledTimes(1);
+
+		vi.advanceTimersByTime(1);
+		expect(onOpenChange).toHaveBeenCalledTimes(2);
+		expect(onOpenChange).toHaveBeenLastCalledWith(false);
+	});
+
+	it("keeps sidebar open while interaction is locked and handles menu-to-dialog handoff", () => {
+		const onOpenChange = vi.fn();
+		const controller = createSidebarHoverController({ onOpenChange });
+
+		controller.pointerEnter();
+		controller.setInteractionLocked(true);
+		controller.pointerLeave();
+
+		vi.advanceTimersByTime(SIDEBAR_CLOSE_DELAY_MS * 2);
+		expect(onOpenChange).toHaveBeenCalledTimes(1);
+
+		// Simulate context menu closing right before a dialog opens within the grace period
+		controller.setInteractionLocked(false);
+		vi.advanceTimersByTime(50);
+		controller.setInteractionLocked(true);
+
+		vi.advanceTimersByTime(SIDEBAR_CLOSE_DELAY_MS * 2);
+		expect(onOpenChange).toHaveBeenCalledTimes(1);
+
+		// Closing the dialog finally allows auto-close after the grace delay
+		controller.setInteractionLocked(false);
+		vi.advanceTimersByTime(SIDEBAR_CLOSE_DELAY_MS);
+		expect(onOpenChange).toHaveBeenCalledTimes(2);
+		expect(onOpenChange).toHaveBeenLastCalledWith(false);
+	});
+
+	it("opens via drag/click without dropping pending locks and cancels on closeNow or dispose", () => {
+		const onOpenChange = vi.fn();
+		const controller = createSidebarHoverController({ onOpenChange });
+
+		controller.open();
+		expect(onOpenChange).toHaveBeenLastCalledWith(true);
+
+		controller.pointerEnter();
+		controller.pointerLeave();
+		controller.open();
+		vi.advanceTimersByTime(SIDEBAR_CLOSE_DELAY_MS);
+		expect(onOpenChange).toHaveBeenCalledTimes(1);
+
+		controller.closeNow();
+		expect(onOpenChange).toHaveBeenCalledTimes(2);
+		expect(onOpenChange).toHaveBeenLastCalledWith(false);
+
+		controller.pointerEnter();
+		controller.pointerLeave();
+		controller.dispose();
+		vi.advanceTimersByTime(SIDEBAR_CLOSE_DELAY_MS * 2);
+		expect(onOpenChange).toHaveBeenCalledTimes(3);
 	});
 });

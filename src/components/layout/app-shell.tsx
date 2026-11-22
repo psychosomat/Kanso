@@ -1,5 +1,5 @@
 import { Link, useLocation, useRouter } from "@tanstack/react-router";
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { CategoryIcon } from "@/lib/category-icons";
 import { buildCategoryTree, type CategoryTreeNode } from "@/lib/category-tree";
 import type { CategoryDto } from "@/lib/contracts";
@@ -14,9 +14,12 @@ import { getDraggedVideoId, hasDraggedVideo } from "@/lib/video-drag";
 import IconChevronDown from "~icons/tabler/chevron-down";
 import IconChevronLeft from "~icons/tabler/chevron-left";
 import IconChevronRight from "~icons/tabler/chevron-right";
+import IconEye from "~icons/tabler/eye";
+import IconEyeOff from "~icons/tabler/eye-off";
 import IconFolderPlus from "~icons/tabler/folder-plus";
 import IconInbox from "~icons/tabler/inbox";
 import IconLayoutGrid from "~icons/tabler/layout-grid";
+import IconLayoutSidebar from "~icons/tabler/layout-sidebar";
 import IconMenu2 from "~icons/tabler/menu-2";
 import IconPencil from "~icons/tabler/pencil";
 import IconPin from "~icons/tabler/pin";
@@ -67,6 +70,131 @@ export function isPlayerPath(pathname: string): boolean {
 	return pathname.startsWith("/player/");
 }
 
+export const SIDEBAR_CLOSE_DELAY_MS = 450;
+
+export type OverlaySidebarKeepOpenState = {
+	pointerInside: boolean;
+	focusInside: boolean;
+	interactionLocked: boolean;
+};
+
+/**
+ * Returns true if any active interaction (pointer hover, keyboard focus, or an
+ * open context menu / dialog) should prevent the overlay sidebar from closing.
+ */
+export function shouldKeepOverlaySidebarOpen(
+	state: OverlaySidebarKeepOpenState,
+): boolean {
+	return state.pointerInside || state.focusInside || state.interactionLocked;
+}
+
+export type SidebarHoverController = {
+	open: () => void;
+	pointerEnter: () => void;
+	pointerLeave: () => void;
+	setFocusInside: (focusInside: boolean) => void;
+	setInteractionLocked: (interactionLocked: boolean) => void;
+	closeNow: () => void;
+	dispose: () => void;
+};
+
+/**
+ * Coordinates delayed auto-closing for the overlay sidebar so brief pointer
+ * transitions, keyboard focus inside the panel, and Portaled menus/dialogs
+ * never snap the sidebar shut unexpectedly.
+ */
+export function createSidebarHoverController({
+	closeDelayMs = SIDEBAR_CLOSE_DELAY_MS,
+	onOpenChange,
+}: {
+	closeDelayMs?: number;
+	onOpenChange: (open: boolean) => void;
+}): SidebarHoverController {
+	let open = false;
+	let pointerInside = false;
+	let focusInside = false;
+	let interactionLocked = false;
+	let closeTimer: ReturnType<typeof setTimeout> | null = null;
+
+	function clearCloseTimer() {
+		if (closeTimer !== null) {
+			clearTimeout(closeTimer);
+			closeTimer = null;
+		}
+	}
+
+	function emitOpen(next: boolean) {
+		if (open === next) return;
+		open = next;
+		onOpenChange(next);
+	}
+
+	function isKeptOpen() {
+		return shouldKeepOverlaySidebarOpen({
+			pointerInside,
+			focusInside,
+			interactionLocked,
+		});
+	}
+
+	function scheduleClose() {
+		if (isKeptOpen() || !open) {
+			clearCloseTimer();
+			return;
+		}
+		clearCloseTimer();
+		closeTimer = setTimeout(() => {
+			closeTimer = null;
+			if (!isKeptOpen()) {
+				emitOpen(false);
+			}
+		}, closeDelayMs);
+	}
+
+	return {
+		open() {
+			clearCloseTimer();
+			emitOpen(true);
+		},
+		pointerEnter() {
+			pointerInside = true;
+			clearCloseTimer();
+			emitOpen(true);
+		},
+		pointerLeave() {
+			pointerInside = false;
+			scheduleClose();
+		},
+		setFocusInside(next: boolean) {
+			if (focusInside === next) return;
+			focusInside = next;
+			if (next) {
+				clearCloseTimer();
+				return;
+			}
+			scheduleClose();
+		},
+		setInteractionLocked(next: boolean) {
+			if (interactionLocked === next) return;
+			interactionLocked = next;
+			if (next) {
+				clearCloseTimer();
+				return;
+			}
+			scheduleClose();
+		},
+		closeNow() {
+			clearCloseTimer();
+			pointerInside = false;
+			focusInside = false;
+			emitOpen(false);
+		},
+		dispose() {
+			clearCloseTimer();
+		},
+	};
+}
+
 export function resolveSidebarLayout({
 	inPlayer,
 	pinned,
@@ -85,6 +213,15 @@ export function isTypingTarget(target: EventTarget | null): boolean {
 		target instanceof HTMLElement &&
 		(target.isContentEditable ||
 			["INPUT", "TEXTAREA", "SELECT"].includes(target.tagName))
+	);
+}
+
+function isRelatedTargetInside(e: {
+	currentTarget: Element;
+	relatedTarget: EventTarget | null;
+}): boolean {
+	return (
+		e.relatedTarget instanceof Node && e.currentTarget.contains(e.relatedTarget)
 	);
 }
 
@@ -166,7 +303,13 @@ function NavItem({
 	);
 }
 
-function SidebarContent({ onOpenPalette }: { onOpenPalette: () => void }) {
+function SidebarContent({
+	onOpenPalette,
+	onInteractionLockChange,
+}: {
+	onOpenPalette: () => void;
+	onInteractionLockChange?: (locked: boolean) => void;
+}) {
 	const { categories, library, scanStatus, refreshAll, refreshCategories } =
 		useAppState();
 	const location = useLocation();
@@ -219,12 +362,48 @@ function SidebarContent({ onOpenPalette }: { onOpenPalette: () => void }) {
 	const [deletingCategory, setDeletingCategory] = useState<CategoryDto | null>(
 		null,
 	);
+	const [openContextMenuIds, setOpenContextMenuIds] = useState<Set<string>>(
+		() => new Set(),
+	);
+
+	const handleContextMenuOpenChange = useCallback(
+		(key: string, open: boolean) => {
+			setOpenContextMenuIds((prev) => {
+				if (prev.has(key) === open) return prev;
+				const next = new Set(prev);
+				if (open) {
+					next.add(key);
+				} else {
+					next.delete(key);
+				}
+				return next;
+			});
+		},
+		[],
+	);
+
+	const interactionLocked =
+		createDialogOpen ||
+		editingCategory !== null ||
+		deletingCategory !== null ||
+		openContextMenuIds.size > 0;
+
+	useEffect(() => {
+		onInteractionLockChange?.(interactionLocked);
+	}, [interactionLocked, onInteractionLockChange]);
+
+	useEffect(() => {
+		return () => {
+			onInteractionLockChange?.(false);
+		};
+	}, [onInteractionLockChange]);
 
 	async function handleCreateCategory(input: {
 		name: string;
 		description?: string;
 		parentCategoryId?: string | null;
 		icon?: CategoryDto["icon"];
+		hiddenFromHome?: boolean;
 	}) {
 		await getPlayerApi().categories.create(input);
 		await refreshCategories();
@@ -237,6 +416,7 @@ function SidebarContent({ onOpenPalette }: { onOpenPalette: () => void }) {
 		description?: string;
 		parentCategoryId?: string | null;
 		icon?: CategoryDto["icon"];
+		hiddenFromHome?: boolean;
 	}) {
 		if (!editingCategory) return;
 		await getPlayerApi().categories.update({
@@ -245,9 +425,22 @@ function SidebarContent({ onOpenPalette }: { onOpenPalette: () => void }) {
 			description: input.description,
 			parentCategoryId: input.parentCategoryId,
 			icon: input.icon,
+			hiddenFromHome: input.hiddenFromHome,
 		});
 		await refreshCategories();
 		setEditingCategory(null);
+	}
+
+	async function handleToggleHiddenFromHome(category: CategoryDto) {
+		await getPlayerApi().categories.update({
+			id: category.id,
+			name: category.name,
+			description: category.description ?? undefined,
+			parentCategoryId: category.parentCategoryId,
+			icon: category.icon,
+			hiddenFromHome: !category.hiddenFromHome,
+		});
+		await refreshCategories();
 	}
 
 	async function handleDropVideo(videoId: string, categoryId: string) {
@@ -287,7 +480,9 @@ function SidebarContent({ onOpenPalette }: { onOpenPalette: () => void }) {
 				/>
 
 				{/* Boards group */}
-				<ContextMenu>
+				<ContextMenu
+					onOpenChange={(open) => handleContextMenuOpenChange("boards", open)}
+				>
 					<ContextMenuTrigger asChild>
 						<button
 							type="button"
@@ -354,7 +549,9 @@ function SidebarContent({ onOpenPalette }: { onOpenPalette: () => void }) {
 									setCreateDialogOpen(true);
 								}}
 								onEdit={(nextCategory) => setEditingCategory(nextCategory)}
+								onToggleHidden={handleToggleHiddenFromHome}
 								onDelete={(nextCategory) => setDeletingCategory(nextCategory)}
+								onContextMenuOpenChange={handleContextMenuOpenChange}
 								onToggleCollapsed={toggleCategoryCollapsed}
 								isCollapsed={isCategoryCollapsed}
 								onDropVideo={handleDropVideo}
@@ -458,7 +655,9 @@ function CategoryTreeItem({
 	pathname,
 	onCreateChild,
 	onEdit,
+	onToggleHidden,
 	onDelete,
+	onContextMenuOpenChange,
 	onToggleCollapsed,
 	isCollapsed,
 	onDropVideo,
@@ -467,13 +666,21 @@ function CategoryTreeItem({
 	pathname: string;
 	onCreateChild: (parentCategoryId: string) => void;
 	onEdit: (category: CategoryDto) => void;
+	onToggleHidden: (category: CategoryDto) => Promise<void>;
 	onDelete: (category: CategoryDto) => void;
+	onContextMenuOpenChange: (key: string, open: boolean) => void;
 	onToggleCollapsed: (categoryId: string) => void;
 	isCollapsed: (categoryId: string) => boolean;
 	onDropVideo: (videoId: string, categoryId: string) => Promise<void>;
 }) {
 	const [dragOver, setDragOver] = useState(false);
 	const [dropping, setDropping] = useState(false);
+
+	useEffect(() => {
+		return () => {
+			onContextMenuOpenChange(category.id, false);
+		};
+	}, [category.id, onContextMenuOpenChange]);
 
 	function handleDragOver(e: React.DragEvent<HTMLDivElement>) {
 		if (!hasDraggedVideo(e.dataTransfer)) {
@@ -485,11 +692,7 @@ function CategoryTreeItem({
 	}
 
 	function handleDragLeave(e: React.DragEvent<HTMLDivElement>) {
-		const relatedTarget = e.relatedTarget;
-		if (
-			relatedTarget instanceof Node &&
-			e.currentTarget.contains(relatedTarget)
-		) {
+		if (isRelatedTargetInside(e)) {
 			return;
 		}
 		setDragOver(false);
@@ -521,7 +724,9 @@ function CategoryTreeItem({
 
 	return (
 		<>
-			<ContextMenu>
+			<ContextMenu
+				onOpenChange={(open) => onContextMenuOpenChange(category.id, open)}
+			>
 				<ContextMenuTrigger asChild>
 					{/* biome-ignore lint/a11y/noStaticElementInteractions: drop target for video drag-and-drop */}
 					<div
@@ -549,6 +754,16 @@ function CategoryTreeItem({
 							<span className="truncate">{category.name}</span>
 						</Link>
 						<div className="ml-2 flex shrink-0 items-center gap-1">
+							{category.hiddenFromHome && (
+								<span
+									role="img"
+									title="Hidden from Home"
+									aria-label="Hidden from Home"
+									className="inline-flex shrink-0 items-center opacity-55"
+								>
+									<IconEyeOff size={12} aria-hidden="true" />
+								</span>
+							)}
 							<span className="tnum text-xs opacity-60">
 								{category.postCount}
 							</span>
@@ -586,6 +801,14 @@ function CategoryTreeItem({
 						<IconPencil size={16} />
 						Edit board
 					</ContextMenuItem>
+					<ContextMenuItem onClick={() => void onToggleHidden(category)}>
+						{category.hiddenFromHome ? (
+							<IconEye size={16} />
+						) : (
+							<IconEyeOff size={16} />
+						)}
+						{category.hiddenFromHome ? "Show on Home" : "Hide from Home"}
+					</ContextMenuItem>
 					<ContextMenuItem
 						onClick={() => onDelete(category)}
 						className="text-(--destructive)"
@@ -603,7 +826,9 @@ function CategoryTreeItem({
 						pathname={pathname}
 						onCreateChild={onCreateChild}
 						onEdit={onEdit}
+						onToggleHidden={onToggleHidden}
 						onDelete={onDelete}
+						onContextMenuOpenChange={onContextMenuOpenChange}
 						onToggleCollapsed={onToggleCollapsed}
 						isCollapsed={isCollapsed}
 						onDropVideo={onDropVideo}
@@ -618,11 +843,13 @@ function SidebarPanel({
 	onTogglePinned,
 	onDismiss,
 	onOpenPalette,
+	onInteractionLockChange,
 }: {
 	pinned: boolean;
 	onTogglePinned: () => void;
 	onDismiss: () => void;
 	onOpenPalette: () => void;
+	onInteractionLockChange?: (locked: boolean) => void;
 }) {
 	return (
 		<div className="flex h-full flex-col">
@@ -656,7 +883,10 @@ function SidebarPanel({
 			</div>
 
 			<div className="app-scrollbar min-h-0 flex-1 overflow-y-auto px-2 pb-3">
-				<SidebarContent onOpenPalette={onOpenPalette} />
+				<SidebarContent
+					onOpenPalette={onOpenPalette}
+					onInteractionLockChange={onInteractionLockChange}
+				/>
 			</div>
 		</div>
 	);
@@ -671,18 +901,37 @@ export function AppShell({ children }: { children: React.ReactNode }) {
 	const [pinned, setPinned] = useState(loadSidebarPinned);
 	const [hovered, setHovered] = useState(false);
 
+	const hoverController = useMemo(
+		() =>
+			createSidebarHoverController({
+				onOpenChange: setHovered,
+			}),
+		[],
+	);
+
+	useEffect(() => {
+		return () => hoverController.dispose();
+	}, [hoverController]);
+
 	const inPlayer = isPlayerPath(location.pathname);
+	const titlebarMode = resolveTitlebarMode(preferences?.titlebarMode ?? "auto");
 	const { showOverlaySidebar, showPinnedSidebar } = resolveSidebarLayout({
 		inPlayer,
 		pinned,
 	});
 
+	useEffect(() => {
+		if (pinned || inPlayer) {
+			hoverController.closeNow();
+		}
+	}, [pinned, inPlayer, hoverController]);
+
 	const togglePinned = useCallback(() => {
 		const next = !pinned;
 		setPinned(next);
 		storeSidebarPinned(next);
-		if (!next) setHovered(false);
-	}, [pinned]);
+		if (!next) hoverController.closeNow();
+	}, [pinned, hoverController]);
 
 	useEffect(() => {
 		const onKeyDown = (e: KeyboardEvent) => {
@@ -726,38 +975,68 @@ export function AppShell({ children }: { children: React.ReactNode }) {
 
 	return (
 		<div className="relative flex h-screen overflow-hidden text-(--foreground)">
-			<WindowTitlebar
-				mode={resolveTitlebarMode(preferences?.titlebarMode ?? "auto")}
-				nonBlocking={inPlayer}
-			/>
+			<WindowTitlebar mode={titlebarMode} nonBlocking={inPlayer} />
 
-			{/* Overlay sidebar: reveals on hover, floats above the content. */}
+			{/* Overlay sidebar: reveals on hover, drag-enter, or toggle click, floats above the content. */}
 			{showOverlaySidebar && (
 				<>
+					{!hovered && (
+						<button
+							type="button"
+							aria-label="Open sidebar"
+							title="Open sidebar (Ctrl+B)"
+							onMouseEnter={hoverController.pointerEnter}
+							onMouseLeave={hoverController.pointerLeave}
+							onClick={hoverController.open}
+							className={cn(
+								"window-no-drag fixed top-2.5 z-40 hidden h-8 w-8 items-center justify-center rounded-(--radius) border border-(--border) bg-(--panel) text-(--muted-foreground) shadow-(--shadow-sm) backdrop-blur-xl transition-colors duration-150 hover:border-(--border-strong) hover:bg-(--panel-strong) hover:text-(--foreground) lg:flex",
+								titlebarMode === "macos" ? "left-20" : "left-3",
+							)}
+						>
+							<IconLayoutSidebar size={16} />
+						</button>
+					)}
 					<div
-						className="group fixed inset-y-0 left-0 z-30 hidden w-3 lg:block"
-						onMouseEnter={() => setHovered(true)}
-						onMouseLeave={() => setHovered(false)}
+						className="group fixed inset-y-0 left-0 z-30 hidden w-5 cursor-pointer lg:block"
+						onMouseEnter={hoverController.pointerEnter}
+						onMouseLeave={hoverController.pointerLeave}
+						onClick={hoverController.open}
+						onDragEnter={hoverController.open}
 						role="presentation"
 						aria-hidden="true"
 					>
-						<span className="absolute left-0 top-1/2 h-16 w-[3px] -translate-y-1/2 rounded-r-full bg-(--accent) opacity-30 transition-[height,width,opacity] duration-200 group-hover:h-24 group-hover:w-1 group-hover:opacity-80" />
+						<span className="absolute left-0.5 top-1/2 h-24 w-1.5 -translate-y-1/2 rounded-full border border-white/15 bg-(--accent)/45 shadow-sm transition-[width,background-color,border-color,opacity] duration-200 group-hover:w-2 group-hover:border-(--accent)/60 group-hover:bg-(--accent) group-hover:opacity-95" />
 					</div>
 					<aside
 						inert={!hovered}
 						className={cn(
 							"fixed inset-y-0 left-0 z-40 hidden w-[264px] flex-col border-r border-(--border) bg-(--panel) shadow-[0_0_60px_-15px_rgba(0,0,0,0.85)] backdrop-blur-2xl lg:flex",
 							"transition-transform duration-300 ease-[cubic-bezier(0.16,1,0.3,1)]",
-							hovered ? "translate-x-0" : "-translate-x-full",
+							hovered
+								? "translate-x-0"
+								: "pointer-events-none -translate-x-full",
 						)}
-						onMouseEnter={() => setHovered(true)}
-						onMouseLeave={() => setHovered(false)}
+						onMouseEnter={hoverController.pointerEnter}
+						onMouseMove={hoverController.pointerEnter}
+						onMouseLeave={hoverController.pointerLeave}
+						onDragEnter={hoverController.open}
+						onDropCapture={hoverController.pointerEnter}
+						onDragLeave={(e) => {
+							if (!isRelatedTargetInside(e)) {
+								hoverController.pointerLeave();
+							}
+						}}
+						onFocusCapture={() => hoverController.setFocusInside(true)}
+						onBlurCapture={(e) => {
+							hoverController.setFocusInside(isRelatedTargetInside(e));
+						}}
 					>
 						<SidebarPanel
 							pinned={false}
 							onTogglePinned={togglePinned}
-							onDismiss={() => setHovered(false)}
+							onDismiss={hoverController.closeNow}
 							onOpenPalette={() => setPaletteOpen(true)}
+							onInteractionLockChange={hoverController.setInteractionLocked}
 						/>
 					</aside>
 				</>
@@ -769,7 +1048,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
 					<SidebarPanel
 						pinned
 						onTogglePinned={togglePinned}
-						onDismiss={() => setHovered(false)}
+						onDismiss={hoverController.closeNow}
 						onOpenPalette={() => setPaletteOpen(true)}
 					/>
 				</aside>

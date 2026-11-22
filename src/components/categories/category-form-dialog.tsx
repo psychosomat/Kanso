@@ -6,6 +6,8 @@ import {
 	getCategoryDescendantIds,
 } from "@/lib/category-tree";
 import type { CategoryDto, CategoryIconName } from "@/lib/contracts";
+import { cn } from "@/lib/utils";
+import IconEyeOff from "~icons/tabler/eye-off";
 import { Button } from "../ui/button";
 import {
 	Dialog,
@@ -47,12 +49,14 @@ export function CategoryFormDialog({
 		description?: string;
 		parentCategoryId?: string | null;
 		icon?: CategoryIconName;
+		hiddenFromHome?: boolean;
 	}) => Promise<void>;
 }) {
 	const [name, setName] = useState("");
 	const [description, setDescription] = useState("");
 	const [parentCategoryId, setParentCategoryId] = useState<string>("root");
 	const [icon, setIcon] = useState<CategoryIconName>("folder");
+	const [hiddenFromHome, setHiddenFromHome] = useState(false);
 	const [saving, setSaving] = useState(false);
 	const categoryTree = buildCategoryTree(categories);
 	const blockedIds = category
@@ -64,13 +68,21 @@ export function CategoryFormDialog({
 	});
 
 	useEffect(() => {
+		if (!open) return;
 		setName(category?.name ?? initialName ?? "");
 		setDescription(category?.description ?? initialDescription ?? "");
 		setParentCategoryId(
 			category?.parentCategoryId ?? initialParentCategoryId ?? "root",
 		);
 		setIcon(category?.icon ?? "folder");
-	}, [category, initialParentCategoryId, initialName, initialDescription]);
+		setHiddenFromHome(category?.hiddenFromHome ?? false);
+	}, [
+		open,
+		category,
+		initialParentCategoryId,
+		initialName,
+		initialDescription,
+	]);
 
 	async function handleSubmit() {
 		setSaving(true);
@@ -80,6 +92,7 @@ export function CategoryFormDialog({
 				description,
 				parentCategoryId: parentCategoryId === "root" ? null : parentCategoryId,
 				icon,
+				hiddenFromHome,
 			});
 			onOpenChange(false);
 		} finally {
@@ -158,6 +171,34 @@ export function CategoryFormDialog({
 							</SelectContent>
 						</Select>
 					</div>
+					<label
+						className={cn(
+							"flex cursor-pointer items-start gap-3 rounded-(--radius) border p-3 transition-colors",
+							hiddenFromHome
+								? "border-(--accent)/35 bg-(--accent-subtle)"
+								: "border-(--border) bg-white/4 hover:bg-white/6",
+						)}
+					>
+						<input
+							type="checkbox"
+							checked={hiddenFromHome}
+							onChange={(event) => setHiddenFromHome(event.target.checked)}
+							className="mt-0.5 h-4 w-4 shrink-0 cursor-pointer accent-(--accent)"
+						/>
+						<div className="min-w-0 flex-1">
+							<span className="flex items-center gap-1.5 text-sm font-medium text-(--foreground)">
+								<IconEyeOff
+									size={15}
+									className="shrink-0 text-(--muted-foreground)"
+								/>
+								Hide from Home (Private)
+							</span>
+							<p className="mt-0.5 text-xs leading-relaxed text-(--muted-foreground)">
+								Exclude videos in this board and its sub-boards from Continue
+								Watching, Recently Added, and quick search.
+							</p>
+						</div>
+					</label>
 				</div>
 				<DialogFooter>
 					<Button variant="secondary" onClick={() => onOpenChange(false)}>
