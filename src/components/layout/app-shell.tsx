@@ -860,7 +860,7 @@ function SidebarPanel({
 						onClick={onDismiss}
 						title="Hide sidebar"
 						aria-label="Hide sidebar"
-						className="flex h-7 w-7 items-center justify-center rounded-full text-(--muted-foreground) transition-colors hover:bg-white/8 hover:text-(--foreground)"
+						className="window-no-drag flex h-7 w-7 items-center justify-center rounded-full text-(--muted-foreground) transition-colors hover:bg-white/8 hover:text-(--foreground)"
 					>
 						<IconChevronLeft size={15} />
 					</button>
@@ -872,7 +872,7 @@ function SidebarPanel({
 					aria-label={pinned ? "Unpin sidebar" : "Pin sidebar"}
 					aria-pressed={pinned}
 					className={cn(
-						"flex h-7 w-7 items-center justify-center rounded-full transition-colors",
+						"window-no-drag flex h-7 w-7 items-center justify-center rounded-full transition-colors",
 						pinned
 							? "text-(--accent) hover:bg-white/8"
 							: "text-(--muted-foreground) hover:bg-white/8 hover:text-(--foreground)",
@@ -1044,7 +1044,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
 
 			{/* Pinned sidebar: part of the layout, content reflows around it. */}
 			{showPinnedSidebar && (
-				<aside className="relative hidden h-full w-[264px] shrink-0 flex-col border-r border-(--border) bg-(--panel) backdrop-blur-2xl lg:flex">
+				<aside className="relative z-40 hidden h-full w-[264px] shrink-0 flex-col border-r border-(--border) bg-(--panel) backdrop-blur-2xl lg:flex">
 					<SidebarPanel
 						pinned
 						onTogglePinned={togglePinned}
