@@ -3,6 +3,10 @@ import { type DragEvent, useCallback, useEffect, useState } from "react";
 import { AssignVideoDialog } from "@/components/categories/assign-video-dialog";
 import { DeleteCategoryDialog } from "@/components/categories/delete-category-dialog";
 import { useAppState } from "@/components/layout/app-state";
+import {
+	getIdleScanRefreshKey,
+	getSourcePathsFingerprint,
+} from "@/components/shared/library-rails";
 import { PageFrame } from "@/components/shared/page-frame";
 import { VideoCard } from "@/components/shared/video-card";
 import { Badge } from "@/components/ui/badge";
@@ -63,9 +67,33 @@ export function readStoredSort(slug: string): CategoryFeedSort {
 	}
 }
 
+export function getCategoryFeedRefreshKey(
+	sourcePaths: Parameters<typeof getSourcePathsFingerprint>[0],
+	scanStatus: Parameters<typeof getIdleScanRefreshKey>[0],
+): string {
+	return `${getSourcePathsFingerprint(sourcePaths)}::${getIdleScanRefreshKey(scanStatus) ?? ""}`;
+}
+
+async function loadCategoryFeed(
+	slug: string,
+	sort: CategoryFeedSort,
+): Promise<PaginatedCategoryPostsDto | null> {
+	const api = getPlayerApi();
+	const category = await api.categories.getBySlug(slug);
+	if (!category) {
+		return null;
+	}
+	return api.categories.getFeed({
+		categoryId: category.id,
+		page: 1,
+		pageSize: 100,
+		sort,
+	});
+}
+
 function CategoryFeedPage() {
 	const { categorySlug } = Route.useParams();
-	const { categories, refreshAll } = useAppState();
+	const { library, categories, scanStatus, refreshAll } = useAppState();
 	const [sort, setSort] = useState<CategoryFeedSort>(() =>
 		readStoredSort(categorySlug),
 	);
@@ -79,42 +107,34 @@ function CategoryFeedPage() {
 	const [deleteOpen, setDeleteOpen] = useState(false);
 	const [reorderError, setReorderError] = useState<string | null>(null);
 	const [reordering, setReordering] = useState(false);
+	const feedRefreshKey = getCategoryFeedRefreshKey(
+		library?.sourcePaths,
+		scanStatus,
+	);
 
 	useEffect(() => {
 		setSort(readStoredSort(categorySlug));
 	}, [categorySlug]);
 
+	// biome-ignore lint/correctness/useExhaustiveDependencies: feedRefreshKey refreshes the open board when folders or disk files change
 	useEffect(() => {
 		if (!window.playerApi) return;
 		let cancelled = false;
 
-		const api = getPlayerApi();
-		void api.categories.getBySlug(categorySlug).then((category) => {
-			if (cancelled) {
-				return;
+		void loadCategoryFeed(categorySlug, sort).then((response) => {
+			if (!cancelled) {
+				setData(response);
 			}
-			if (!category) {
-				setData(null);
-				return;
-			}
-			void api.categories
-				.getFeed({
-					categoryId: category.id,
-					page: 1,
-					pageSize: 100,
-					sort,
-				})
-				.then((response) => {
-					if (!cancelled) {
-						setData(response);
-					}
-				});
 		});
 
 		return () => {
 			cancelled = true;
 		};
-	}, [categorySlug, sort]);
+	}, [categorySlug, sort, feedRefreshKey]);
+
+	async function refetchFeed() {
+		setData(await loadCategoryFeed(categorySlug, sort));
+	}
 
 	async function openAssign(videoId: string) {
 		const detail = await getPlayerApi().library.getVideo(videoId);
@@ -131,6 +151,7 @@ function CategoryFeedPage() {
 			categories: payload,
 		});
 		await refreshAll();
+		await refetchFeed();
 	}
 
 	async function removeVideo(videoId: string) {
@@ -140,37 +161,7 @@ function CategoryFeedPage() {
 			setSelectedVideo(null);
 		}
 		await refreshAll();
-		const api = getPlayerApi();
-		const category = await api.categories.getBySlug(categorySlug);
-		if (!category) {
-			setData(null);
-			return;
-		}
-		setData(
-			await api.categories.getFeed({
-				categoryId: category.id,
-				page: 1,
-				pageSize: 100,
-				sort,
-			}),
-		);
-	}
-
-	async function refetchFeed() {
-		const api = getPlayerApi();
-		const category = await api.categories.getBySlug(categorySlug);
-		if (!category) {
-			setData(null);
-			return;
-		}
-		setData(
-			await api.categories.getFeed({
-				categoryId: category.id,
-				page: 1,
-				pageSize: 100,
-				sort,
-			}),
-		);
+		await refetchFeed();
 	}
 
 	async function persistManualOrder(

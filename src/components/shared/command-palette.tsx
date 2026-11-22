@@ -2,7 +2,7 @@ import { useRouter } from "@tanstack/react-router";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useAppState } from "@/components/layout/app-state";
 import { CategoryIcon } from "@/lib/category-icons";
-import type { CategoryDto, VideoCardDto } from "@/lib/contracts";
+import type { CategoryDto, DumpQueryDto, VideoCardDto } from "@/lib/contracts";
 import { getPlayerApi } from "@/lib/player-api";
 import { cn, formatDuration, paletteShortcutLabel } from "@/lib/utils";
 import IconFolder from "~icons/tabler/folder";
@@ -31,6 +31,18 @@ const ACTIONS: Array<{ id: ActionId; name: string }> = [
 	{ id: "rescan", name: "Rescan library now" },
 ];
 
+export function buildPaletteSearchQuery(query: string): DumpQueryDto {
+	return {
+		search: query.trim(),
+		sort: "recent",
+		order: "desc",
+		page: 1,
+		pageSize: 7,
+		unsortedOnly: false,
+		excludeHiddenFromHome: true,
+	};
+}
+
 export function buildPaletteEntries(
 	categories: CategoryDto[],
 	videos: VideoCardDto[],
@@ -38,7 +50,8 @@ export function buildPaletteEntries(
 ): Entry[] {
 	const q = query.trim().toLowerCase();
 	const boards: Entry[] = categories
-		.filter((c) => !q || c.name.toLowerCase().includes(q))
+		// Hide private boards from the empty-query overview; allow explicit name jumps.
+		.filter((c) => (q ? c.name.toLowerCase().includes(q) : !c.hiddenFromHome))
 		.slice(0, 5)
 		.map((c) => ({
 			kind: "board" as const,
@@ -125,14 +138,7 @@ export function CommandPalette({
 		let cancelled = false;
 		const timer = window.setTimeout(() => {
 			void getPlayerApi()
-				.library.getDumpPage({
-					search: query.trim(),
-					sort: "recent",
-					order: "desc",
-					page: 1,
-					pageSize: 7,
-					unsortedOnly: false,
-				})
+				.library.getDumpPage(buildPaletteSearchQuery(query))
 				.then((page) => {
 					if (!cancelled) setVideos(page.items);
 				});
@@ -197,7 +203,9 @@ export function CommandPalette({
 				setActiveIndex((i) => nextActiveIndex(i, 1, entriesRef.current.length));
 			} else if (e.key === "ArrowUp") {
 				e.preventDefault();
-				setActiveIndex((i) => nextActiveIndex(i, -1, entriesRef.current.length));
+				setActiveIndex((i) =>
+					nextActiveIndex(i, -1, entriesRef.current.length),
+				);
 			} else if (e.key === "Enter") {
 				const entry = entriesRef.current[activeIndexRef.current];
 				if (entry) runEntryRef.current(entry);

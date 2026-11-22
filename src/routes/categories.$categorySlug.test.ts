@@ -4,6 +4,7 @@ import {
 	computeDropEdge,
 	computeReorderedIds,
 	feedSortStorageKey,
+	getCategoryFeedRefreshKey,
 	readStoredSort,
 } from "./categories.$categorySlug";
 
@@ -60,19 +61,39 @@ describe("computeReorderedIds", () => {
 	const ids = ["a", "b", "c", "d"];
 
 	it("moves the source before a later target", () => {
-		expect(computeReorderedIds(ids, "a", "c", "before")).toEqual(["b", "a", "c", "d"]);
+		expect(computeReorderedIds(ids, "a", "c", "before")).toEqual([
+			"b",
+			"a",
+			"c",
+			"d",
+		]);
 	});
 
 	it("moves the source after a later target", () => {
-		expect(computeReorderedIds(ids, "a", "c", "after")).toEqual(["b", "c", "a", "d"]);
+		expect(computeReorderedIds(ids, "a", "c", "after")).toEqual([
+			"b",
+			"c",
+			"a",
+			"d",
+		]);
 	});
 
 	it("moves the source after an earlier target", () => {
-		expect(computeReorderedIds(ids, "d", "b", "after")).toEqual(["a", "b", "d", "c"]);
+		expect(computeReorderedIds(ids, "d", "b", "after")).toEqual([
+			"a",
+			"b",
+			"d",
+			"c",
+		]);
 	});
 
 	it("appends the source when the target is absent", () => {
-		expect(computeReorderedIds(ids, "b", "missing", "after")).toEqual(["a", "c", "d", "b"]);
+		expect(computeReorderedIds(ids, "b", "missing", "after")).toEqual([
+			"a",
+			"c",
+			"d",
+			"b",
+		]);
 	});
 
 	it("returns null for an absent source or a no-op move", () => {
@@ -83,5 +104,38 @@ describe("computeReorderedIds", () => {
 	it("does not mutate the input", () => {
 		computeReorderedIds(ids, "a", "d", "after");
 		expect(ids).toEqual(["a", "b", "c", "d"]);
+	});
+});
+
+describe("getCategoryFeedRefreshKey", () => {
+	it("updates on folder removal/changes and idle scan updates only", () => {
+		const initial = getCategoryFeedRefreshKey(
+			[
+				{ id: "s1", hiddenFromHome: false },
+				{ id: "s2", hiddenFromHome: false },
+			],
+			{ status: "scanning", updatedAt: "2026-01-01T00:00:01Z" },
+		);
+		const scanningTick = getCategoryFeedRefreshKey(
+			[
+				{ id: "s1", hiddenFromHome: false },
+				{ id: "s2", hiddenFromHome: false },
+			],
+			{ status: "scanning", updatedAt: "2026-01-01T00:00:02Z" },
+		);
+		const idleTick = getCategoryFeedRefreshKey(
+			[
+				{ id: "s1", hiddenFromHome: false },
+				{ id: "s2", hiddenFromHome: false },
+			],
+			{ status: "idle", updatedAt: "2026-01-01T00:00:03Z" },
+		);
+		const folderRemoved = getCategoryFeedRefreshKey(
+			[{ id: "s1", hiddenFromHome: false }],
+			{ status: "idle", updatedAt: "2026-01-01T00:00:03Z" },
+		);
+		expect(scanningTick).toBe(initial);
+		expect(idleTick).not.toBe(initial);
+		expect(folderRemoved).not.toBe(idleTick);
 	});
 });

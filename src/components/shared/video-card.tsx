@@ -34,6 +34,7 @@ import IconFolderPlus from "~icons/tabler/folder-plus";
 import IconFolderSearch from "~icons/tabler/folder-search";
 import IconPlayerPlayFilled from "~icons/tabler/player-play-filled";
 import IconTrash from "~icons/tabler/trash";
+import IconX from "~icons/tabler/x";
 
 type Props = {
 	video: VideoCardDto;
@@ -43,12 +44,28 @@ type Props = {
 		action: "open-folder" | "reveal-file" | "copy-path",
 	) => void;
 	onRemove?: (videoId: string) => Promise<void>;
+	onDismiss?: (videoId: string) => void;
 	caption?: string | null;
 	draggable?: boolean;
 	duplicate?: boolean;
 	showResumeProgress?: boolean;
 	resumeLabel?: string;
 };
+
+export function hasRenderableDuration(
+	durationSec: number | null | undefined,
+): durationSec is number {
+	return (
+		durationSec !== null &&
+		durationSec !== undefined &&
+		Number.isFinite(durationSec) &&
+		durationSec > 0
+	);
+}
+
+export function getDismissButtonLabel(fileName: string): string {
+	return `Dismiss ${fileName} from Continue Watching`;
+}
 
 export function getRemoveDialogDescription(exists: boolean): string {
 	return exists
@@ -100,10 +117,12 @@ function VideoThumbnail({
 	video,
 	duplicate,
 	showResumeProgress,
+	onDismiss,
 }: {
 	video: VideoCardDto;
 	duplicate?: boolean;
 	showResumeProgress?: boolean;
+	onDismiss?: (videoId: string) => void;
 }) {
 	const progressPercent =
 		showResumeProgress &&
@@ -152,9 +171,27 @@ function VideoThumbnail({
 				</div>
 			</div>
 
-			<div className="tnum font-data pointer-events-none absolute bottom-2 right-2 rounded-full bg-black/60 px-2 py-0.5 text-[10px] font-medium text-white/90 backdrop-blur-md">
-				{formatDuration(video.durationSec)}
-			</div>
+			{onDismiss && (
+				<button
+					type="button"
+					aria-label={getDismissButtonLabel(video.fileName)}
+					title="Dismiss from Continue Watching"
+					onClick={(e) => {
+						e.preventDefault();
+						e.stopPropagation();
+						onDismiss(video.id);
+					}}
+					className="absolute right-2 top-2 z-10 flex h-7 w-7 items-center justify-center rounded-full bg-black/65 text-white/85 ring-1 ring-white/10 backdrop-blur-md opacity-0 transition-[opacity,background-color,color] duration-150 hover:bg-black/85 hover:text-white group-hover:opacity-100 focus-visible:opacity-100"
+				>
+					<IconX size={14} />
+				</button>
+			)}
+
+			{hasRenderableDuration(video.durationSec) && (
+				<div className="tnum font-data pointer-events-none absolute bottom-2 right-2 rounded-full bg-black/60 px-2 py-0.5 text-[10px] font-medium text-white/90 backdrop-blur-md">
+					{formatDuration(video.durationSec)}
+				</div>
+			)}
 
 			{progressPercent !== null && (
 				<div
@@ -224,6 +261,7 @@ export function VideoCard({
 	onAssign,
 	onAction,
 	onRemove,
+	onDismiss,
 	caption,
 	draggable = true,
 	duplicate = false,
@@ -301,6 +339,7 @@ export function VideoCard({
 							video={video}
 							duplicate={duplicate}
 							showResumeProgress={showResumeProgress}
+							onDismiss={onDismiss}
 						/>
 
 						<div className="mt-2 flex items-start gap-2 px-0.5">
@@ -317,7 +356,10 @@ export function VideoCard({
 										size="icon-sm"
 										className="mt-0.5 shrink-0 opacity-0 transition-opacity duration-150 group-hover:opacity-100 group-focus-within:opacity-100 focus-visible:opacity-100 data-[state=open]:opacity-100"
 										aria-label={`Video actions for ${video.fileName}`}
-										onClick={(e) => { e.preventDefault(); e.stopPropagation(); }}
+										onClick={(e) => {
+											e.preventDefault();
+											e.stopPropagation();
+										}}
 									>
 										<IconDots size={16} />
 									</Button>

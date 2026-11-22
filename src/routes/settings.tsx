@@ -18,7 +18,7 @@ import { Separator } from "@/components/ui/separator";
 import { useFolderPlaylistPrompt } from "@/hooks/use-folder-playlist-prompt";
 import { useScrollRestore } from "@/hooks/use-scroll-restore";
 import { APP_NAME } from "@/lib/constants";
-import type { TitlebarMode } from "@/lib/contracts";
+import type { PlayerPreferencesDto, TitlebarMode } from "@/lib/contracts";
 import {
 	bandX,
 	buildEqAreaPath,
@@ -30,14 +30,14 @@ import {
 	yToGain as eqYToGain,
 } from "@/lib/eq-graph";
 import { clampEqGain, EQ_BANDS, normalizeEqGains } from "@/lib/equalizer";
-import { PLAYBACK_RATE_MAX, PLAYBACK_RATE_MIN } from "@/lib/player-playback";
-import { getPlayerApi } from "@/lib/player-api";
 import {
 	chooseFoldersAndPromptNew,
 	collectPreviousFolderPaths,
-	submitFolderPlaylistRequest,
 	type FolderPlaylistInput,
+	submitFolderPlaylistRequest,
 } from "@/lib/folder-playlist";
+import { getPlayerApi } from "@/lib/player-api";
+import { PLAYBACK_RATE_MAX, PLAYBACK_RATE_MIN } from "@/lib/player-playback";
 import {
 	applyAccentColor,
 	applyNoiseOpacity,
@@ -45,7 +45,7 @@ import {
 	getAccentColor,
 	getNoiseOpacity,
 } from "@/lib/settings-appearance";
-import { formatDateTime } from "@/lib/utils";
+import { cn, formatDateTime } from "@/lib/utils";
 import IconBrandGithub from "~icons/tabler/brand-github";
 import IconDatabase from "~icons/tabler/database";
 import IconEye from "~icons/tabler/eye";
@@ -53,6 +53,8 @@ import IconEyeOff from "~icons/tabler/eye-off";
 import IconFolder from "~icons/tabler/folder";
 import IconFolderOpen from "~icons/tabler/folder-open";
 import IconFolderPlus from "~icons/tabler/folder-plus";
+import IconHome from "~icons/tabler/home";
+import IconHomeOff from "~icons/tabler/home-off";
 import IconInfoCircle from "~icons/tabler/info-circle";
 import IconPalette from "~icons/tabler/palette";
 import IconPlayerPlay from "~icons/tabler/player-play";
@@ -79,6 +81,55 @@ export function getScanProgress(
 ): number | null {
 	if (!status || status.totalFiles <= 0) return null;
 	return Math.round((status.scannedFiles / status.totalFiles) * 100);
+}
+
+export type HomeRailPreferenceKey =
+	| "showContinueWatching"
+	| "showRecentlyAdded";
+
+export type HomeRailSettingItem = {
+	key: HomeRailPreferenceKey;
+	label: string;
+	description: string;
+	enabled: boolean;
+};
+
+export function buildHomeRailSettings(
+	preferences:
+		| Pick<PlayerPreferencesDto, "showContinueWatching" | "showRecentlyAdded">
+		| null
+		| undefined,
+): HomeRailSettingItem[] {
+	return [
+		{
+			key: "showContinueWatching",
+			label: "Continue Watching rail",
+			description:
+				"Resume partially watched videos from the top of the home screen",
+			enabled: preferences?.showContinueWatching ?? true,
+		},
+		{
+			key: "showRecentlyAdded",
+			label: "Recently Added rail",
+			description: "Show newly indexed videos on the home screen",
+			enabled: preferences?.showRecentlyAdded ?? true,
+		},
+	];
+}
+
+export function getFolderHideButtonMeta(folder: {
+	path: string;
+	hiddenFromHome: boolean;
+}): { ariaLabel: string; title: string } {
+	return folder.hiddenFromHome
+		? {
+				ariaLabel: `Show ${folder.path} on Home`,
+				title: "Show on Home",
+			}
+		: {
+				ariaLabel: `Hide ${folder.path} from Home`,
+				title: "Hide from Home",
+			};
 }
 
 function SettingsPage() {
@@ -248,34 +299,36 @@ function SettingsPage() {
 		});
 	}
 
-	async function removeFolder(folderId: string) {
+	async function runLibrarySettingsAction(action: () => Promise<unknown>) {
 		setBusy(true);
 		try {
-			await getPlayerApi().settings.removeLibraryFolder(folderId);
+			await action();
 			await refreshAll();
 		} finally {
 			setBusy(false);
 		}
+	}
+
+	async function removeFolder(folderId: string) {
+		await runLibrarySettingsAction(() =>
+			getPlayerApi().settings.removeLibraryFolder(folderId),
+		);
 	}
 
 	async function toggleWatchFolder(folderId: string) {
-		setBusy(true);
-		try {
-			await getPlayerApi().settings.toggleWatchFolder(folderId);
-			await refreshAll();
-		} finally {
-			setBusy(false);
-		}
+		await runLibrarySettingsAction(() =>
+			getPlayerApi().settings.toggleWatchFolder(folderId),
+		);
+	}
+
+	async function toggleHideFolderFromHome(folderId: string) {
+		await runLibrarySettingsAction(() =>
+			getPlayerApi().settings.toggleHideFolderFromHome(folderId),
+		);
 	}
 
 	async function rescan() {
-		setBusy(true);
-		try {
-			await getPlayerApi().library.rescanNow();
-			await refreshAll();
-		} finally {
-			setBusy(false);
-		}
+		await runLibrarySettingsAction(() => getPlayerApi().library.rescanNow());
 	}
 
 	async function saveSpeedPreset(
@@ -288,6 +341,7 @@ function SettingsPage() {
 	}
 
 	const scanProgress = getScanProgress(scanStatus);
+	const homeRailSettings = buildHomeRailSettings(preferences);
 
 	const hasSourcePaths = library && library.sourcePaths.length > 0;
 	const anyWatchEnabled =
@@ -308,56 +362,89 @@ function SettingsPage() {
 
 							{hasSourcePaths ? (
 								<div className="space-y-2">
-									{library?.sourcePaths.map((folder) => (
-										<div
-											key={folder.id}
-											className="flex items-center justify-between gap-3 rounded-(--radius) border border-(--border) bg-white/4 p-3"
-										>
-											<div className="flex min-w-0 items-center gap-2">
-												<IconFolder
-													size={16}
-													className="shrink-0 text-(--accent)"
-												/>
-												<span className="truncate text-sm text-(--foreground)">
-													{folder.path}
-												</span>
-											</div>
-											<div className="flex shrink-0 items-center gap-1">
-												<Button
-													size="sm"
-													variant="ghost"
-													onClick={() => void toggleWatchFolder(folder.id)}
-													disabled={busy}
-													title={
-														folder.watchEnabled
-															? "Disable watch"
-															: "Enable watch"
-													}
-												>
-													{folder.watchEnabled ? (
-														<IconEye size={16} className="text-(--accent)" />
-													) : (
-														<IconEyeOff
+									{library?.sourcePaths.map((folder) => {
+										const hideMeta = getFolderHideButtonMeta(folder);
+										return (
+											<div
+												key={folder.id}
+												className="flex items-center justify-between gap-3 rounded-(--radius) border border-(--border) bg-white/4 p-3"
+											>
+												<div className="flex min-w-0 items-center gap-2">
+													<IconFolder
+														size={16}
+														className="shrink-0 text-(--accent)"
+													/>
+													<span className="truncate text-sm text-(--foreground)">
+														{folder.path}
+													</span>
+													{folder.hiddenFromHome ? (
+														<Badge variant="default" className="shrink-0">
+															Hidden from Home
+														</Badge>
+													) : null}
+												</div>
+												<div className="flex shrink-0 items-center gap-1">
+													<Button
+														type="button"
+														size="sm"
+														variant="ghost"
+														onClick={() =>
+															void toggleHideFolderFromHome(folder.id)
+														}
+														disabled={busy}
+														aria-label={hideMeta.ariaLabel}
+														title={hideMeta.title}
+													>
+														{folder.hiddenFromHome ? (
+															<IconHomeOff
+																size={16}
+																className="text-(--accent)"
+															/>
+														) : (
+															<IconHome
+																size={16}
+																className="text-(--muted-foreground)"
+															/>
+														)}
+													</Button>
+													<Button
+														type="button"
+														size="sm"
+														variant="ghost"
+														onClick={() => void toggleWatchFolder(folder.id)}
+														disabled={busy}
+														title={
+															folder.watchEnabled
+																? "Disable watch"
+																: "Enable watch"
+														}
+													>
+														{folder.watchEnabled ? (
+															<IconEye size={16} className="text-(--accent)" />
+														) : (
+															<IconEyeOff
+																size={16}
+																className="text-(--muted-foreground)"
+															/>
+														)}
+													</Button>
+													<Button
+														type="button"
+														size="sm"
+														variant="ghost"
+														onClick={() => void removeFolder(folder.id)}
+														disabled={busy}
+														title="Remove folder"
+													>
+														<IconTrash
 															size={16}
 															className="text-(--muted-foreground)"
 														/>
-													)}
-												</Button>
-												<Button
-													size="sm"
-													variant="ghost"
-													onClick={() => void removeFolder(folder.id)}
-													disabled={busy}
-													title="Remove folder"
-												>
-													<IconTrash
-														size={16}
-														className="text-(--muted-foreground)"
-													/>
-												</Button>
+													</Button>
+												</div>
 											</div>
-										</div>
-									))}
+										);
+									})}
 								</div>
 							) : (
 								<p className="text-sm text-(--muted-foreground)">
@@ -525,6 +612,57 @@ function SettingsPage() {
 								<span>Strong</span>
 							</div>
 						</div>
+					</div>
+				</SettingsSection>
+
+				<SettingsSection icon={<IconHome size={16} />} title="Home screen">
+					<div className="space-y-4">
+						<p className="text-xs text-(--muted-foreground)">
+							Choose which rails show on the Unsorted home screen. Private
+							boards and folders marked Hidden from Home never appear on the
+							home screen or in quick search.
+						</p>
+						<Separator />
+						{homeRailSettings.map((item, index) => (
+							<div key={item.key}>
+								{index > 0 ? <Separator className="mb-4" /> : null}
+								<div className="flex items-center justify-between gap-4">
+									<div className="min-w-0">
+										<p className="text-sm text-(--foreground)">{item.label}</p>
+										<p className="mt-0.5 text-xs text-(--muted-foreground)">
+											{item.description}
+										</p>
+									</div>
+									<div className="flex shrink-0 items-center gap-2.5">
+										<Badge variant={item.enabled ? "accent" : "default"}>
+											{item.enabled ? "Shown" : "Hidden"}
+										</Badge>
+										<button
+											type="button"
+											role="switch"
+											aria-checked={item.enabled}
+											aria-label={item.label}
+											onClick={() =>
+												void savePreferences({ [item.key]: !item.enabled })
+											}
+											className={cn(
+												"relative inline-flex h-6 w-11 shrink-0 cursor-pointer items-center rounded-full border transition-colors duration-150 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-(--ring)",
+												item.enabled
+													? "border-(--accent)/40 bg-(--accent)"
+													: "border-(--border) bg-white/10",
+											)}
+										>
+											<span
+												className={cn(
+													"pointer-events-none block h-4 w-4 rounded-full bg-white shadow-sm transition-transform duration-150",
+													item.enabled ? "translate-x-5.5" : "translate-x-1",
+												)}
+											/>
+										</button>
+									</div>
+								</div>
+							</div>
+						))}
 					</div>
 				</SettingsSection>
 
