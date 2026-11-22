@@ -35,6 +35,7 @@ const category: CategoryDto = {
 	description: null,
 	parentCategoryId: null,
 	icon: "folder",
+	hiddenFromHome: false,
 	postCount: 2,
 	createdAt: "2026-01-01",
 	updatedAt: "2026-01-01",
