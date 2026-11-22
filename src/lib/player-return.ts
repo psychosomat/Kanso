@@ -1,10 +1,26 @@
 const SCROLL_PREFIX = "player:scroll:";
 const RETURN_TARGET_KEY = "player:return-target";
 
-type PlayerReturnTarget = {
+export type PlayerReturnTarget = {
 	pathname: string;
 	scrollTop: number;
 };
+
+export function resolveSafeReturnPathname(
+	target: PlayerReturnTarget | null,
+): string | null {
+	if (!target || typeof target.pathname !== "string") {
+		return null;
+	}
+	if (
+		!target.pathname.startsWith("/") ||
+		target.pathname.startsWith("//") ||
+		target.pathname.startsWith("/player/")
+	) {
+		return null;
+	}
+	return target.pathname;
+}
 
 export function getMainScrollElement(): HTMLElement | null {
 	if (typeof document === "undefined") {

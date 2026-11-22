@@ -26,8 +26,8 @@ import {
 } from "./lib/video-protocol";
 import { DatabaseService } from "./services/db";
 import {
-	LibraryIndexerService,
 	isSupportedVideo,
+	LibraryIndexerService,
 	selectWatchPaths,
 } from "./services/library-indexer";
 import { PosterCacheService } from "./services/poster-cache";
@@ -37,12 +37,6 @@ import {
 	resolveMediaPath,
 } from "./services/smart-library";
 import { TransmuxerService } from "./services/transmuxer";
-
-// Disable hardware video decoding to prevent crashes with 4K HEVC video
-// This is a workaround for GPU decoder crashes on some systems
-// GPU is still used for rendering, only video decoding is affected
-app.commandLine.appendSwitch("disable-gpu-video-decoder");
-app.commandLine.appendSwitch("disable-features", "UseSkiaRenderer");
 
 let mainWindow: BrowserWindow | null = null;
 let cleanupIpc: (() => void) | null = null;
@@ -425,6 +419,40 @@ function resolveMediaRequestPath(targetPath: string): string {
 	});
 }
 
+function createManagedFileWebStream(
+	filePath: string,
+	request: Request,
+	range?: { start: number; end: number },
+) {
+	const stream = createReadStream(filePath, range);
+	const onAbort = () => {
+		if (!stream.destroyed) {
+			stream.destroy();
+		}
+	};
+	const cleanupAbort = () => {
+		request.signal?.removeEventListener("abort", onAbort);
+	};
+
+	if (request.signal) {
+		if (request.signal.aborted) {
+			onAbort();
+		} else {
+			request.signal.addEventListener("abort", onAbort, { once: true });
+		}
+	}
+
+	stream.once("close", cleanupAbort);
+	stream.once("error", () => {
+		cleanupAbort();
+		if (!stream.destroyed) {
+			stream.destroy();
+		}
+	});
+
+	return Readable.toWeb(stream) as unknown as globalThis.ReadableStream;
+}
+
 async function createMediaResponse(targetPath: string, request: Request) {
 	// Security gate: resolve -> realpath -> must be inside the library,
 	// the transmux cache, the DB index, or an explicitly opened file.
@@ -440,7 +468,8 @@ async function createMediaResponse(targetPath: string, request: Request) {
 
 	const stats = statSync(resolved);
 	const mimeType = getMimeType(resolved);
-	const range = parseRangeHeader(request.headers.get("range"), stats.size);
+	const rangeHeader = request.headers.get("range");
+	const range = parseRangeHeader(rangeHeader, stats.size);
 
 	const baseHeaders = {
 		...corsHeaders(),
@@ -449,35 +478,35 @@ async function createMediaResponse(targetPath: string, request: Request) {
 		"Cache-Control": "no-cache",
 	};
 
-	if (range) {
-		const stream = createReadStream(resolved, {
-			start: range.start,
-			end: range.end,
-		});
-
-		return new Response(
-			Readable.toWeb(stream) as unknown as globalThis.ReadableStream,
-			{
-				status: 206,
-				headers: {
-					...baseHeaders,
-					"Content-Length": String(range.end - range.start + 1),
-					"Content-Range": `bytes ${range.start}-${range.end}/${stats.size}`,
-				},
-			},
-		);
-	}
-
-	const stream = createReadStream(resolved);
-	return new Response(
-		Readable.toWeb(stream) as unknown as globalThis.ReadableStream,
-		{
-			status: 200,
+	if (rangeHeader !== null && !range) {
+		return new Response(null, {
+			status: 416,
 			headers: {
 				...baseHeaders,
-				"Content-Length": String(stats.size),
+				"Content-Range": `bytes */${stats.size}`,
 			},
-		},
+		});
+	}
+
+	const status = range ? 206 : 200;
+	const headers = range
+		? {
+				...baseHeaders,
+				"Content-Length": String(range.end - range.start + 1),
+				"Content-Range": `bytes ${range.start}-${range.end}/${stats.size}`,
+			}
+		: {
+				...baseHeaders,
+				"Content-Length": String(stats.size),
+			};
+
+	if (request.method === "HEAD") {
+		return new Response(null, { status, headers });
+	}
+
+	return new Response(
+		createManagedFileWebStream(resolved, request, range ?? undefined),
+		{ status, headers },
 	);
 }
 

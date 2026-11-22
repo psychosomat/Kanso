@@ -164,7 +164,12 @@ body.ui-decor-ready::after {
 	opacity: var(--noise-opacity, 0.07);
 }
 
-/* Keep the film grain on the chrome, never on the video itself. */
+/* Keep the film grain and aurora drift off the video player surface. */
+body.is-player::before {
+	opacity: 0;
+	animation: none;
+}
+
 body.is-player::after {
 	opacity: 0;
 }
