@@ -56,6 +56,7 @@ import {
 	cn,
 	formatBytes,
 	formatDateTime,
+	formatDuration,
 	formatResolution,
 	resolveTitlebarMode,
 	shouldResume,
@@ -73,24 +74,6 @@ import IconRepeat from "~icons/tabler/repeat";
 import IconTrash from "~icons/tabler/trash";
 import IconVolume from "~icons/tabler/volume";
 import IconVolumeOff from "~icons/tabler/volume-off";
-
-export function formatClock(seconds: number | null | undefined): string {
-	if (
-		seconds === null ||
-		seconds === undefined ||
-		!Number.isFinite(seconds) ||
-		seconds < 0
-	) {
-		return "Unknown";
-	}
-	const total = Math.floor(seconds);
-	const hours = Math.floor(total / 3600);
-	const minutes = Math.floor((total % 3600) / 60);
-	const secs = total % 60;
-	return hours > 0
-		? `${hours}:${String(minutes).padStart(2, "0")}:${String(secs).padStart(2, "0")}`
-		: `${minutes}:${String(secs).padStart(2, "0")}`;
-}
 
 export function getVolumePercent(prefs: PlayerPreferencesDto | null): number {
 	return Math.round(
@@ -780,16 +763,7 @@ export function PlayerPage({
 			) {
 				const nextWidth = element.videoWidth || null;
 				const nextHeight = element.videoHeight || null;
-				void (
-					getPlayerApi().library as {
-						updateVideoMetadata?: (input: {
-							videoId: string;
-							durationSec?: number | null;
-							width?: number | null;
-							height?: number | null;
-						}) => Promise<void>;
-					}
-				).updateVideoMetadata?.({
+				void getPlayerApi().library.updateVideoMetadata({
 					videoId: currentVideo.id,
 					durationSec: elementDuration,
 					width: nextWidth,
@@ -1184,7 +1158,9 @@ export function PlayerPage({
 													video?.height ?? null,
 												)}
 											</Badge>
-											<Badge>{formatClock(video?.durationSec ?? null)}</Badge>
+											<Badge>
+												{formatDuration(video?.durationSec ?? null)}
+											</Badge>
 											{video?.codecVideo ? (
 												<Badge>{video.codecVideo}</Badge>
 											) : null}
@@ -1418,9 +1394,11 @@ export function PlayerPage({
 								</p>
 							</div>
 							<span className="tnum shrink-0 text-xs text-white/70">
-								{formatClock(isScrubbing ? timelinePreview.time : currentTime)}{" "}
+								{formatDuration(
+									isScrubbing ? timelinePreview.time : currentTime,
+								)}{" "}
 								<span className="text-white/35">
-									/ {formatClock(displayDuration)}
+									/ {formatDuration(displayDuration)}
 								</span>
 							</span>
 						</div>
@@ -1460,7 +1438,7 @@ export function PlayerPage({
 										)}
 									</div>
 									<div className="font-data bg-black/90 px-2 py-1 text-center text-[11px] tabular-nums text-white/70">
-										{formatClock(timelinePreview.time)}
+										{formatDuration(timelinePreview.time)}
 									</div>
 								</div>
 							) : null}

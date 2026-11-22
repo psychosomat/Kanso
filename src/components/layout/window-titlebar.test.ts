@@ -37,16 +37,20 @@ describe("shouldHideTitlebar", () => {
 });
 
 describe("getTitlebarShellClass", () => {
-	it("applies pointer-events-none only in non-blocking mode and stays at z-50", () => {
+	it("uses z-50 non-blocking in player and z-30 full-width in desktop modes", () => {
 		expect(getTitlebarShellClass(true)).toContain("pointer-events-none");
 		expect(getTitlebarShellClass(true)).toContain("z-50");
 		expect(getTitlebarShellClass(true, "start")).toContain("left-0");
 		expect(getTitlebarShellClass(true, "end")).toContain("right-0");
 		expect(getTitlebarShellClass(false)).not.toContain("pointer-events-none");
-		expect(getTitlebarShellClass(false)).toContain("z-50");
+		expect(getTitlebarShellClass(false)).toContain("z-30");
+		expect(getTitlebarShellClass(false)).not.toContain("z-50");
+		expect(getTitlebarShellClass(false, "start")).toContain("justify-start");
+		expect(getTitlebarShellClass(false, "end")).toContain("justify-end");
 		expect(getTitlebarShellClass(undefined)).not.toContain(
 			"pointer-events-none",
 		);
+		expect(getTitlebarShellClass(undefined)).toContain("z-30");
 	});
 });
 
