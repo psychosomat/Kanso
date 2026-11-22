@@ -1,44 +1,50 @@
 # Kanso Video Thumbnail Provider
 
-Windows COM server for generating video thumbnails in File Explorer.
+Windows COM shell thumbnail provider (`IThumbnailProvider`) for generating video thumbnails in File Explorer.
 
 ## Building
 
-Requires .NET Framework 4.8 and MSBuild.
+Requires .NET Framework 4.8 (or .NET SDK / Visual Studio MSBuild / built-in .NET 4.x `csc.exe`). Produces `bin\KansoThumbnailProvider.dll` targeting AnyCPU:
+
+```powershell
+powershell -ExecutionPolicy Bypass -File build.ps1
+```
+
+Or from the repository root:
 
 ```bash
-msbuild KansoThumbnailProvider.csproj /p:Configuration=Release /p:Platform=x64
+bun run build:thumbnail:win
 ```
 
 ## Installing
 
-Run the registration script as Administrator:
+Run `register.bat` (registers per-user under `HKCU\Software\Classes` when non-admin, or system-wide via `RegAsm.exe` when run as Administrator):
 
-```bash
+```bat
 register.bat
 ```
 
 ## Uninstalling
 
-Run the unregistration script as Administrator:
+Run `unregister.bat`:
 
-```bash
+```bat
 unregister.bat
 ```
 
 ## How it works
 
 The thumbnail provider:
-1. Implements the IThumbnailProvider COM interface
-2. Uses ffmpeg to extract a frame from the video file
-3. Returns the frame as a bitmap to Windows Explorer
+1. Implements `IThumbnailProvider`, `IInitializeWithItem` (using `IShellItem::GetDisplayName(SIGDN_FILESYSPATH)`), and `IInitializeWithFile` so Explorer passes file paths directly without copying videos to temp files.
+2. Runs in-process at normal user medium IL (`InprocServer32` = `mscoree.dll`, `DisableProcessIsolation = 1`, `DisableLowILProcessIsolation = 1`) so it can read `%LOCALAPPDATA%\Programs\Kanso` and spawn `ffmpeg.exe`.
+3. Extracts a frame with `ffmpeg.exe` (seeking to `00:00:01` with fallback to `00:00:00`), composites the `kanso-logo.png` watermark, and returns a top-down 32bpp `BI_RGB` DIB section (`CreateDIBSection`) with premultiplied ARGB pixels.
 
 ## Supported formats
 
-- MP4
-- MKV
-- WebM
-- MOV
-- AVI
-- M4V
-- TS
+- MP4 (`.mp4`)
+- MKV (`.mkv`)
+- WebM (`.webm`)
+- MOV (`.mov`)
+- AVI (`.avi`)
+- M4V (`.m4v`)
+- TS (`.ts`)
