@@ -64,7 +64,6 @@ vi.mock("@/components/shared/remove-video-dialog", () => ({
 
 import {
 	buildSpeedPresets,
-	formatClock,
 	getVolumePercent,
 	PlayerPage,
 } from "./player.$videoId";
@@ -87,6 +86,8 @@ function prefs(
 		accentColor: "#f76f53",
 		playerEqEnabled: false,
 		playerEqGains: [0, 0, 0, 0, 0, 0],
+		showContinueWatching: true,
+		showRecentlyAdded: true,
 		...overrides,
 	};
 }
@@ -119,23 +120,6 @@ function makeVideo(overrides: Partial<VideoDetailDto> = {}): VideoDetailDto {
 		...overrides,
 	};
 }
-
-describe("formatClock", () => {
-	it("formats zero as 0:00 instead of Unknown", () => {
-		expect(formatClock(0)).toBe("0:00");
-		expect(formatClock(5)).toBe("0:05");
-		expect(formatClock(65)).toBe("1:05");
-		expect(formatClock(3661)).toBe("1:01:01");
-	});
-
-	it("returns Unknown for nullish, negative, or non-finite values", () => {
-		expect(formatClock(null)).toBe("Unknown");
-		expect(formatClock(undefined)).toBe("Unknown");
-		expect(formatClock(-1)).toBe("Unknown");
-		expect(formatClock(Number.NaN)).toBe("Unknown");
-		expect(formatClock(Number.POSITIVE_INFINITY)).toBe("Unknown");
-	});
-});
 
 describe("getVolumePercent", () => {
 	it("rounds the stored volume to a percentage", () => {

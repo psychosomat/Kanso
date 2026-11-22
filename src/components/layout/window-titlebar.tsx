@@ -40,7 +40,8 @@ export function getTitlebarShellClass(
 		);
 	}
 	return cn(
-		"window-drag fixed inset-x-0 top-0 z-50 flex h-11 items-center justify-end px-3",
+		"window-drag fixed inset-x-0 top-0 z-30 flex h-11 items-center px-3",
+		align === "start" ? "justify-start" : "justify-end",
 	);
 }
 
