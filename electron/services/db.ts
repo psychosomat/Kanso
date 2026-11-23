@@ -801,6 +801,21 @@ export class DatabaseService {
 		this.deleteVideoRows(toDelete);
 	}
 
+	removeVideosOutsideRoots(activeRoots: string[]) {
+		const rows = this.db
+			.prepare("SELECT id, source_path, poster_path FROM videos")
+			.all() as Array<{
+			id: string;
+			source_path: string;
+			poster_path: string | null;
+		}>;
+		const toDelete = rows.filter(
+			(row) =>
+				!activeRoots.some((root) => isPathWithinRoot(row.source_path, root)),
+		);
+		this.deleteVideoRows(toDelete);
+	}
+
 	removeVideoByPath(sourcePath: string) {
 		const rows =
 			process.platform === "win32"

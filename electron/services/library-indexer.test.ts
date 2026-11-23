@@ -229,4 +229,81 @@ describe("LibraryIndexerService.fullScanAll", () => {
 			db.close();
 		}
 	});
+
+	it("removes videos from folders no longer in sourcePaths during rescan while preserving disconnected active roots", async () => {
+		const removedRoot = path.join(tempDir, "old-removed");
+		const unpluggedRoot = path.join(tempDir, "usb-active");
+		fs.mkdirSync(removedRoot, { recursive: true });
+		fs.mkdirSync(unpluggedRoot, { recursive: true });
+		fs.writeFileSync(path.join(root, "keep.mkv"), "fake-video");
+		fs.writeFileSync(path.join(removedRoot, "stale.mkv"), "fake-video");
+		fs.writeFileSync(path.join(unpluggedRoot, "usb.mkv"), "fake-video");
+
+		const { db, indexer } = makeServices(tempDir);
+		try {
+			await indexer.fullScanAll([root, removedRoot, unpluggedRoot]);
+			expect(
+				db.getDumpPage({
+					sort: "recent",
+					order: "desc",
+					page: 1,
+					pageSize: 24,
+				}).total,
+			).toBe(3);
+
+			// Unplug one active root and drop removedRoot from the scan list.
+			fs.rmSync(unpluggedRoot, { recursive: true, force: true });
+			await indexer.fullScanAll([root, unpluggedRoot]);
+
+			const page = db.getDumpPage({
+				sort: "recent",
+				order: "desc",
+				page: 1,
+				pageSize: 24,
+			});
+			expect(page.items.map((item) => item.fileName).sort()).toEqual([
+				"keep.mkv",
+				"usb.mkv",
+			]);
+
+			// Rescanning with no configured scan folders clears all remaining videos.
+			await indexer.fullScanAll([]);
+			expect(
+				db.getDumpPage({
+					sort: "recent",
+					order: "desc",
+					page: 1,
+					pageSize: 24,
+				}).total,
+			).toBe(0);
+		} finally {
+			db.close();
+		}
+	});
+
+	it("preserves videos in other folders when scanning a single newly added folder", async () => {
+		const secondRoot = path.join(tempDir, "second");
+		fs.mkdirSync(secondRoot, { recursive: true });
+		fs.writeFileSync(path.join(root, "first.mkv"), "fake-video");
+		fs.writeFileSync(path.join(secondRoot, "second.mkv"), "fake-video");
+
+		const { db, indexer } = makeServices(tempDir);
+		try {
+			await indexer.fullScanAll([root]);
+			await indexer.fullScan(secondRoot);
+
+			const page = db.getDumpPage({
+				sort: "recent",
+				order: "desc",
+				page: 1,
+				pageSize: 24,
+			});
+			expect(page.items.map((item) => item.fileName).sort()).toEqual([
+				"first.mkv",
+				"second.mkv",
+			]);
+		} finally {
+			db.close();
+		}
+	});
 });
