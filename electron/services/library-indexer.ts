@@ -142,8 +142,12 @@ export class LibraryIndexerService {
 		await this.watchService.stop();
 	}
 
-	async fullScanAll(sourcePaths: string[]) {
-		if (sourcePaths.length === 0) return;
+	async fullScanAll(
+		sourcePaths: string[],
+		options: { pruneOutsideRoots?: boolean } = {},
+	) {
+		const pruneOutsideRoots = options.pruneOutsideRoots ?? true;
+		if (sourcePaths.length === 0 && !pruneOutsideRoots) return;
 		this.db.updateScanState({ scanStatus: "scanning", scanError: null });
 		try {
 			const allFiles = await this.collectFiles(sourcePaths);
@@ -151,7 +155,7 @@ export class LibraryIndexerService {
 			this.lastPublishTime = 0;
 			this.publishScanStart(allFiles.length);
 			await this.indexFilesSequentially(allFiles, seen);
-			this.finalizeScan(sourcePaths, allFiles, seen);
+			this.finalizeScan(sourcePaths, allFiles, seen, pruneOutsideRoots);
 		} catch (error) {
 			const message = toScanErrorMessage(error);
 			this.db.updateScanState({
@@ -239,8 +243,12 @@ export class LibraryIndexerService {
 		sourcePaths: string[],
 		allFiles: string[],
 		seen: Set<string>,
+		pruneOutsideRoots: boolean,
 	) {
 		const finishedAt = new Date().toISOString();
+		if (pruneOutsideRoots) {
+			this.db.removeVideosOutsideRoots(sourcePaths);
+		}
 		for (const sourcePath of sourcePaths) {
 			// Skip missing roots so temporarily disconnected drives do not purge indexed entries.
 			if (existsSync(sourcePath)) {
@@ -267,7 +275,7 @@ export class LibraryIndexerService {
 	}
 
 	async fullScan(sourcePath: string) {
-		await this.fullScanAll([sourcePath]);
+		await this.fullScanAll([sourcePath], { pruneOutsideRoots: false });
 	}
 
 	private publish(status: Omit<ScanStatusDto, "updatedAt">) {

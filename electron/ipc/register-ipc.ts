@@ -169,7 +169,6 @@ export function registerIpc({
 	});
 	ipcMain.handle("library:rescan", async () => {
 		const settings = db.getLibrarySettings();
-		if (settings.sourcePaths.length === 0) return;
 		const pathsToScan = settings.sourcePaths.map((sp) => sp.path);
 		await indexer.fullScanAll(pathsToScan);
 		await syncWatches(indexer, settings);

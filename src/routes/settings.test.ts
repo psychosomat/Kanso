@@ -18,6 +18,7 @@ import type {
 } from "@/lib/contracts";
 import {
 	buildHomeRailSettings,
+	getCategoryHideButtonMeta,
 	getFolderHideButtonMeta,
 	getScanProgress,
 	parseSpeedPreset,
@@ -36,6 +37,7 @@ const mocks = vi.hoisted(() => ({
 	toggleHideFolderFromHome: vi.fn(),
 	toggleWatchFolder: vi.fn(),
 	removeLibraryFolder: vi.fn(),
+	updateCategory: vi.fn(),
 }));
 
 vi.mock("@tanstack/react-router", async (importOriginal) => {
@@ -69,12 +71,20 @@ vi.mock("@/hooks/use-folder-playlist-prompt", () => ({
 	}),
 }));
 
+vi.mock("@/lib/category-icons", () => ({
+	CategoryIcon: ({ name }: { name: string }) =>
+		React.createElement("span", { "data-testid": "category-icon", "data-icon": name }),
+}));
+
 vi.mock("@/lib/player-api", () => ({
 	getPlayerApi: () => ({
 		settings: {
 			toggleHideFolderFromHome: mocks.toggleHideFolderFromHome,
 			toggleWatchFolder: mocks.toggleWatchFolder,
 			removeLibraryFolder: mocks.removeLibraryFolder,
+		},
+		categories: {
+			update: mocks.updateCategory,
 		},
 	}),
 }));
@@ -117,6 +127,7 @@ beforeEach(() => {
 	mocks.appState.refreshAll = vi.fn().mockResolvedValue(undefined);
 	mocks.appState.savePreferences = vi.fn().mockResolvedValue(undefined);
 	mocks.toggleHideFolderFromHome.mockReset().mockResolvedValue(null);
+	mocks.updateCategory.mockReset().mockResolvedValue(null);
 });
 
 afterEach(() => {
@@ -204,6 +215,23 @@ describe("getFolderHideButtonMeta", () => {
 	});
 });
 
+describe("getCategoryHideButtonMeta", () => {
+	it("returns descriptive labels for visible and hidden categories", () => {
+		expect(
+			getCategoryHideButtonMeta({ name: "Clips", hiddenFromHome: false }),
+		).toEqual({
+			ariaLabel: "Hide Clips from Home",
+			title: "Hide from Home",
+		});
+		expect(
+			getCategoryHideButtonMeta({ name: "Clips", hiddenFromHome: true }),
+		).toEqual({
+			ariaLabel: "Show Clips on Home",
+			title: "Show on Home",
+		});
+	});
+});
+
 async function renderSettingsPage() {
 	await act(async () => {
 		await (
@@ -267,5 +295,58 @@ describe("SettingsPage Home screen and folder privacy controls", () => {
 		expect(mocks.appState.savePreferences).toHaveBeenCalledWith({
 			showRecentlyAdded: false,
 		});
+	});
+
+	it("renders Categories on Home and toggles category visibility", async () => {
+		mocks.appState.categories = [
+			{
+				id: "c1",
+				slug: "travel",
+				name: "Travel",
+				description: "Trip videos",
+				parentCategoryId: null,
+				icon: "folder",
+				hiddenFromHome: false,
+				postCount: 3,
+				createdAt: "2026-01-01",
+				updatedAt: "2026-01-01",
+			},
+			{
+				id: "c2",
+				slug: "private-board",
+				name: "Private Board",
+				description: null,
+				parentCategoryId: null,
+				icon: "lock",
+				hiddenFromHome: true,
+				postCount: 1,
+				createdAt: "2026-01-01",
+				updatedAt: "2026-01-01",
+			},
+		];
+
+		await renderSettingsPage();
+
+		expect(
+			await screen.findByText("Categories on Home", {}, { timeout: 5000 }),
+		).toBeTruthy();
+		// One Hidden from Home badge from folder f2, plus one from category c2
+		expect(screen.getAllByText("Hidden from Home")).toHaveLength(2);
+
+		fireEvent.click(
+			screen.getByRole("button", { name: "Hide Travel from Home" }),
+		);
+
+		await waitFor(() =>
+			expect(mocks.updateCategory).toHaveBeenCalledWith({
+				id: "c1",
+				name: "Travel",
+				description: "Trip videos",
+				parentCategoryId: null,
+				icon: "folder",
+				hiddenFromHome: true,
+			}),
+		);
+		expect(mocks.appState.refreshAll).toHaveBeenCalledOnce();
 	});
 });

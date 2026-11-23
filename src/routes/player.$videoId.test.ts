@@ -459,4 +459,51 @@ describe("PlayerPage engine & navigation fixes", () => {
 			expect(navigateMock).toHaveBeenCalledWith({ to: "/dump" });
 		});
 	});
+
+	it("skips timeupdate currentTime renders while HUD is hidden and syncs on wake", async () => {
+		const { container, unmount } = render(
+			createElement(PlayerPage, { mode: "library", videoId: "vid-1" }),
+		);
+
+		await screen.findAllByText("clip.mp4");
+
+		vi.useFakeTimers();
+		const mainVideo = container.querySelectorAll(
+			"video",
+		)[0] as HTMLVideoElement;
+		Object.defineProperty(mainVideo, "duration", {
+			value: 120,
+			configurable: true,
+		});
+		let currentTimeValue = 0;
+		Object.defineProperty(mainVideo, "currentTime", {
+			get: () => currentTimeValue,
+			set: (value: number) => {
+				currentTimeValue = value;
+			},
+			configurable: true,
+		});
+
+		act(() => {
+			fireEvent(mainVideo, new Event("play"));
+		});
+		act(() => {
+			vi.advanceTimersByTime(3000);
+		});
+
+		// While HUD is hidden, timeupdate should not re-render currentTime
+		currentTimeValue = 45;
+		act(() => {
+			fireEvent(mainVideo, new Event("timeupdate"));
+		});
+		expect(screen.queryByText(/^0:45/)).toBeNull();
+
+		// Waking the HUD syncs currentTime immediately
+		act(() => {
+			window.dispatchEvent(new MouseEvent("mousemove"));
+		});
+		expect(screen.getByText(/0:45/)).toBeTruthy();
+
+		unmount();
+	});
 });

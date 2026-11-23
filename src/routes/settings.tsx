@@ -18,7 +18,12 @@ import { Separator } from "@/components/ui/separator";
 import { useFolderPlaylistPrompt } from "@/hooks/use-folder-playlist-prompt";
 import { useScrollRestore } from "@/hooks/use-scroll-restore";
 import { APP_NAME } from "@/lib/constants";
-import type { PlayerPreferencesDto, TitlebarMode } from "@/lib/contracts";
+import { CategoryIcon } from "@/lib/category-icons";
+import type {
+	CategoryDto,
+	PlayerPreferencesDto,
+	TitlebarMode,
+} from "@/lib/contracts";
 import {
 	bandX,
 	buildEqAreaPath,
@@ -117,19 +122,33 @@ export function buildHomeRailSettings(
 	];
 }
 
+export function getHomeVisibilityButtonMeta(
+	label: string,
+	hiddenFromHome: boolean,
+): { ariaLabel: string; title: string } {
+	return hiddenFromHome
+		? {
+				ariaLabel: `Show ${label} on Home`,
+				title: "Show on Home",
+			}
+		: {
+				ariaLabel: `Hide ${label} from Home`,
+				title: "Hide from Home",
+			};
+}
+
 export function getFolderHideButtonMeta(folder: {
 	path: string;
 	hiddenFromHome: boolean;
 }): { ariaLabel: string; title: string } {
-	return folder.hiddenFromHome
-		? {
-				ariaLabel: `Show ${folder.path} on Home`,
-				title: "Show on Home",
-			}
-		: {
-				ariaLabel: `Hide ${folder.path} from Home`,
-				title: "Hide from Home",
-			};
+	return getHomeVisibilityButtonMeta(folder.path, folder.hiddenFromHome);
+}
+
+export function getCategoryHideButtonMeta(category: {
+	name: string;
+	hiddenFromHome: boolean;
+}): { ariaLabel: string; title: string } {
+	return getHomeVisibilityButtonMeta(category.name, category.hiddenFromHome);
 }
 
 function SettingsPage() {
@@ -324,6 +343,19 @@ function SettingsPage() {
 	async function toggleHideFolderFromHome(folderId: string) {
 		await runLibrarySettingsAction(() =>
 			getPlayerApi().settings.toggleHideFolderFromHome(folderId),
+		);
+	}
+
+	async function toggleHideCategoryFromHome(category: CategoryDto) {
+		await runLibrarySettingsAction(() =>
+			getPlayerApi().categories.update({
+				id: category.id,
+				name: category.name,
+				description: category.description ?? undefined,
+				parentCategoryId: category.parentCategoryId,
+				icon: category.icon,
+				hiddenFromHome: !category.hiddenFromHome,
+			}),
 		);
 	}
 
@@ -663,6 +695,74 @@ function SettingsPage() {
 								</div>
 							</div>
 						))}
+						<Separator />
+						<div className="space-y-2">
+							<p className="text-xs uppercase tracking-[0.18em] text-(--muted-foreground)">
+								Categories on Home
+							</p>
+							<p className="text-xs text-(--muted-foreground)">
+								Hide specific categories from the Home screen without hiding
+								their source folders.
+							</p>
+							{categories.length > 0 ? (
+								<div className="space-y-2 pt-1">
+									{categories.map((category) => {
+										const hideMeta = getCategoryHideButtonMeta(category);
+										return (
+											<div
+												key={category.id}
+												className="flex items-center justify-between gap-3 rounded-(--radius) border border-(--border) bg-white/4 p-3"
+											>
+												<div className="flex min-w-0 items-center gap-2">
+													<CategoryIcon
+														name={category.icon}
+														size={16}
+														className="shrink-0 text-(--accent)"
+													/>
+													<span className="truncate text-sm text-(--foreground)">
+														{category.name}
+													</span>
+													{category.hiddenFromHome ? (
+														<Badge variant="default" className="shrink-0">
+															Hidden from Home
+														</Badge>
+													) : null}
+												</div>
+												<div className="flex shrink-0 items-center gap-1">
+													<Button
+														type="button"
+														size="sm"
+														variant="ghost"
+														onClick={() =>
+															void toggleHideCategoryFromHome(category)
+														}
+														disabled={busy}
+														aria-label={hideMeta.ariaLabel}
+														title={hideMeta.title}
+													>
+														{category.hiddenFromHome ? (
+															<IconHomeOff
+																size={16}
+																className="text-(--accent)"
+															/>
+														) : (
+															<IconHome
+																size={16}
+																className="text-(--muted-foreground)"
+															/>
+														)}
+													</Button>
+												</div>
+											</div>
+										);
+									})}
+								</div>
+							) : (
+								<p className="text-sm text-(--muted-foreground)">
+									No categories yet
+								</p>
+							)}
+						</div>
 					</div>
 				</SettingsSection>
 

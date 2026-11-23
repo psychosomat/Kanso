@@ -186,6 +186,8 @@ export function PlayerPage({
 			!playing ||
 			hudHovered,
 	});
+	const isVisibleRef = useRef(isVisible);
+	const durationRef = useRef(duration);
 
 	const applyEq = useCallback(
 		(enabled: boolean, gains: number[] | undefined) => {
@@ -713,7 +715,24 @@ export function PlayerPage({
 		isLoopingRef.current = isLooping;
 		playbackRateRef.current = playbackRate;
 		applyEqRef.current = applyEq;
-	}, [applyEq, isLooping, isScrubbing, playbackRate, prefs, video]);
+		isVisibleRef.current = isVisible;
+		durationRef.current = duration;
+	}, [
+		applyEq,
+		duration,
+		isLooping,
+		isScrubbing,
+		isVisible,
+		playbackRate,
+		prefs,
+		video,
+	]);
+
+	useEffect(() => {
+		if (isVisible && !isScrubbingRef.current && videoRef.current) {
+			setCurrentTime(videoRef.current.currentTime);
+		}
+	}, [isVisible]);
 
 	const activeVideoId = video?.id;
 	const activeStreamUrl = video?.streamUrl;
@@ -785,14 +804,17 @@ export function PlayerPage({
 		const onTimeUpdate = () => {
 			const currentVideo = videoStateRef.current;
 			if (!currentVideo) return;
-			if (!isScrubbingRef.current) {
+			if (!isScrubbingRef.current && isVisibleRef.current) {
 				setCurrentTime(element.currentTime);
 			}
 			const nextDuration =
 				Number.isFinite(element.duration) && element.duration > 0
 					? element.duration
 					: (currentVideo.durationSec ?? 0);
-			setDuration(nextDuration);
+			if (nextDuration !== durationRef.current) {
+				durationRef.current = nextDuration;
+				setDuration(nextDuration);
+			}
 			if (
 				isLibraryVideo(currentVideo) &&
 				!completedMarkedRef.current &&
@@ -973,20 +995,20 @@ export function PlayerPage({
 
 			if (isVisible) {
 				gsap.to([topBar, bottomBar], {
-					opacity: 1,
+					autoAlpha: 1,
 					y: 0,
 					duration: 0.3,
 					ease: "power2.out",
 				});
 			} else {
 				gsap.to(topBar, {
-					opacity: 0,
+					autoAlpha: 0,
 					y: -20,
 					duration: 0.3,
 					ease: "power2.in",
 				});
 				gsap.to(bottomBar, {
-					opacity: 0,
+					autoAlpha: 0,
 					y: 20,
 					duration: 0.3,
 					ease: "power2.in",
@@ -1314,9 +1336,8 @@ export function PlayerPage({
 						<video
 							ref={videoRef}
 							src={video.streamUrl}
-							crossOrigin="anonymous"
 							poster={video.posterUrl ?? undefined}
-							className={`h-full w-full ${fitClass}`}
+							className={`h-full w-full transform-gpu ${fitClass}`}
 							controls={false}
 							preload="metadata"
 							playsInline
@@ -1551,7 +1572,7 @@ export function PlayerPage({
 							{/* Speed */}
 							<div ref={speedControlRef} className="relative flex items-center">
 								{speedOpen ? (
-									<div className="absolute right-0 bottom-full z-30 mb-2 w-60 rounded-xl border border-white/15 bg-black/90 p-3 shadow-2xl backdrop-blur-md">
+									<div className="absolute right-0 bottom-full z-30 mb-2 w-60 rounded-xl border border-white/15 bg-black/90 p-3 shadow-2xl">
 										<div className="mb-2 flex items-center justify-between">
 											<span className="text-[11px] font-medium tracking-[0.14em] text-white/50 uppercase">
 												Speed
