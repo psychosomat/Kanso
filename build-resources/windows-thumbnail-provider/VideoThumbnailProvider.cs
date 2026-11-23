@@ -22,7 +22,7 @@ namespace KansoThumbnailProvider
 
 	[ComImport]
 	[InterfaceType(ComInterfaceType.InterfaceIsIUnknown)]
-	[Guid("e357fccd-a995-4576-b01f-234630154c96")]
+	[Guid("e357fccd-a995-4576-b01f-234630154e96")]
 	public interface IThumbnailProvider
 	{
 		void GetThumbnail(uint cx, out IntPtr phbmp, out WTS_ALPHATYPE pdwAlpha);

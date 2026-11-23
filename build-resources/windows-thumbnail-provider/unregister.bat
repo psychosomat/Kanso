@@ -5,7 +5,8 @@ REM associations from HKCU and (when elevated) HKLM.
 setlocal
 set "DLL_PATH=%~dp0bin\KansoThumbnailProvider.dll"
 set "CLSID={E8F3A4C0-5D8B-4A3E-9B2F-1C7D8E9F0A1B}"
-set "IFACE={e357fccd-a995-4576-b01f-234630154c96}"
+set "IFACE={e357fccd-a995-4576-b01f-234630154e96}"
+set "LEGACY_IFACE={e357fccd-a995-4576-b01f-234630154c96}"
 set "PROGID_NAME=KansoThumbnailProvider.VideoThumbnailProvider"
 set "ALT_PROGID=Kanso.VideoThumbnailProvider"
 set "APPROVED_KEY=Software\Microsoft\Windows\CurrentVersion\Shell Extensions\Approved"
@@ -55,9 +56,12 @@ exit /b 0
 :clean_root
 set "CLASSES_ROOT=%~1"
 call :delete_if_owned "%CLASSES_ROOT%\Kanso Video\shellex\%IFACE%"
+call :delete_if_owned "%CLASSES_ROOT%\Kanso Video\shellex\%LEGACY_IFACE%"
 for %%E in (.mp4 .mkv .webm .mov .avi .m4v .ts) do (
     call :delete_if_owned "%CLASSES_ROOT%\%%E\shellex\%IFACE%"
+    call :delete_if_owned "%CLASSES_ROOT%\%%E\shellex\%LEGACY_IFACE%"
     call :delete_if_owned "%CLASSES_ROOT%\SystemFileAssociations\%%E\shellex\%IFACE%"
+    call :delete_if_owned "%CLASSES_ROOT%\SystemFileAssociations\%%E\shellex\%LEGACY_IFACE%"
     for /f "tokens=2,*" %%A in ('reg query "HKCU\Software\Microsoft\Windows\CurrentVersion\Explorer\FileExts\%%E\UserChoice" /v ProgId %REG_VIEW% 2^>nul ^| findstr /i "REG_SZ"') do (
         call :delete_progid_if_owned "%CLASSES_ROOT%" "%%B"
     )
@@ -73,6 +77,7 @@ set "PROG=%~2"
 if "%PROG%"=="" exit /b 0
 if /i "%PROG%"=="(value not set)" exit /b 0
 call :delete_if_owned "%CR%\%PROG%\shellex\%IFACE%"
+call :delete_if_owned "%CR%\%PROG%\shellex\%LEGACY_IFACE%"
 exit /b 0
 
 :delete_if_owned

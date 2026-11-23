@@ -7,7 +7,8 @@ REM non-admin per-user registration (HKCU\Software\Classes).
 setlocal
 set "DLL_PATH=%~dp0bin\KansoThumbnailProvider.dll"
 set "CLSID={E8F3A4C0-5D8B-4A3E-9B2F-1C7D8E9F0A1B}"
-set "IFACE={e357fccd-a995-4576-b01f-234630154c96}"
+set "IFACE={e357fccd-a995-4576-b01f-234630154e96}"
+set "LEGACY_IFACE={e357fccd-a995-4576-b01f-234630154c96}"
 set "CATID={62C8FE65-4EBB-45e7-B440-6E39B2CDBF29}"
 set "CLASS_NAME=KansoThumbnailProvider.VideoThumbnailProvider"
 set "ASSEMBLY_NAME=KansoThumbnailProvider, Version=1.0.0.0, Culture=neutral, PublicKeyToken=null"
@@ -87,9 +88,12 @@ if "%IS_ADMIN%"=="1" (
 )
 
 echo Registering file associations under %CLASSES_ROOT%...
+call :delete_if_owned "%CLASSES_ROOT%\Kanso Video\shellex\%LEGACY_IFACE%"
 reg add "%CLASSES_ROOT%\Kanso Video\shellex\%IFACE%" /ve /t REG_SZ /d "%CLSID%" /f %REG_VIEW% >nul
 
 for %%E in (.mp4 .mkv .webm .mov .avi .m4v .ts) do (
+    call :delete_if_owned "%CLASSES_ROOT%\%%E\shellex\%LEGACY_IFACE%"
+    call :delete_if_owned "%CLASSES_ROOT%\SystemFileAssociations\%%E\shellex\%LEGACY_IFACE%"
     reg add "%CLASSES_ROOT%\%%E\shellex\%IFACE%" /ve /t REG_SZ /d "%CLSID%" /f %REG_VIEW% >nul
     reg add "%CLASSES_ROOT%\SystemFileAssociations\%%E\shellex\%IFACE%" /ve /t REG_SZ /d "%CLSID%" /f %REG_VIEW% >nul
 
@@ -118,6 +122,13 @@ set "KIND=%~2"
 set "PROG=%~3"
 if "%PROG%"=="" exit /b 0
 if /i "%PROG%"=="(value not set)" exit /b 0
+call :delete_if_owned "%CLASSES_ROOT%\%PROG%\shellex\%LEGACY_IFACE%"
 reg add "%CLASSES_ROOT%\%PROG%\shellex\%IFACE%" /ve /t REG_SZ /d "%CLSID%" /f %REG_VIEW% >nul
 echo   %EXT% -^> %KIND% %PROG%
+exit /b 0
+
+:delete_if_owned
+set "TARGET=%~1"
+reg query "%TARGET%" /ve %REG_VIEW% 2>nul | findstr /i "%CLSID%" >nul
+if %errorlevel%==0 reg delete "%TARGET%" /f %REG_VIEW% >nul 2>&1
 exit /b 0

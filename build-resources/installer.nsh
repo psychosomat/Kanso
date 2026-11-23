@@ -10,7 +10,8 @@
 ; %LOCALAPPDATA%\Programs\Kanso and spawn ffmpeg.exe.
 
 !define KANSO_THUMB_CLSID "{E8F3A4C0-5D8B-4A3E-9B2F-1C7D8E9F0A1B}"
-!define KANSO_THUMB_INTERFACE "{e357fccd-a995-4576-b01f-234630154c96}"
+!define KANSO_THUMB_INTERFACE "{e357fccd-a995-4576-b01f-234630154e96}"
+!define KANSO_THUMB_INTERFACE_LEGACY "{e357fccd-a995-4576-b01f-234630154c96}"
 !define KANSO_THUMB_CAT_MANAGED "{62C8FE65-4EBB-45e7-B440-6E39B2CDBF29}"
 !define KANSO_THUMB_CLASS "KansoThumbnailProvider.VideoThumbnailProvider"
 !define KANSO_THUMB_ASSEMBLY "KansoThumbnailProvider, Version=1.0.0.0, Culture=neutral, PublicKeyToken=null"
@@ -78,6 +79,24 @@
   WriteRegStr ${_Root} "${KANSO_APPROVED_KEY}" "${KANSO_THUMB_CLSID}" "${KANSO_THUMB_DESC}"
 !macroend
 
+!macro _KansoDeleteShellexIfOwned _Root _ShellexParent
+  ClearErrors
+  ReadRegStr $R7 ${_Root} "${_ShellexParent}\${KANSO_THUMB_INTERFACE}" ""
+  ${IfNot} ${Errors}
+  ${AndIf} "$R7" == "${KANSO_THUMB_CLSID}"
+    DeleteRegKey ${_Root} "${_ShellexParent}\${KANSO_THUMB_INTERFACE}"
+  ${EndIf}
+
+  ClearErrors
+  ReadRegStr $R7 ${_Root} "${_ShellexParent}\${KANSO_THUMB_INTERFACE_LEGACY}" ""
+  ${IfNot} ${Errors}
+  ${AndIf} "$R7" == "${KANSO_THUMB_CLSID}"
+    DeleteRegKey ${_Root} "${_ShellexParent}\${KANSO_THUMB_INTERFACE_LEGACY}"
+  ${EndIf}
+
+  DeleteRegKey /ifempty ${_Root} "${_ShellexParent}"
+!macroend
+
 ; Thumbnail shell extensions have to be registered in several places because
 ; Windows resolves them through whichever ProgID currently owns the file type.
 ; To cover every case we write the shellex association into:
@@ -87,6 +106,8 @@
 ;   4. HKCU UserChoice ProgId -> SHCTX Software\Classes\<ProgId>\shellex\{guid}
 ;   5. HKCR\.<ext> default ProgId -> SHCTX Software\Classes\<ProgId>\shellex\{guid}
 !macro _KansoWriteThumbnailAssoc _Ext
+  !insertmacro _KansoDeleteShellexIfOwned SHCTX "Software\Classes\${_Ext}\shellex"
+  !insertmacro _KansoDeleteShellexIfOwned SHCTX "Software\Classes\SystemFileAssociations\${_Ext}\shellex"
   WriteRegStr SHCTX "Software\Classes\${_Ext}\shellex\${KANSO_THUMB_INTERFACE}" "" "${KANSO_THUMB_CLSID}"
   WriteRegStr SHCTX "Software\Classes\SystemFileAssociations\${_Ext}\shellex\${KANSO_THUMB_INTERFACE}" "" "${KANSO_THUMB_CLSID}"
 
@@ -94,6 +115,7 @@
   ReadRegStr $R8 HKCU "Software\Microsoft\Windows\CurrentVersion\Explorer\FileExts\${_Ext}\UserChoice" "ProgId"
   ${IfNot} ${Errors}
   ${AndIf} "$R8" != ""
+    !insertmacro _KansoDeleteShellexIfOwned SHCTX "Software\Classes\$R8\shellex"
     WriteRegStr SHCTX "Software\Classes\$R8\shellex\${KANSO_THUMB_INTERFACE}" "" "${KANSO_THUMB_CLSID}"
     DetailPrint "Thumbnail assoc: ${_Ext} (UserChoice=$R8)"
   ${EndIf}
@@ -102,18 +124,9 @@
   ReadRegStr $R9 HKCR "${_Ext}" ""
   ${IfNot} ${Errors}
   ${AndIf} "$R9" != ""
+    !insertmacro _KansoDeleteShellexIfOwned SHCTX "Software\Classes\$R9\shellex"
     WriteRegStr SHCTX "Software\Classes\$R9\shellex\${KANSO_THUMB_INTERFACE}" "" "${KANSO_THUMB_CLSID}"
     DetailPrint "Thumbnail assoc: ${_Ext} (ProgID=$R9)"
-  ${EndIf}
-!macroend
-
-!macro _KansoDeleteShellexIfOwned _Root _ShellexParent
-  ClearErrors
-  ReadRegStr $R7 ${_Root} "${_ShellexParent}\${KANSO_THUMB_INTERFACE}" ""
-  ${IfNot} ${Errors}
-  ${AndIf} "$R7" == "${KANSO_THUMB_CLSID}"
-    DeleteRegKey ${_Root} "${_ShellexParent}\${KANSO_THUMB_INTERFACE}"
-    DeleteRegKey /ifempty ${_Root} "${_ShellexParent}"
   ${EndIf}
 !macroend
 
@@ -196,6 +209,7 @@
     !insertmacro _KansoWriteClsidKeys SHCTX "$4"
 
     ; Explicitly wire Kanso Video ProgID as well as extension/UserChoice/HKCR targets
+    !insertmacro _KansoDeleteShellexIfOwned SHCTX "Software\Classes\Kanso Video\shellex"
     WriteRegStr SHCTX "Software\Classes\Kanso Video\shellex\${KANSO_THUMB_INTERFACE}" "" "${KANSO_THUMB_CLSID}"
 
     !insertmacro _KansoWriteThumbnailAssoc ".mp4"
