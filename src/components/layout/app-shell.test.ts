@@ -232,8 +232,8 @@ describe("createSidebarHoverController", () => {
 		vi.useRealTimers();
 	});
 
-	it("uses a generous 450ms grace delay before auto-closing", () => {
-		expect(SIDEBAR_CLOSE_DELAY_MS).toBe(450);
+	it("uses a balanced 180ms grace delay before auto-closing", () => {
+		expect(SIDEBAR_CLOSE_DELAY_MS).toBe(180);
 
 		const onOpenChange = vi.fn();
 		const controller = createSidebarHoverController({ onOpenChange });
@@ -257,7 +257,7 @@ describe("createSidebarHoverController", () => {
 
 		controller.pointerEnter();
 		controller.pointerLeave();
-		vi.advanceTimersByTime(250);
+		vi.advanceTimersByTime(Math.floor(SIDEBAR_CLOSE_DELAY_MS / 2));
 		controller.pointerEnter();
 
 		vi.advanceTimersByTime(SIDEBAR_CLOSE_DELAY_MS * 2);

@@ -70,7 +70,7 @@ export function isPlayerPath(pathname: string): boolean {
 	return pathname.startsWith("/player/");
 }
 
-export const SIDEBAR_CLOSE_DELAY_MS = 450;
+export const SIDEBAR_CLOSE_DELAY_MS = 180;
 
 export type OverlaySidebarKeepOpenState = {
 	pointerInside: boolean;
