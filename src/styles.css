@@ -165,13 +165,19 @@ body.ui-decor-ready::after {
 }
 
 /* Keep the film grain and aurora drift off the video player surface. */
-body.is-player::before {
+body.is-player::before,
+body.is-player::after {
+	display: none;
 	opacity: 0;
 	animation: none;
 }
 
-body.is-player::after {
-	opacity: 0;
+/* Avoid expensive live backdrop-filter blur passes over hardware-decoded video frames. */
+body.is-player .glass,
+body.is-player .island-strong {
+	backdrop-filter: none;
+	-webkit-backdrop-filter: none;
+	background: rgba(18, 19, 22, 0.88);
 }
 
 ::-webkit-scrollbar {
@@ -307,7 +313,6 @@ img {
 			transparent 70%
 		);
 	opacity: 0.5;
-	filter: blur(48px);
 	transition: background 0.6s ease;
 }
 

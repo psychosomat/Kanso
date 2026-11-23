@@ -651,6 +651,18 @@ function registerActivateHandler() {
 	});
 }
 
+function configureGpuSwitches() {
+	app.commandLine.appendSwitch("ignore-gpu-blocklist");
+	app.commandLine.appendSwitch("enable-gpu-rasterization");
+	app.commandLine.appendSwitch("enable-zero-copy");
+	if (process.platform === "win32") {
+		app.commandLine.appendSwitch(
+			"enable-features",
+			"PlatformHEVCDecoderSupport",
+		);
+	}
+}
+
 async function bootstrap() {
 	console.log("[BOOTSTRAP] Starting Kanso bootstrap...");
 	console.log("[BOOTSTRAP] Platform:", process.platform);
@@ -661,6 +673,7 @@ async function bootstrap() {
 		return;
 	}
 
+	configureGpuSwitches();
 	queueArgvOpenPaths(process.argv.slice(1));
 	registerFileOpenHandlers();
 
